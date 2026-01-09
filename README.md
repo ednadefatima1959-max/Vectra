@@ -24,6 +24,10 @@ If you need help, check out [our documentation](https://vectras.vercel.app/how.h
 
 [![Tutorial for beginners](https://img.youtube.com/vi/AlNbverd0xE/mqdefault.jpg)](https://www.youtube.com/watch?v=AlNbverd0xE)
 
+## Nota sobre forks (PT-BR)
+
+Seguimos a mesma ideia aplicada nos forks de Termux, UserLAnd e androidx_rmr: aproveitar cada possibilidade sem alterar a missão original do projeto e mantendo o fluxo de compilação intacto sempre que possível.
+
 ## Device Compatibility
 
 Works fine on devices manufactured in 2021 or later and devices equipped with Snapdragon 855 CPU or better. You can try running Vectras VM on unsupported devices, but we cannot guarantee stability or support. Here are the devices tested:
