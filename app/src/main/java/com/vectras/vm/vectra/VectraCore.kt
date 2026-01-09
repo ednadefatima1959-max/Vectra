@@ -29,6 +29,8 @@ object VectraBlock {
     private const val MAGIC = 0x5645435452413031L // "VECTRA01"
     private const val VERSION = 1
     private const val HEADER_BYTES = 64
+    private const val CRC_OFFSET = 32
+    private const val PRE6_FACTOR = 0x9E3779B97F4A7C15uL.toLong()
 
     fun createHeader(index: Long, payloadLen: Int, seed: Int, stripeCfg: Int = 0x01020304, idPrefix: Long = 0x5645435452414cL): ByteArray {
         val buffer = ByteBuffer.allocate(HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
@@ -40,11 +42,11 @@ object VectraBlock {
         buffer.putInt(0) // crc32c placeholder
         buffer.putInt(stripeCfg)
         buffer.putLong(idPrefix)
-        buffer.putLong(seed.toLong() * 0x9E3779B97F4A7C15uL.toLong()) // pre6-ish derivation
+        buffer.putLong(seed.toLong() * PRE6_FACTOR) // pre6 derivation
         while (buffer.position() < HEADER_BYTES) buffer.putLong(0)
         val header = buffer.array()
         val crc = CRC32C.update(0, header)
-        ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN).putInt(32, crc)
+        ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN).putInt(CRC_OFFSET, crc)
         return header
     }
 }
@@ -91,6 +93,10 @@ object Parity {
 }
 
 class VectraMempool(private val chunkSize: Int, poolSize: Int) {
+    companion object {
+        private const val MAX_POOL_SIZE = 32
+    }
+
     private val pool = ArrayDeque<ByteArray>()
 
     init {
@@ -106,15 +112,17 @@ class VectraMempool(private val chunkSize: Int, poolSize: Int) {
     }
 
     fun release(buffer: ByteArray) {
-        if (buffer.size == chunkSize && pool.size < 32) {
+        if (buffer.size == chunkSize && pool.size < MAX_POOL_SIZE) {
             pool.addLast(buffer)
         }
     }
 }
 
 object VectraCore {
+    private const val DEFAULT_CHUNK_BYTES = 64 * 1024
+    private const val DEFAULT_POOL_SIZE = 4
     private val state = VectraState()
-    private val mempool = VectraMempool(64 * 1024, 4)
+    private val mempool = VectraMempool(DEFAULT_CHUNK_BYTES, DEFAULT_POOL_SIZE)
 
     @JvmStatic
     fun init(context: Context) {
@@ -139,6 +147,9 @@ object VectraCore {
         Log.d(TAG, "selftest_ok=$ok parity_len=${parity.size}")
     }
 
+    /**
+     * PSI stage: fold payload into CRC and advance stage counter.
+     */
     fun psi(payload: ByteArray): Int {
         val crc = CRC32C.update(state.crc32c, payload)
         state.crc32c = crc
@@ -146,6 +157,9 @@ object VectraCore {
         return crc
     }
 
+    /**
+     * RHO stage: treat noise as data to update entropy hint.
+     */
     fun rho(noise: ByteArray): Int {
         val entropy = CRC32C.update(state.entropyHint, noise)
         state.entropyHint = entropy
@@ -153,18 +167,27 @@ object VectraCore {
         return entropy
     }
 
+    /**
+     * DELTA stage: branchless select between two ints using a mask.
+     */
     fun deltaBranchless(mask: Int, a: Int, b: Int): Int {
         val res = (a and mask) or (b and mask.inv())
         state.stageCounters[3]++
         return res
     }
 
+    /**
+     * SIGMA stage: combine two ints with xor and rotate mix.
+     */
     fun sigmaCombine(a: Int, b: Int): Int {
         val mix = a xor ((b shl 1) or (b ushr 31))
         state.stageCounters[4]++
         return mix
     }
 
+    /**
+     * OMEGA stage: finalize digest from crc and entropy hints.
+     */
     fun omegaFinalize(): Int {
         state.stageCounters[5]++
         return state.crc32c xor state.entropyHint
