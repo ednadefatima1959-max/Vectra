@@ -16,6 +16,7 @@ import com.vectras.qemu.MainSettingsManager;
 import com.vectras.vm.utils.FileUtils;
 import com.vectras.vm.utils.PackageUtils;
 import com.vectras.vm.utils.UIUtils;
+import com.vectras.vm.vectra.VectraCore;
 
 import java.lang.ref.WeakReference;
 import java.util.Locale;
@@ -54,6 +55,7 @@ public class VectrasApp extends Application {
 //			overrideFont("DEFAULT", R.font.gilroy);
 //		}
 		setupAppConfig(getApplicationContext());
+		VectraCore.init(this);
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
