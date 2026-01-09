@@ -31,7 +31,7 @@ object VectraBlock {
     private const val VERSION = 1
     private const val HEADER_BYTES = 64
     private const val CRC_OFFSET = 32
-    private const val PRE6_FACTOR = 0x9E3779B97F4A7C15uL.toLong() // 64-bit golden ratio mix
+    private val PRE6_FACTOR = 0x9E3779B97F4A7C15uL.toLong() // 64-bit golden ratio mix
     private const val STRIPE_CFG_DEFAULT = 0x01020304
     private const val ID_PREFIX_DEFAULT = 0x5645435452414C4CL // "VECTRAL"
 
