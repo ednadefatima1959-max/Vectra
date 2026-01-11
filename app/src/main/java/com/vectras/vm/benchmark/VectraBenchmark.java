@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.CRC32C;
 
 /**
- * VECTRA BENCHMARK MODULE (Low-Level, No Abstractions)
+ * VECTRA BENCHMARK MODULE (Low-Level, Matrix-Based, No Abstractions)
  * 
  * Inspired by AnTuTu benchmark methodology with ~79 metrics across:
  * - CPU Performance (single/multi-threaded)
@@ -24,10 +24,21 @@ import java.util.zip.CRC32C;
  * - Integrity/Parity Performance
  * 
  * Design principles:
- * - No abstractions: direct measurement
+ * - LOW-LEVEL: All operations use primitive types and raw loops
+ * - MATRIX-BASED: Data stored in pre-allocated 2D arrays (M0-M4)
+ * - NO ABSTRACTIONS: No Math.*, Arrays.*, System.arraycopy, etc.
+ * - NUMBERED VARIABLES: v0, v1, t0, t1, n0, n1 style naming
+ * - MINIMAL OVERHEAD: Pre-allocated buffers, no allocation during timing
+ * - INLINE ALGORITHMS: SplitMix64, SWAR popcount, manual byte conversion
  * - Non-intrusive: no user penalties
- * - Low-level: bit operations, mmap, CRC32C
- * - Deterministic: reproducible results
+ * - Deterministic: reproducible results via fixed seeds
+ * 
+ * Matrix Buffers:
+ * - M0[256][256]: int matrix for integer operations
+ * - M1[256][256]: long matrix for 64-bit operations
+ * - M2[256][256]: float matrix for FP32 operations
+ * - M3[256][256]: double matrix for FP64 operations
+ * - M4[1024][4096]: byte matrix for memory/integrity operations (4MB)
  * 
  * Reference: AnTuTu Benchmark v10.x methodology
  * 
@@ -391,323 +402,518 @@ public class VectraBenchmark {
         return x;
     }
     
-    // ========== CPU Benchmarks ==========
+    // ========== LOW-LEVEL CPU BENCHMARKS (Matrix-based, numbered variables) ==========
     
-    static long benchCpuIntegerAdd(int iterations) {
-        long start = System.nanoTime();
-        int sum = 0;
-        for (int i = 0; i < iterations; i++) {
-            sum += i;
-            sum += (i ^ 0x55555555);
-            sum += (i & 0xAAAAAAAA);
-            sum += (i | 0x33333333);
+    // Pre-allocated matrices for benchmarks (avoids allocation during measurement)
+    private static final int[][] M0 = new int[256][256];   // Integer matrix
+    private static final long[][] M1 = new long[256][256]; // Long matrix
+    private static final float[][] M2 = new float[256][256]; // Float matrix
+    private static final double[][] M3 = new double[256][256]; // Double matrix
+    private static final byte[][] M4 = new byte[1024][4096]; // Byte matrix for memory
+    
+    // Initialize matrices with deterministic values
+    static {
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                M0[i][j] = (i * 257) ^ (j * 263);
+                M1[i][j] = ((long)i * 0x5DEECE66DL) ^ ((long)j * 0xBL);
+                M2[i][j] = (float)(i * 0.00390625f + j * 0.00001f);
+                M3[i][j] = (double)(i * 0.00390625 + j * 0.00000001);
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (sum & 0); // prevent optimization
+        for (int i = 0; i < 1024; i++) {
+            for (int j = 0; j < 4096; j++) {
+                M4[i][j] = (byte)((i ^ j) & 0xFF);
+            }
+        }
     }
     
-    static long benchCpuIntegerMul(int iterations) {
-        long start = System.nanoTime();
-        int prod = 1;
-        for (int i = 1; i < iterations; i++) {
-            prod *= (i & 0xFF) + 1;
-            prod *= ((i >>> 8) & 0xFF) + 1;
-            if ((i & 0xFFFF) == 0) prod = 1; // prevent overflow
+    static long benchCpuIntegerAdd(int n) {
+        // Pure integer add on matrix - no named variables except indices
+        int v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                v0 = v0 + M0[i][j];
+                v1 = v1 + M0[j][i];
+                v2 = v0 + v1;
+                v3 = v2 + M0[i][j];
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (prod & 0);
+        for (int k = 0; k < n >> 16; k++) {
+            v0 = v0 + v1 + v2 + v3;
+            v1 = v1 + v0;
+        }
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
     }
     
-    static long benchCpuIntegerDiv(int iterations) {
-        long start = System.nanoTime();
-        int quot = Integer.MAX_VALUE;
-        for (int i = 1; i < iterations; i++) {
-            quot /= ((i & 0x7) + 1);
-            if (quot == 0) quot = Integer.MAX_VALUE;
+    static long benchCpuIntegerMul(int n) {
+        // Pure integer multiply on matrix
+        int v0 = 1, v1 = 1, v2 = 1, v3 = 1;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                v0 = v0 * ((M0[i][j] & 0x7F) | 1);
+                v1 = v1 * ((M0[j][i] & 0x7F) | 1);
+                v2 = v0 ^ v1;
+                v3 = (v2 != 0) ? v2 : 1;
+                if ((j & 0x3F) == 0) { v0 = 1; v1 = 1; } // prevent overflow
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (quot & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v3 & 0);
     }
     
-    static long benchCpuLongMix(int iterations) {
-        long start = System.nanoTime();
-        long state = 0x123456789ABCDEF0L;
-        for (int i = 0; i < iterations; i++) {
-            state = mix64(state ^ i);
+    static long benchCpuIntegerDiv(int n) {
+        // Pure integer divide on matrix
+        int v0 = 0x7FFFFFFF, v1 = 0x7FFFFFFF;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                int v2 = (M0[i][j] & 0x7) | 1; // divisor: 1-8
+                int v3 = (M0[j][i] & 0x7) | 1;
+                v0 = v0 / v2;
+                v1 = v1 / v3;
+                if (v0 < 256) v0 = 0x7FFFFFFF;
+                if (v1 < 256) v1 = 0x7FFFFFFF;
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (state & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
     }
     
-    static long benchCpuFloatAdd(int iterations) {
-        long start = System.nanoTime();
-        float sum = 0.0f;
-        for (int i = 0; i < iterations; i++) {
-            sum += i * 0.001f;
-            sum += (float) Math.sin(i * 0.0001);
+    static long benchCpuLongMix(int n) {
+        // Low-level 64-bit mixing on matrix (SplitMix64 inlined)
+        long v0 = 0x123456789ABCDEF0L;
+        long v1 = 0xFEDCBA9876543210L;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                v0 = v0 ^ M1[i][j];
+                v0 = (v0 ^ (v0 >>> 30)) * 0xBF58476D1CE4E5B9L;
+                v0 = (v0 ^ (v0 >>> 27)) * 0x94D049BB133111EBL;
+                v0 = v0 ^ (v0 >>> 31);
+                v1 = v1 ^ v0;
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (int)(sum * 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
     }
     
-    static long benchCpuDoubleMul(int iterations) {
-        long start = System.nanoTime();
-        double prod = 1.0;
-        for (int i = 1; i < iterations; i++) {
-            prod *= 1.0000001;
-            if (i % 10000 == 0) prod = 1.0;
+    static long benchCpuFloatAdd(int n) {
+        // Low-level float add on matrix - no Math functions
+        float v0 = 0.0f, v1 = 0.0f, v2 = 0.0f, v3 = 0.0f;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                v0 = v0 + M2[i][j];
+                v1 = v1 + M2[j][i];
+                v2 = v0 + v1;
+                v3 = v2 + M2[i][j] * 0.5f;
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (long)(prod * 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + ((int)v3 & 0);
     }
     
-    static long benchCpuBitwiseXor(int iterations) {
-        long start = System.nanoTime();
-        long val = 0xFEDCBA9876543210L;
-        for (int i = 0; i < iterations; i++) {
-            val ^= ((long) i * GOLDEN_GAMMA);
-            val ^= (val >>> 17);
-            val ^= (val << 13);
+    static long benchCpuDoubleMul(int n) {
+        // Low-level double multiply on matrix
+        double v0 = 1.0, v1 = 1.0, v2 = 1.0;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                v0 = v0 * (1.0 + M3[i][j] * 0.0001);
+                v1 = v1 * (1.0 + M3[j][i] * 0.0001);
+                v2 = v0 * v1;
+                if ((j & 0x1F) == 0) { v0 = 1.0; v1 = 1.0; } // prevent overflow
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (val & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + ((long)v2 & 0);
     }
     
-    static long benchCpuPopcount(int iterations) {
-        long start = System.nanoTime();
-        int total = 0;
-        for (int i = 0; i < iterations; i++) {
-            total += Integer.bitCount(i);
-            total += Long.bitCount((long) i * GOLDEN_GAMMA);
+    static long benchCpuBitwiseXor(int n) {
+        // Low-level bitwise XOR on matrix
+        long v0 = 0xFEDCBA9876543210L;
+        long v1 = 0x0123456789ABCDEFL;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                v0 = v0 ^ M1[i][j];
+                v1 = v1 ^ M1[j][i];
+                v0 = v0 ^ (v0 >>> 17);
+                v1 = v1 ^ (v1 << 13);
+                v0 = v0 ^ v1;
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (total & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
     }
     
-    // ========== Multi-threaded CPU Benchmarks ==========
+    static long benchCpuPopcount(int n) {
+        // Low-level popcount on matrix (manual bit counting, no library)
+        int v0 = 0;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                // Manual popcount for int (SWAR algorithm)
+                int v1 = M0[i][j];
+                v1 = v1 - ((v1 >>> 1) & 0x55555555);
+                v1 = (v1 & 0x33333333) + ((v1 >>> 2) & 0x33333333);
+                v1 = (v1 + (v1 >>> 4)) & 0x0F0F0F0F;
+                v1 = v1 + (v1 >>> 8);
+                v1 = v1 + (v1 >>> 16);
+                v0 = v0 + (v1 & 0x3F);
+                
+                // Manual popcount for long
+                long v2 = M1[i][j];
+                v2 = v2 - ((v2 >>> 1) & 0x5555555555555555L);
+                v2 = (v2 & 0x3333333333333333L) + ((v2 >>> 2) & 0x3333333333333333L);
+                v2 = (v2 + (v2 >>> 4)) & 0x0F0F0F0F0F0F0F0FL;
+                v2 = v2 + (v2 >>> 8);
+                v2 = v2 + (v2 >>> 16);
+                v2 = v2 + (v2 >>> 32);
+                v0 = v0 + (int)(v2 & 0x7F);
+            }
+        }
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
+    }
     
-    static long benchCpuMtInteger(int threads, int iterationsPerThread) throws InterruptedException {
-        CountDownLatch latch = new CountDownLatch(threads);
-        AtomicLong totalWork = new AtomicLong(0);
-        long start = System.nanoTime();
+    // ========== LOW-LEVEL Multi-threaded CPU Benchmarks ==========
+    
+    static long benchCpuMtInteger(int n0, int n1) throws InterruptedException {
+        // n0 = thread count, n1 = iterations per thread
+        CountDownLatch c0 = new CountDownLatch(n0);
+        AtomicLong r0 = new AtomicLong(0);
+        long t0 = System.nanoTime();
         
-        for (int t = 0; t < threads; t++) {
-            final int seed = t;
+        for (int k = 0; k < n0; k++) {
+            final int s0 = k;
             new Thread(() -> {
-                long work = 0;
-                int val = seed;
-                for (int i = 0; i < iterationsPerThread; i++) {
-                    val = val * 1103515245 + 12345;
-                    work += val;
+                long v0 = 0;
+                int v1 = s0;
+                // Low-level LCG (Linear Congruential Generator)
+                for (int i = 0; i < n1; i++) {
+                    v1 = v1 * 1103515245 + 12345;
+                    v0 = v0 + v1;
                 }
-                totalWork.addAndGet(work);
-                latch.countDown();
+                r0.addAndGet(v0);
+                c0.countDown();
             }).start();
         }
         
-        latch.await();
-        long end = System.nanoTime();
-        return end - start + (totalWork.get() & 0);
+        c0.await();
+        long t1 = System.nanoTime();
+        return t1 - t0 + (r0.get() & 0);
     }
     
-    static long benchCpuMtCas(int threads, int iterations) throws InterruptedException {
-        CountDownLatch latch = new CountDownLatch(threads);
-        AtomicLong counter = new AtomicLong(0);
-        long start = System.nanoTime();
+    static long benchCpuMtCas(int n0, int n1) throws InterruptedException {
+        // n0 = threads, n1 = total iterations
+        CountDownLatch c0 = new CountDownLatch(n0);
+        AtomicLong r0 = new AtomicLong(0);
+        long t0 = System.nanoTime();
         
-        for (int t = 0; t < threads; t++) {
+        for (int k = 0; k < n0; k++) {
             new Thread(() -> {
-                for (int i = 0; i < iterations / threads; i++) {
-                    counter.incrementAndGet();
+                for (int i = 0; i < n1 / n0; i++) {
+                    r0.incrementAndGet();
                 }
-                latch.countDown();
+                c0.countDown();
             }).start();
         }
         
-        latch.await();
-        long end = System.nanoTime();
-        return end - start + (counter.get() & 0);
+        c0.await();
+        long t1 = System.nanoTime();
+        return t1 - t0 + (r0.get() & 0);
     }
     
-    // ========== Memory Benchmarks ==========
+    // ========== LOW-LEVEL Memory Benchmarks (Matrix-based) ==========
     
-    static long benchMemSequentialRead(byte[] buffer) {
-        long start = System.nanoTime();
-        long sum = 0;
-        for (int i = 0; i < buffer.length; i++) {
-            sum += buffer[i];
+    static long benchMemSequentialRead(byte[] b0) {
+        // Low-level sequential read using matrix M4
+        long v0 = 0;
+        int n0 = M4.length;
+        int n1 = M4[0].length;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < n0; i++) {
+            for (int j = 0; j < n1; j++) {
+                v0 = v0 + M4[i][j];
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (sum & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
     }
     
-    static long benchMemSequentialWrite(byte[] buffer) {
-        long start = System.nanoTime();
-        for (int i = 0; i < buffer.length; i++) {
-            buffer[i] = (byte) (i & 0xFF);
+    static long benchMemSequentialWrite(byte[] b0) {
+        // Low-level sequential write using matrix M4
+        int n0 = M4.length;
+        int n1 = M4[0].length;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < n0; i++) {
+            for (int j = 0; j < n1; j++) {
+                M4[i][j] = (byte)((i + j) & 0xFF);
+            }
         }
-        long end = System.nanoTime();
-        return end - start;
+        long t1 = System.nanoTime();
+        return t1 - t0;
     }
     
-    static long benchMemRandomRead(byte[] buffer, int[] indices) {
-        long start = System.nanoTime();
-        long sum = 0;
-        for (int idx : indices) {
-            sum += buffer[idx % buffer.length];
+    static long benchMemRandomRead(byte[] b0, int[] idx) {
+        // Low-level random read using pre-computed indices on matrix
+        long v0 = 0;
+        int n0 = idx.length;
+        int n1 = M4.length;
+        int n2 = M4[0].length;
+        long t0 = System.nanoTime();
+        for (int k = 0; k < n0; k++) {
+            int i = idx[k] & 0x3FF;  // mod 1024 (rows)
+            int j = (idx[k] >>> 10) & 0xFFF; // mod 4096 (cols)
+            if (i >= n1) i = i % n1;
+            if (j >= n2) j = j % n2;
+            v0 = v0 + M4[i][j];
         }
-        long end = System.nanoTime();
-        return end - start + (sum & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
     }
     
-    static long benchMemCopyBandwidth(byte[] src, byte[] dst) {
-        long start = System.nanoTime();
-        System.arraycopy(src, 0, dst, 0, src.length);
-        long end = System.nanoTime();
-        return end - start;
-    }
-    
-    static long benchMemFillBandwidth(byte[] buffer, byte value) {
-        long start = System.nanoTime();
-        Arrays.fill(buffer, value);
-        long end = System.nanoTime();
-        return end - start;
-    }
-    
-    static long benchMemAllocSpeed(int count, int size) {
-        long start = System.nanoTime();
-        byte[][] arrays = new byte[count][];
-        for (int i = 0; i < count; i++) {
-            arrays[i] = new byte[size];
+    static long benchMemCopyBandwidth(byte[] s0, byte[] d0) {
+        // Low-level manual copy (no System.arraycopy)
+        int n0 = M4.length;
+        int n1 = M4[0].length;
+        byte[][] d1 = new byte[n0][n1];
+        long t0 = System.nanoTime();
+        for (int i = 0; i < n0; i++) {
+            for (int j = 0; j < n1; j++) {
+                d1[i][j] = M4[i][j];
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (arrays[0][0] & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (d1[0][0] & 0);
     }
     
-    // ========== Integrity Benchmarks ==========
-    
-    static long benchIntegrityCrc32c(byte[] data, int iterations) {
-        CRC32C crc = new CRC32C();
-        long start = System.nanoTime();
-        for (int i = 0; i < iterations; i++) {
-            crc.reset();
-            crc.update(data);
+    static long benchMemFillBandwidth(byte[] b0, byte v0) {
+        // Low-level manual fill (no Arrays.fill)
+        int n0 = M4.length;
+        int n1 = M4[0].length;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < n0; i++) {
+            for (int j = 0; j < n1; j++) {
+                M4[i][j] = v0;
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (int)(crc.getValue() & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0;
     }
     
-    static long benchIntegrityParity2D(int iterations) {
-        long start = System.nanoTime();
-        int total = 0;
-        for (int i = 0; i < iterations; i++) {
-            total += parity2D8(i & 0xFFFF);
+    static long benchMemAllocSpeed(int n0, int n1) {
+        // n0 = count, n1 = size
+        // Low-level allocation test using matrix
+        long t0 = System.nanoTime();
+        byte[][] a0 = new byte[n0][n1];
+        for (int i = 0; i < n0; i++) {
+            for (int j = 0; j < n1; j++) {
+                a0[i][j] = (byte)(i ^ j);
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (total & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (a0[0][0] & 0);
     }
     
-    static long benchIntegritySyndrome(int iterations) {
-        long start = System.nanoTime();
-        int total = 0;
-        for (int i = 0; i < iterations; i++) {
-            int p1 = parity2D8(i & 0xFFFF);
-            int p2 = parity2D8((i ^ 1) & 0xFFFF);
-            total += syndromePopcount(p1, p2);
+    // ========== LOW-LEVEL Integrity Benchmarks (Matrix-based) ==========
+    
+    static long benchIntegrityCrc32c(byte[] d0, int n0) {
+        // Low-level CRC32C on matrix M4
+        // n0 = iterations
+        CRC32C c0 = new CRC32C();
+        long t0 = System.nanoTime();
+        for (int k = 0; k < n0; k++) {
+            c0.reset();
+            for (int i = 0; i < M4.length; i++) {
+                c0.update(M4[i]);
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (total & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (int)(c0.getValue() & 0);
     }
     
-    static long benchIntegrityXorStripe(byte[][] chunks, int iterations) {
-        long start = System.nanoTime();
-        int maxLen = 0;
-        for (byte[] chunk : chunks) {
-            if (chunk.length > maxLen) maxLen = chunk.length;
+    static long benchIntegrityParity2D(int n0) {
+        // Low-level 2D parity on matrix M0
+        int v0 = 0;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                // Manual 2D parity calculation
+                int v1 = M0[i][j] & 0xFFFF;
+                int v2 = 0;
+                // Column parity (4 columns of 4 bits each)
+                v2 = v2 | (((v1 >>> 0) ^ (v1 >>> 4) ^ (v1 >>> 8) ^ (v1 >>> 12)) & 0xF);
+                // Row parity (4 rows of 4 bits each)
+                int v3 = (v1 & 0x1111) ^ ((v1 >>> 1) & 0x1111) ^ ((v1 >>> 2) & 0x1111) ^ ((v1 >>> 3) & 0x1111);
+                v2 = v2 | ((v3 & 0x000F) << 4);
+                v0 = v0 + v2;
+            }
         }
-        byte[] parity = new byte[maxLen];
-        
-        for (int iter = 0; iter < iterations; iter++) {
-            Arrays.fill(parity, (byte) 0);
-            for (int i = 0; i < maxLen; i++) {
-                for (byte[] chunk : chunks) {
-                    if (i < chunk.length) {
-                        parity[i] ^= chunk[i];
-                    }
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
+    }
+    
+    static long benchIntegritySyndrome(int n0) {
+        // Low-level syndrome computation on matrix
+        int v0 = 0;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                int v1 = M0[i][j] & 0xFFFF;
+                int v2 = M0[j][i] & 0xFFFF;
+                int v3 = v1 ^ v2; // XOR for error detection
+                // Manual popcount (SWAR)
+                v3 = v3 - ((v3 >>> 1) & 0x5555);
+                v3 = (v3 & 0x3333) + ((v3 >>> 2) & 0x3333);
+                v3 = (v3 + (v3 >>> 4)) & 0x0F0F;
+                v3 = v3 + (v3 >>> 8);
+                v0 = v0 + (v3 & 0x1F);
+            }
+        }
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
+    }
+    
+    static long benchIntegrityXorStripe(byte[][] c0, int n0) {
+        // Low-level XOR stripe parity on matrix M4 (no Arrays.fill)
+        int n1 = M4.length;
+        int n2 = M4[0].length;
+        byte[] p0 = new byte[n2];
+        long t0 = System.nanoTime();
+        for (int k = 0; k < n0; k++) {
+            // Manual fill with 0
+            for (int j = 0; j < n2; j++) {
+                p0[j] = 0;
+            }
+            // XOR all rows
+            for (int i = 0; i < n1; i++) {
+                for (int j = 0; j < n2; j++) {
+                    p0[j] = (byte)(p0[j] ^ M4[i][j]);
                 }
             }
         }
-        long end = System.nanoTime();
-        return end - start + (parity[0] & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (p0[0] & 0);
     }
     
-    static long benchIntegrityHashMix(int iterations) {
-        long start = System.nanoTime();
-        long state = 0x123456789ABCDEF0L;
-        for (int i = 0; i < iterations; i++) {
-            state = mix64(state ^ ((long) i * GOLDEN_GAMMA));
+    static long benchIntegrityHashMix(int n0) {
+        // Low-level hash mixing on matrix M1 (SplitMix64 inlined)
+        long v0 = 0x123456789ABCDEF0L;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                v0 = v0 ^ M1[i][j];
+                v0 = (v0 ^ (v0 >>> 30)) * 0xBF58476D1CE4E5B9L;
+                v0 = (v0 ^ (v0 >>> 27)) * 0x94D049BB133111EBL;
+                v0 = v0 ^ (v0 >>> 31);
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (state & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
     }
     
-    // ========== Emulation Benchmarks ==========
+    // ========== LOW-LEVEL Emulation Benchmarks ==========
     
-    static long benchEmuContextSwitch(int iterations) throws InterruptedException {
-        long start = System.nanoTime();
-        for (int i = 0; i < iterations; i++) {
+    static long benchEmuContextSwitch(int n0) throws InterruptedException {
+        long t0 = System.nanoTime();
+        for (int i = 0; i < n0; i++) {
             Thread.yield();
         }
-        long end = System.nanoTime();
-        return end - start;
+        long t1 = System.nanoTime();
+        return t1 - t0;
     }
     
-    static long benchEmuTimerPrecision(int iterations) {
-        long start = System.nanoTime();
-        long[] samples = new long[iterations];
-        for (int i = 0; i < iterations; i++) {
-            samples[i] = System.nanoTime();
+    static long benchEmuTimerPrecision(int n0) {
+        // Low-level timer measurement on pre-allocated array
+        long[] s0 = new long[n0];
+        long t0 = System.nanoTime();
+        for (int i = 0; i < n0; i++) {
+            s0[i] = System.nanoTime();
         }
-        long end = System.nanoTime();
+        long t1 = System.nanoTime();
         
-        // Calculate jitter
-        long maxDiff = 0;
-        for (int i = 1; i < iterations; i++) {
-            long diff = samples[i] - samples[i-1];
-            if (diff > maxDiff) maxDiff = diff;
+        // Calculate max jitter (difference between samples)
+        long v0 = 0;
+        for (int i = 1; i < n0; i++) {
+            long v1 = s0[i] - s0[i-1];
+            if (v1 > v0) v0 = v1;
         }
-        return end - start + maxDiff;
+        return t1 - t0 + v0;
     }
     
-    static long benchEmuTriadConsensus(int iterations) {
-        long start = System.nanoTime();
-        long cpu = 0, ram = 0, disk = 0;
-        int total = 0;
-        for (int i = 0; i < iterations; i++) {
-            cpu = mix64(cpu ^ i);
-            ram = mix64(ram ^ (i * 2));
-            disk = mix64(disk ^ (i * 3));
-            total += whoOutTriad(cpu, ram, disk);
+    static long benchEmuTriadConsensus(int n0) {
+        // Low-level triad consensus on matrix M1
+        long v0 = 0, v1 = 0, v2 = 0;
+        int r0 = 0;
+        long t0 = System.nanoTime();
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                // Inline SplitMix64 mixing
+                v0 = v0 ^ M1[i][j];
+                v0 = (v0 ^ (v0 >>> 30)) * 0xBF58476D1CE4E5B9L;
+                v0 = (v0 ^ (v0 >>> 27)) * 0x94D049BB133111EBL;
+                v0 = v0 ^ (v0 >>> 31);
+                
+                v1 = v1 ^ (M1[i][j] << 1);
+                v1 = (v1 ^ (v1 >>> 30)) * 0xBF58476D1CE4E5B9L;
+                v1 = (v1 ^ (v1 >>> 27)) * 0x94D049BB133111EBL;
+                v1 = v1 ^ (v1 >>> 31);
+                
+                v2 = v2 ^ (M1[i][j] << 2);
+                v2 = (v2 ^ (v2 >>> 30)) * 0xBF58476D1CE4E5B9L;
+                v2 = (v2 ^ (v2 >>> 27)) * 0x94D049BB133111EBL;
+                v2 = v2 ^ (v2 >>> 31);
+                
+                // Inline whoOutTriad logic
+                if (v0 == v1 && v0 != v2) r0 = r0 + 2;
+                else if (v0 == v2 && v0 != v1) r0 = r0 + 1;
+                else if (v1 == v2 && v1 != v0) r0 = r0 + 0;
+                else r0 = r0 + 3;
+            }
         }
-        long end = System.nanoTime();
-        return end - start + (total & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (r0 & 0);
     }
     
-    static long benchEmuStateSerialize(int iterations) {
-        long start = System.nanoTime();
-        ByteBuffer buffer = ByteBuffer.allocate(1024).order(ByteOrder.LITTLE_ENDIAN);
-        long state = 0x123456789ABCDEF0L;
-        
-        for (int i = 0; i < iterations; i++) {
-            buffer.clear();
-            buffer.putLong(state);
-            buffer.putInt(i);
-            buffer.putInt(parity2D8(i & 0xFFFF));
-            buffer.flip();
-            state = buffer.getLong() ^ i;
+    static long benchEmuStateSerialize(int n0) {
+        // Low-level state serialization using byte matrix
+        byte[] b0 = new byte[1024];
+        long v0 = 0x123456789ABCDEF0L;
+        long t0 = System.nanoTime();
+        for (int k = 0; k < n0; k++) {
+            // Manual long to bytes (little endian)
+            b0[0] = (byte)(v0 & 0xFF);
+            b0[1] = (byte)((v0 >>> 8) & 0xFF);
+            b0[2] = (byte)((v0 >>> 16) & 0xFF);
+            b0[3] = (byte)((v0 >>> 24) & 0xFF);
+            b0[4] = (byte)((v0 >>> 32) & 0xFF);
+            b0[5] = (byte)((v0 >>> 40) & 0xFF);
+            b0[6] = (byte)((v0 >>> 48) & 0xFF);
+            b0[7] = (byte)((v0 >>> 56) & 0xFF);
+            // Manual int to bytes
+            b0[8] = (byte)(k & 0xFF);
+            b0[9] = (byte)((k >>> 8) & 0xFF);
+            b0[10] = (byte)((k >>> 16) & 0xFF);
+            b0[11] = (byte)((k >>> 24) & 0xFF);
+            // Read back
+            v0 = ((long)b0[0] & 0xFF) | 
+                 (((long)b0[1] & 0xFF) << 8) |
+                 (((long)b0[2] & 0xFF) << 16) |
+                 (((long)b0[3] & 0xFF) << 24) |
+                 (((long)b0[4] & 0xFF) << 32) |
+                 (((long)b0[5] & 0xFF) << 40) |
+                 (((long)b0[6] & 0xFF) << 48) |
+                 (((long)b0[7] & 0xFF) << 56);
+            v0 = v0 ^ k;
         }
-        long end = System.nanoTime();
-        return end - start + (state & 0);
+        long t1 = System.nanoTime();
+        return t1 - t0 + (v0 & 0);
     }
     
     // ========== SI Unit Formatting Helpers ==========
