@@ -251,7 +251,7 @@ public final class BitwiseMath {
     }
     
     /**
-     * Computes determinant of 2x2 matrix using bitwise operations.
+     * Computes determinant of 2x2 matrix.
      * det = a*d - b*c
      * 
      * @param a Element (0,0)
@@ -289,7 +289,6 @@ public final class BitwiseMath {
         if (angle < 0) angle += FIXED_TWO_PI;
         
         // Determine quadrant and adjust angle
-        int halfPi = FIXED_PI >> 1;
         int quadrant = (angle * 4) / FIXED_TWO_PI;
         int tableAngle;
         boolean negate = false;

@@ -193,14 +193,17 @@ public class BitwiseMathTest {
         int angle = BitwiseMath.fastAtan2Fixed(1, 1);
         // atan2(1,1) = Pi/4
         int piOver4 = BitwiseMath.FIXED_PI >> 2;
-        assertTrue(Math.abs(angle - piOver4) < BitwiseMath.FIXED_PI / 10);
+        // Allow ~6 degree tolerance for approximation
+        int tolerance = BitwiseMath.FIXED_PI / 30;
+        assertTrue(Math.abs(angle - piOver4) < tolerance);
     }
 
     @Test
     public void fastAtan2Fixed_xAxis() {
         int angle = BitwiseMath.fastAtan2Fixed(0, 1);
         // atan2(0,1) = 0
-        assertTrue(Math.abs(angle) < BitwiseMath.FIXED_PI / 10);
+        int tolerance = BitwiseMath.FIXED_PI / 30;
+        assertTrue(Math.abs(angle) < tolerance);
     }
 
     @Test
@@ -208,7 +211,8 @@ public class BitwiseMathTest {
         int angle = BitwiseMath.fastAtan2Fixed(1, 0);
         // atan2(1,0) = Pi/2
         int piOver2 = BitwiseMath.FIXED_PI >> 1;
-        assertTrue(Math.abs(angle - piOver2) < BitwiseMath.FIXED_PI / 10);
+        int tolerance = BitwiseMath.FIXED_PI / 30;
+        assertTrue(Math.abs(angle - piOver2) < tolerance);
     }
 
     // ========== Entropy/Harmony Tests ==========
