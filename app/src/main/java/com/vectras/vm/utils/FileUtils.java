@@ -924,4 +924,71 @@ public class FileUtils {
 			Log.e(TAG, "openFolder: " + e.getMessage());
 		}
 	}
+
+	/**
+	 * Maximum file size for CRC32C calculation (100 MB).
+	 * Larger files will be skipped to avoid memory/performance issues.
+	 */
+	public static final long MAX_CRC_FILE_SIZE = 100L * 1024 * 1024;
+
+	/**
+	 * Calculates CRC32C checksum for a file.
+	 * Uses the Castagnoli polynomial for better error detection.
+	 * 
+	 * @param file The file to calculate checksum for
+	 * @return CRC32C checksum value, or -1 if error
+	 * @throws IOException If file cannot be read
+	 */
+	public static long calculateCRC32C(File file) throws IOException {
+		if (file == null || !file.exists() || !file.isFile()) {
+			return -1;
+		}
+		
+		if (file.length() > MAX_CRC_FILE_SIZE) {
+			throw new IOException("File too large for checksum calculation");
+		}
+		
+		java.util.zip.CRC32C crc = new java.util.zip.CRC32C();
+		try (FileInputStream fis = new FileInputStream(file)) {
+			byte[] buffer = new byte[8192];
+			int read;
+			while ((read = fis.read(buffer)) != -1) {
+				crc.update(buffer, 0, read);
+			}
+		}
+		return crc.getValue();
+	}
+
+	/**
+	 * Formats a CRC32C checksum as an 8-character hex string.
+	 * 
+	 * @param crc The CRC32C value
+	 * @return Formatted hex string (e.g., "A1B2C3D4")
+	 */
+	public static String formatCRC32C(long crc) {
+		return String.format("%08X", crc);
+	}
+
+	/**
+	 * Calculates and formats CRC32C checksum for a file.
+	 * Returns error message if calculation fails.
+	 * 
+	 * @param file The file to calculate checksum for
+	 * @return Formatted checksum or error message
+	 */
+	public static String getFileCRC32CString(File file) {
+		if (file == null || !file.exists()) {
+			return "File not found";
+		}
+		if (file.length() > MAX_CRC_FILE_SIZE) {
+			return "File too large (>100MB)";
+		}
+		try {
+			long crc = calculateCRC32C(file);
+			return formatCRC32C(crc);
+		} catch (IOException e) {
+			Log.e(TAG, "getFileCRC32CString: ", e);
+			return "Error: " + e.getMessage();
+		}
+	}
 }

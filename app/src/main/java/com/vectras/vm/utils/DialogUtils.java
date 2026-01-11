@@ -18,6 +18,7 @@ import android.text.util.Linkify;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.preference.PreferenceManager;
@@ -27,6 +28,90 @@ import com.vectras.vm.AppConfig;
 import com.vectras.vm.R;
 
 public class DialogUtils {
+
+    /**
+     * Shows a progress dialog for long-running operations.
+     * The dialog shows an indeterminate progress bar with a message.
+     * 
+     * @param context The context
+     * @param title Dialog title
+     * @param message Dialog message
+     * @return The AlertDialog instance (call dismiss() when operation completes)
+     */
+    public static AlertDialog showProgressDialog(Context context, String title, String message) {
+        if (!isAllowShow(context)) return null;
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        View view = LayoutInflater.from(context).inflate(R.layout.dialog_progress_operation, null);
+        
+        TextView titleView = view.findViewById(R.id.progress_title);
+        TextView messageView = view.findViewById(R.id.progress_message);
+        ProgressBar progressBar = view.findViewById(R.id.progress_bar);
+        
+        if (titleView != null) titleView.setText(title);
+        if (messageView != null) messageView.setText(message);
+        if (progressBar != null) progressBar.setIndeterminate(true);
+        
+        builder.setView(view);
+        builder.setCancelable(false);
+        
+        AlertDialog dialog = builder.create();
+        dialog.show();
+        return dialog;
+    }
+
+    /**
+     * Shows a progress dialog with determinate progress.
+     * Call updateProgressDialog() to update progress.
+     * 
+     * @param context The context
+     * @param title Dialog title
+     * @param message Dialog message
+     * @param max Maximum progress value
+     * @return The AlertDialog instance
+     */
+    public static AlertDialog showProgressDialog(Context context, String title, String message, int max) {
+        if (!isAllowShow(context)) return null;
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        View view = LayoutInflater.from(context).inflate(R.layout.dialog_progress_operation, null);
+        
+        TextView titleView = view.findViewById(R.id.progress_title);
+        TextView messageView = view.findViewById(R.id.progress_message);
+        ProgressBar progressBar = view.findViewById(R.id.progress_bar);
+        
+        if (titleView != null) titleView.setText(title);
+        if (messageView != null) messageView.setText(message);
+        if (progressBar != null) {
+            progressBar.setIndeterminate(false);
+            progressBar.setMax(max);
+            progressBar.setProgress(0);
+        }
+        
+        builder.setView(view);
+        builder.setCancelable(false);
+        
+        AlertDialog dialog = builder.create();
+        dialog.show();
+        return dialog;
+    }
+
+    /**
+     * Updates the progress of a determinate progress dialog.
+     * 
+     * @param dialog The dialog to update
+     * @param progress Current progress value
+     * @param message Optional new message (pass null to keep current)
+     */
+    public static void updateProgressDialog(AlertDialog dialog, int progress, String message) {
+        if (dialog == null || !dialog.isShowing()) return;
+        
+        ProgressBar progressBar = dialog.findViewById(R.id.progress_bar);
+        TextView messageView = dialog.findViewById(R.id.progress_message);
+        
+        if (progressBar != null) progressBar.setProgress(progress);
+        if (messageView != null && message != null) messageView.setText(message);
+    }
 
     public static void oneDialog(Context context, String title, String message, int iconid) {
         oneDialog(context, title, message, context.getString(R.string.ok), iconid != -1, iconid, true, null, null);

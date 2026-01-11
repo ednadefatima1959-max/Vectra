@@ -806,4 +806,26 @@
     <string name="lang_total_size">Total downloaded: %s</string>
     <string name="lang_clear_all">Clear all language packs</string>
     <string name="lang_clear_all_confirm">Remove all downloaded language packs? The app will revert to English.</string>
+
+    <!-- ========================== FILE INTEGRITY STRINGS ========================== -->
+    <string name="file_integrity">File Integrity</string>
+    <string name="file_crc32c">CRC32C</string>
+    <string name="file_crc32c_calculating">Calculating…</string>
+    <string name="file_crc32c_error">Error calculating checksum</string>
+    <string name="file_too_large_for_checksum">File too large for checksum (>100MB)</string>
+    <string name="copy_checksum">Copy Checksum</string>
+    <string name="checksum_copied">Checksum copied to clipboard</string>
+
+    <!-- ========================== STORAGE PERMISSION EXPLANATION STRINGS ========================== -->
+    <string name="storage_permission_title">Storage Access Required</string>
+    <string name="storage_permission_explanation_android13">Vectras VM needs access to your files to import and manage virtual machine disk images, ISO files, and ROM configurations. On Android 13+, you\'ll be asked to grant specific media permissions.</string>
+    <string name="storage_permission_explanation_android11">Vectras VM needs \"All Files Access\" permission to manage virtual machine files stored in shared storage. This is required for importing large disk images and ISO files.</string>
+    <string name="storage_permission_explanation_legacy">Vectras VM needs storage permission to read and write virtual machine files, including disk images and ISO files.</string>
+    <string name="proceed">Proceed</string>
+
+    <!-- ========================== PROGRESS DIALOG STRINGS ========================== -->
+    <string name="progress_importing_file">Importing file…</string>
+    <string name="progress_creating_disk">Creating disk image…</string>
+    <string name="progress_please_wait">Please wait, this may take a few minutes.</string>
+    <string name="progress_estimated_time">Estimated time: %s</string>
 </resources>

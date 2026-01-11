@@ -39,6 +39,7 @@
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture, design patterns, and component overview |
+| [IMAGES_INDEX.md](IMAGES_INDEX.md) | Architecture and UI images index with code mappings |
 | [VECTRA_CORE.md](../VECTRA_CORE.md) | Vectra Core MVP - Information-theoretic runtime framework |
 | [IMPLEMENTATION_SUMMARY.md](../IMPLEMENTATION_SUMMARY.md) | Implementation summary and deliverables |
 | [FIREBASE.md](../app/FIREBASE.md) | Firebase configuration and setup guide |
@@ -91,9 +92,11 @@ Vectras-VM-Android/
 │   ├── ABSTRACT.md                # English technical abstract
 │   ├── RESUMO.md                  # Portuguese technical summary
 │   ├── ARCHITECTURE.md            # System architecture documentation
+│   ├── IMAGES_INDEX.md            # Architecture/UI images index and code mappings
 │   ├── BIBLIOGRAPHY.md            # Academic references
 │   ├── GLOSSARY.md                # Technical glossary
-│   └── CONTRIBUTING.md            # Contribution guidelines
+│   ├── CONTRIBUTING.md            # Contribution guidelines
+│   └── assets/                    # Documentation images and assets
 ├── VECTRA_CORE.md                 # Vectra Core technical documentation
 ├── IMPLEMENTATION_SUMMARY.md      # Implementation details
 ├── README.md                      # Main project README

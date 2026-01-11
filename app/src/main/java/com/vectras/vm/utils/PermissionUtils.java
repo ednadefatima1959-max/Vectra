@@ -6,6 +6,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.Settings;
 import android.widget.Toast;
 
@@ -46,5 +47,40 @@ public class PermissionUtils {
         } else {
             ActivityCompat.requestPermissions(activity, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1000);
         }
+    }
+
+    /**
+     * Shows explanation dialog before requesting storage permissions.
+     * Tailored for Android version-specific permission requirements.
+     * 
+     * @param activity The activity context
+     * @param onProceed Callback to run when user agrees to proceed
+     */
+    public static void showStoragePermissionExplanation(Activity activity, Runnable onProceed) {
+        String message;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+ (API 33)
+            message = activity.getString(R.string.storage_permission_explanation_android13);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11-12 (API 30-32)
+            message = activity.getString(R.string.storage_permission_explanation_android11);
+        } else {
+            // Android 10 and below
+            message = activity.getString(R.string.storage_permission_explanation_legacy);
+        }
+
+        DialogUtils.twoDialog(
+                activity,
+                activity.getString(R.string.storage_permission_title),
+                message,
+                activity.getString(R.string.proceed),
+                activity.getString(R.string.cancel),
+                true,
+                R.drawable.folder_24px,
+                true,
+                onProceed,
+                null,
+                null
+        );
     }
 }
