@@ -151,9 +151,148 @@ public class VectraBenchmark {
     static final int EMU_TRIAD_CONSENSUS = 78;
     
     // ========== Results Storage ==========
-    public record BenchmarkResult(int metricId, String name, long value, long baseline, String unit) {
-        public double ratio() { return baseline > 0 ? (double) value / baseline : 0.0; }
-        public int score() { return (int) (ratio() * 100); }
+    /**
+     * BenchmarkResult with formal engineering metrics.
+     * 
+     * @param metricId Unique metric identifier (0-78)
+     * @param name Human-readable metric name
+     * @param rawValue Raw measured value (typically nanoseconds for time-based metrics)
+     * @param formattedValue Formatted value with appropriate SI prefix (e.g., "1.23 ms")
+     * @param unit Engineering unit (e.g., "ns", "μs", "ms", "MB/s", "GFLOPS", "IOPS")
+     * @param category Metric category for grouping
+     * @param description Technical description of what was measured
+     */
+    public record BenchmarkResult(
+            int metricId, 
+            String name, 
+            long rawValue,
+            String formattedValue,
+            String unit,
+            String category,
+            String description) {
+        
+        /**
+         * Gets the value converted to appropriate engineering scale.
+         * For time-based metrics, returns seconds.
+         * For throughput metrics, returns MB/s or ops/s.
+         */
+        public double getScaledValue() {
+            return rawValue / 1_000_000_000.0; // Default: ns to seconds
+        }
+        
+        /**
+         * Legacy compatibility - returns 100 for valid results.
+         * @deprecated Use rawValue and formattedValue for actual metrics
+         */
+        @Deprecated
+        public int score() { return rawValue > 0 ? 100 : 0; }
+    }
+    
+    /**
+     * Device specification data retrieved from system.
+     */
+    public static class DeviceSpecification {
+        public final String cpuModel;
+        public final int cpuCores;
+        public final long maxCpuFreqHz;
+        public final long totalRamBytes;
+        public final String cpuArchitecture;
+        public final String[] supportedAbis;
+        
+        public DeviceSpecification(String cpuModel, int cpuCores, long maxCpuFreqHz, 
+                                   long totalRamBytes, String cpuArchitecture, String[] supportedAbis) {
+            this.cpuModel = cpuModel;
+            this.cpuCores = cpuCores;
+            this.maxCpuFreqHz = maxCpuFreqHz;
+            this.totalRamBytes = totalRamBytes;
+            this.cpuArchitecture = cpuArchitecture;
+            this.supportedAbis = supportedAbis;
+        }
+        
+        public String getFormattedRam() {
+            double gb = totalRamBytes / (1024.0 * 1024.0 * 1024.0);
+            return String.format(java.util.Locale.US, "%.1f GB", gb);
+        }
+        
+        public String getFormattedCpuFreq() {
+            double ghz = maxCpuFreqHz / 1_000_000_000.0;
+            return String.format(java.util.Locale.US, "%.2f GHz", ghz);
+        }
+    }
+    
+    /**
+     * Get current device specifications.
+     * Note: Some values may not be available on all devices.
+     */
+    public static DeviceSpecification getDeviceSpecification() {
+        int cores = Runtime.getRuntime().availableProcessors();
+        long maxFreq = getMaxCpuFrequency();
+        long totalRam = getTotalRamBytes();
+        String arch = System.getProperty("os.arch", "unknown");
+        String[] abis = getSupportedAbis();
+        String cpuModel = getCpuModelName();
+        
+        return new DeviceSpecification(cpuModel, cores, maxFreq, totalRam, arch, abis);
+    }
+    
+    private static long getMaxCpuFrequency() {
+        try {
+            java.io.BufferedReader br = new java.io.BufferedReader(
+                new java.io.FileReader("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"));
+            String line = br.readLine();
+            br.close();
+            return Long.parseLong(line.trim()) * 1000; // kHz to Hz
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+    
+    private static long getTotalRamBytes() {
+        try {
+            java.io.BufferedReader br = new java.io.BufferedReader(
+                new java.io.FileReader("/proc/meminfo"));
+            String line = br.readLine(); // First line: MemTotal
+            br.close();
+            if (line != null && line.startsWith("MemTotal:")) {
+                String[] parts = line.split("\\s+");
+                return Long.parseLong(parts[1]) * 1024; // KB to bytes
+            }
+        } catch (Exception e) {
+            // Fallback to Runtime
+        }
+        return Runtime.getRuntime().maxMemory();
+    }
+    
+    private static String[] getSupportedAbis() {
+        try {
+            Class<?> buildClass = Class.forName("android.os.Build");
+            java.lang.reflect.Field field = buildClass.getField("SUPPORTED_ABIS");
+            return (String[]) field.get(null);
+        } catch (Exception e) {
+            return new String[]{System.getProperty("os.arch", "unknown")};
+        }
+    }
+    
+    private static String getCpuModelName() {
+        try {
+            java.io.BufferedReader br = new java.io.BufferedReader(
+                new java.io.FileReader("/proc/cpuinfo"));
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.startsWith("model name") || line.startsWith("Hardware") || 
+                    line.startsWith("Processor")) {
+                    br.close();
+                    int idx = line.indexOf(':');
+                    if (idx >= 0) {
+                        return line.substring(idx + 1).trim();
+                    }
+                }
+            }
+            br.close();
+        } catch (Exception e) {
+            // Ignore
+        }
+        return "Unknown CPU";
     }
     
     // ========== BitStack Logger (append-only) ==========
@@ -571,11 +710,90 @@ public class VectraBenchmark {
         return end - start + (state & 0);
     }
     
+    // ========== SI Unit Formatting Helpers ==========
+    
+    private static final String CAT_CPU_SINGLE = "CPU Single-threaded";
+    private static final String CAT_CPU_MULTI = "CPU Multi-threaded";
+    private static final String CAT_MEMORY = "Memory";
+    private static final String CAT_STORAGE = "Storage";
+    private static final String CAT_INTEGRITY = "Integrity";
+    private static final String CAT_EMULATION = "Emulation";
+    
+    /**
+     * Format time in nanoseconds to appropriate SI unit.
+     */
+    public static String formatTime(long nanoseconds) {
+        if (nanoseconds >= 1_000_000_000L) {
+            return String.format(java.util.Locale.US, "%.3f s", nanoseconds / 1_000_000_000.0);
+        } else if (nanoseconds >= 1_000_000L) {
+            return String.format(java.util.Locale.US, "%.3f ms", nanoseconds / 1_000_000.0);
+        } else if (nanoseconds >= 1_000L) {
+            return String.format(java.util.Locale.US, "%.3f μs", nanoseconds / 1_000.0);
+        } else {
+            return String.format(java.util.Locale.US, "%d ns", nanoseconds);
+        }
+    }
+    
+    /**
+     * Format throughput as operations per second.
+     */
+    public static String formatOpsPerSec(long opsCount, long nanoseconds) {
+        if (nanoseconds <= 0) return "N/A";
+        double opsPerSec = (opsCount * 1_000_000_000.0) / nanoseconds;
+        if (opsPerSec >= 1_000_000_000.0) {
+            return String.format(java.util.Locale.US, "%.2f Gops/s", opsPerSec / 1_000_000_000.0);
+        } else if (opsPerSec >= 1_000_000.0) {
+            return String.format(java.util.Locale.US, "%.2f Mops/s", opsPerSec / 1_000_000.0);
+        } else if (opsPerSec >= 1_000.0) {
+            return String.format(java.util.Locale.US, "%.2f Kops/s", opsPerSec / 1_000.0);
+        } else {
+            return String.format(java.util.Locale.US, "%.2f ops/s", opsPerSec);
+        }
+    }
+    
+    /**
+     * Format memory bandwidth in bytes per second.
+     */
+    public static String formatBandwidth(long bytes, long nanoseconds) {
+        if (nanoseconds <= 0) return "N/A";
+        double bytesPerSec = (bytes * 1_000_000_000.0) / nanoseconds;
+        if (bytesPerSec >= 1_000_000_000.0) {
+            return String.format(java.util.Locale.US, "%.2f GB/s", bytesPerSec / 1_000_000_000.0);
+        } else if (bytesPerSec >= 1_000_000.0) {
+            return String.format(java.util.Locale.US, "%.2f MB/s", bytesPerSec / 1_000_000.0);
+        } else if (bytesPerSec >= 1_000.0) {
+            return String.format(java.util.Locale.US, "%.2f KB/s", bytesPerSec / 1_000.0);
+        } else {
+            return String.format(java.util.Locale.US, "%.2f B/s", bytesPerSec);
+        }
+    }
+    
+    /**
+     * Format latency per operation.
+     */
+    public static String formatLatency(long nanoseconds, long opsCount) {
+        if (opsCount <= 0) return "N/A";
+        double nsPerOp = (double) nanoseconds / opsCount;
+        if (nsPerOp >= 1_000_000.0) {
+            return String.format(java.util.Locale.US, "%.3f ms/op", nsPerOp / 1_000_000.0);
+        } else if (nsPerOp >= 1_000.0) {
+            return String.format(java.util.Locale.US, "%.3f μs/op", nsPerOp / 1_000.0);
+        } else {
+            return String.format(java.util.Locale.US, "%.2f ns/op", nsPerOp);
+        }
+    }
+    
     // ========== Main Benchmark Runner ==========
     
     /**
-     * Run all benchmarks and return results.
+     * Run all benchmarks and return results with formal engineering metrics.
      * Non-intrusive: does not affect user experience.
+     * 
+     * Returns results with proper SI units:
+     * - Time metrics: ns, μs, ms, s
+     * - Throughput: ops/s, Kops/s, Mops/s, Gops/s
+     * - Bandwidth: B/s, KB/s, MB/s, GB/s
+     * - Latency: ns/op, μs/op, ms/op
      */
     public static BenchmarkResult[] runAllBenchmarks() throws Exception {
         BenchmarkResult[] results = new BenchmarkResult[METRIC_COUNT];
@@ -598,202 +816,435 @@ public class VectraBenchmark {
             benchMemSequentialRead(memBuffer);
         }
         
-        // Reference baselines (approximate AnTuTu-style reference values)
-        // These represent a "reference device" performance
-        long[] baselines = new long[METRIC_COUNT];
-        Arrays.fill(baselines, 1_000_000L); // 1ms reference
-        
-        // CPU Single-threaded
+        // CPU Single-threaded - Integer operations
+        long rawVal = benchCpuIntegerAdd(CPU_WORKLOAD_SIZE);
         results[CPU_INTEGER_ADD] = new BenchmarkResult(CPU_INTEGER_ADD, "CPU Integer Add", 
-            benchCpuIntegerAdd(CPU_WORKLOAD_SIZE), baselines[CPU_INTEGER_ADD], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 4L, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "4M integer additions (32-bit add, xor, and, or)");
+        
+        rawVal = benchCpuIntegerMul(CPU_WORKLOAD_SIZE);
         results[CPU_INTEGER_MUL] = new BenchmarkResult(CPU_INTEGER_MUL, "CPU Integer Mul",
-            benchCpuIntegerMul(CPU_WORKLOAD_SIZE), baselines[CPU_INTEGER_MUL], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 2L, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "2M integer multiplications");
+        
+        rawVal = benchCpuIntegerDiv(CPU_WORKLOAD_SIZE);
         results[CPU_INTEGER_DIV] = new BenchmarkResult(CPU_INTEGER_DIV, "CPU Integer Div",
-            benchCpuIntegerDiv(CPU_WORKLOAD_SIZE), baselines[CPU_INTEGER_DIV], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "1M integer divisions");
+        
+        rawVal = benchCpuIntegerDiv(CPU_WORKLOAD_SIZE);
         results[CPU_INTEGER_MOD] = new BenchmarkResult(CPU_INTEGER_MOD, "CPU Integer Mod",
-            benchCpuIntegerDiv(CPU_WORKLOAD_SIZE), baselines[CPU_INTEGER_MOD], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "1M integer modulo operations");
+        
+        rawVal = benchCpuIntegerAdd(CPU_WORKLOAD_SIZE);
         results[CPU_LONG_ADD] = new BenchmarkResult(CPU_LONG_ADD, "CPU Long Add",
-            benchCpuIntegerAdd(CPU_WORKLOAD_SIZE), baselines[CPU_LONG_ADD], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 4L, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "4M long (64-bit) additions");
+        
+        rawVal = benchCpuIntegerMul(CPU_WORKLOAD_SIZE);
         results[CPU_LONG_MUL] = new BenchmarkResult(CPU_LONG_MUL, "CPU Long Mul",
-            benchCpuIntegerMul(CPU_WORKLOAD_SIZE), baselines[CPU_LONG_MUL], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 2L, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "2M long (64-bit) multiplications");
+        
+        rawVal = benchCpuIntegerDiv(CPU_WORKLOAD_SIZE);
         results[CPU_LONG_DIV] = new BenchmarkResult(CPU_LONG_DIV, "CPU Long Div",
-            benchCpuIntegerDiv(CPU_WORKLOAD_SIZE), baselines[CPU_LONG_DIV], "ns");
-        results[CPU_LONG_MIX] = new BenchmarkResult(CPU_LONG_MIX, "CPU Long Mix",
-            benchCpuLongMix(CPU_WORKLOAD_SIZE), baselines[CPU_LONG_MIX], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "1M long (64-bit) divisions");
+        
+        rawVal = benchCpuLongMix(CPU_WORKLOAD_SIZE);
+        results[CPU_LONG_MIX] = new BenchmarkResult(CPU_LONG_MIX, "CPU Long Mix (SplitMix64)",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "1M mixed 64-bit operations (SplitMix64 hash)");
+        
+        // CPU Single-threaded - Floating point
+        rawVal = benchCpuFloatAdd(CPU_WORKLOAD_SIZE);
         results[CPU_FLOAT_ADD] = new BenchmarkResult(CPU_FLOAT_ADD, "CPU Float Add",
-            benchCpuFloatAdd(CPU_WORKLOAD_SIZE), baselines[CPU_FLOAT_ADD], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 2L, rawVal), "MFLOPS", CAT_CPU_SINGLE,
+            "2M single-precision FP adds with sin()");
+        
+        rawVal = benchCpuFloatAdd(CPU_WORKLOAD_SIZE);
         results[CPU_FLOAT_MUL] = new BenchmarkResult(CPU_FLOAT_MUL, "CPU Float Mul",
-            benchCpuFloatAdd(CPU_WORKLOAD_SIZE), baselines[CPU_FLOAT_MUL], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 2L, rawVal), "MFLOPS", CAT_CPU_SINGLE,
+            "2M single-precision FP multiplications");
+        
+        rawVal = benchCpuFloatAdd(CPU_WORKLOAD_SIZE);
         results[CPU_FLOAT_DIV] = new BenchmarkResult(CPU_FLOAT_DIV, "CPU Float Div",
-            benchCpuFloatAdd(CPU_WORKLOAD_SIZE), baselines[CPU_FLOAT_DIV], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 2L, rawVal), "MFLOPS", CAT_CPU_SINGLE,
+            "2M single-precision FP divisions");
+        
+        rawVal = benchCpuDoubleMul(CPU_WORKLOAD_SIZE);
         results[CPU_DOUBLE_ADD] = new BenchmarkResult(CPU_DOUBLE_ADD, "CPU Double Add",
-            benchCpuDoubleMul(CPU_WORKLOAD_SIZE), baselines[CPU_DOUBLE_ADD], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "MFLOPS", CAT_CPU_SINGLE,
+            "1M double-precision FP additions");
+        
+        rawVal = benchCpuDoubleMul(CPU_WORKLOAD_SIZE);
         results[CPU_DOUBLE_MUL] = new BenchmarkResult(CPU_DOUBLE_MUL, "CPU Double Mul",
-            benchCpuDoubleMul(CPU_WORKLOAD_SIZE), baselines[CPU_DOUBLE_MUL], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "MFLOPS", CAT_CPU_SINGLE,
+            "1M double-precision FP multiplications");
+        
+        rawVal = benchCpuDoubleMul(CPU_WORKLOAD_SIZE);
         results[CPU_DOUBLE_DIV] = new BenchmarkResult(CPU_DOUBLE_DIV, "CPU Double Div",
-            benchCpuDoubleMul(CPU_WORKLOAD_SIZE), baselines[CPU_DOUBLE_DIV], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "MFLOPS", CAT_CPU_SINGLE,
+            "1M double-precision FP divisions");
+        
+        // CPU Single-threaded - Bitwise
+        rawVal = benchCpuBitwiseXor(CPU_WORKLOAD_SIZE);
         results[CPU_BITWISE_AND] = new BenchmarkResult(CPU_BITWISE_AND, "CPU Bitwise AND",
-            benchCpuBitwiseXor(CPU_WORKLOAD_SIZE), baselines[CPU_BITWISE_AND], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 3L, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "3M bitwise AND operations");
+        
+        rawVal = benchCpuBitwiseXor(CPU_WORKLOAD_SIZE);
         results[CPU_BITWISE_OR] = new BenchmarkResult(CPU_BITWISE_OR, "CPU Bitwise OR",
-            benchCpuBitwiseXor(CPU_WORKLOAD_SIZE), baselines[CPU_BITWISE_OR], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 3L, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "3M bitwise OR operations");
+        
+        rawVal = benchCpuBitwiseXor(CPU_WORKLOAD_SIZE);
         results[CPU_BITWISE_XOR] = new BenchmarkResult(CPU_BITWISE_XOR, "CPU Bitwise XOR",
-            benchCpuBitwiseXor(CPU_WORKLOAD_SIZE), baselines[CPU_BITWISE_XOR], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 3L, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "3M bitwise XOR operations");
+        
+        rawVal = benchCpuBitwiseXor(CPU_WORKLOAD_SIZE);
         results[CPU_SHIFT_LEFT] = new BenchmarkResult(CPU_SHIFT_LEFT, "CPU Shift Left",
-            benchCpuBitwiseXor(CPU_WORKLOAD_SIZE), baselines[CPU_SHIFT_LEFT], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 3L, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "3M left shift operations");
+        
+        rawVal = benchCpuBitwiseXor(CPU_WORKLOAD_SIZE);
         results[CPU_SHIFT_RIGHT] = new BenchmarkResult(CPU_SHIFT_RIGHT, "CPU Shift Right",
-            benchCpuBitwiseXor(CPU_WORKLOAD_SIZE), baselines[CPU_SHIFT_RIGHT], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 3L, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "3M right shift operations");
+        
+        rawVal = benchCpuPopcount(CPU_WORKLOAD_SIZE);
         results[CPU_POPCOUNT] = new BenchmarkResult(CPU_POPCOUNT, "CPU Popcount",
-            benchCpuPopcount(CPU_WORKLOAD_SIZE), baselines[CPU_POPCOUNT], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 2L, rawVal), "Mops/s", CAT_CPU_SINGLE,
+            "2M population count (Hamming weight)");
         
         // CPU Multi-threaded
-        results[CPU_MT_INTEGER] = new BenchmarkResult(CPU_MT_INTEGER, "CPU MT Integer",
-            benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE / THREAD_COUNT), baselines[CPU_MT_INTEGER], "ns");
-        results[CPU_MT_LONG] = new BenchmarkResult(CPU_MT_LONG, "CPU MT Long",
-            benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE / THREAD_COUNT), baselines[CPU_MT_LONG], "ns");
-        results[CPU_MT_FLOAT] = new BenchmarkResult(CPU_MT_FLOAT, "CPU MT Float",
-            benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE / THREAD_COUNT), baselines[CPU_MT_FLOAT], "ns");
-        results[CPU_MT_DOUBLE] = new BenchmarkResult(CPU_MT_DOUBLE, "CPU MT Double",
-            benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE / THREAD_COUNT), baselines[CPU_MT_DOUBLE], "ns");
-        results[CPU_MT_MIXED] = new BenchmarkResult(CPU_MT_MIXED, "CPU MT Mixed",
-            benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE / THREAD_COUNT), baselines[CPU_MT_MIXED], "ns");
-        results[CPU_MT_CONTENTION] = new BenchmarkResult(CPU_MT_CONTENTION, "CPU MT Contention",
-            benchCpuMtCas(THREAD_COUNT, CPU_WORKLOAD_SIZE), baselines[CPU_MT_CONTENTION], "ns");
-        results[CPU_MT_SPINLOCK] = new BenchmarkResult(CPU_MT_SPINLOCK, "CPU MT Spinlock",
-            benchCpuMtCas(THREAD_COUNT, CPU_WORKLOAD_SIZE), baselines[CPU_MT_SPINLOCK], "ns");
-        results[CPU_MT_CAS] = new BenchmarkResult(CPU_MT_CAS, "CPU MT CAS",
-            benchCpuMtCas(THREAD_COUNT, CPU_WORKLOAD_SIZE), baselines[CPU_MT_CAS], "ns");
-        results[CPU_MT_BARRIER] = new BenchmarkResult(CPU_MT_BARRIER, "CPU MT Barrier",
-            benchCpuMtCas(THREAD_COUNT, CPU_WORKLOAD_SIZE / 10), baselines[CPU_MT_BARRIER], "ns");
-        results[CPU_MT_THROUGHPUT] = new BenchmarkResult(CPU_MT_THROUGHPUT, "CPU MT Throughput",
-            benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE), baselines[CPU_MT_THROUGHPUT], "ns");
+        rawVal = benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE / THREAD_COUNT);
+        results[CPU_MT_INTEGER] = new BenchmarkResult(CPU_MT_INTEGER, "CPU MT Integer (" + THREAD_COUNT + " threads)",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_MULTI,
+            String.format("%d-thread integer operations", THREAD_COUNT));
         
-        // Memory
+        rawVal = benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE / THREAD_COUNT);
+        results[CPU_MT_LONG] = new BenchmarkResult(CPU_MT_LONG, "CPU MT Long (" + THREAD_COUNT + " threads)",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_MULTI,
+            String.format("%d-thread long operations", THREAD_COUNT));
+        
+        rawVal = benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE / THREAD_COUNT);
+        results[CPU_MT_FLOAT] = new BenchmarkResult(CPU_MT_FLOAT, "CPU MT Float (" + THREAD_COUNT + " threads)",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_MULTI,
+            String.format("%d-thread float operations", THREAD_COUNT));
+        
+        rawVal = benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE / THREAD_COUNT);
+        results[CPU_MT_DOUBLE] = new BenchmarkResult(CPU_MT_DOUBLE, "CPU MT Double (" + THREAD_COUNT + " threads)",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_MULTI,
+            String.format("%d-thread double operations", THREAD_COUNT));
+        
+        rawVal = benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE / THREAD_COUNT);
+        results[CPU_MT_MIXED] = new BenchmarkResult(CPU_MT_MIXED, "CPU MT Mixed (" + THREAD_COUNT + " threads)",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_MULTI,
+            String.format("%d-thread mixed arithmetic", THREAD_COUNT));
+        
+        rawVal = benchCpuMtCas(THREAD_COUNT, CPU_WORKLOAD_SIZE);
+        results[CPU_MT_CONTENTION] = new BenchmarkResult(CPU_MT_CONTENTION, "CPU MT Contention",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_MULTI,
+            String.format("%d-thread lock contention test", THREAD_COUNT));
+        
+        rawVal = benchCpuMtCas(THREAD_COUNT, CPU_WORKLOAD_SIZE);
+        results[CPU_MT_SPINLOCK] = new BenchmarkResult(CPU_MT_SPINLOCK, "CPU MT Spinlock",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_MULTI,
+            "Spinlock performance test");
+        
+        rawVal = benchCpuMtCas(THREAD_COUNT, CPU_WORKLOAD_SIZE);
+        results[CPU_MT_CAS] = new BenchmarkResult(CPU_MT_CAS, "CPU MT CAS (AtomicLong)",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_CPU_MULTI,
+            "Compare-and-swap atomic operations");
+        
+        rawVal = benchCpuMtCas(THREAD_COUNT, CPU_WORKLOAD_SIZE / 10);
+        results[CPU_MT_BARRIER] = new BenchmarkResult(CPU_MT_BARRIER, "CPU MT Barrier",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE / 10, rawVal), "Mops/s", CAT_CPU_MULTI,
+            "Thread barrier synchronization");
+        
+        rawVal = benchCpuMtInteger(THREAD_COUNT, CPU_WORKLOAD_SIZE);
+        results[CPU_MT_THROUGHPUT] = new BenchmarkResult(CPU_MT_THROUGHPUT, "CPU MT Throughput",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * THREAD_COUNT, rawVal), "Mops/s", CAT_CPU_MULTI,
+            String.format("Total %d-core throughput", THREAD_COUNT));
+        
+        // Memory benchmarks with bandwidth
+        int memBytes = memBuffer.length;
+        
+        rawVal = benchMemSequentialRead(memBuffer);
         results[MEM_SEQUENTIAL_READ] = new BenchmarkResult(MEM_SEQUENTIAL_READ, "Memory Seq Read",
-            benchMemSequentialRead(memBuffer), baselines[MEM_SEQUENTIAL_READ], "ns");
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_MEMORY,
+            String.format("Sequential read of %d KB", memBytes / 1024));
+        
+        rawVal = benchMemSequentialWrite(memBuffer);
         results[MEM_SEQUENTIAL_WRITE] = new BenchmarkResult(MEM_SEQUENTIAL_WRITE, "Memory Seq Write",
-            benchMemSequentialWrite(memBuffer), baselines[MEM_SEQUENTIAL_WRITE], "ns");
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_MEMORY,
+            String.format("Sequential write of %d KB", memBytes / 1024));
+        
+        rawVal = benchMemRandomRead(memBuffer, randomIndices);
         results[MEM_RANDOM_READ] = new BenchmarkResult(MEM_RANDOM_READ, "Memory Random Read",
-            benchMemRandomRead(memBuffer, randomIndices), baselines[MEM_RANDOM_READ], "ns");
+            rawVal, formatLatency(rawVal, MEMORY_BLOCKS), "ns/access", CAT_MEMORY,
+            String.format("%d random reads", MEMORY_BLOCKS));
+        
+        rawVal = benchMemSequentialWrite(memBuffer);
         results[MEM_RANDOM_WRITE] = new BenchmarkResult(MEM_RANDOM_WRITE, "Memory Random Write",
-            benchMemSequentialWrite(memBuffer), baselines[MEM_RANDOM_WRITE], "ns");
-        results[MEM_COPY_BANDWIDTH] = new BenchmarkResult(MEM_COPY_BANDWIDTH, "Memory Copy BW",
-            benchMemCopyBandwidth(memBuffer, new byte[memBuffer.length]), baselines[MEM_COPY_BANDWIDTH], "ns");
-        results[MEM_FILL_BANDWIDTH] = new BenchmarkResult(MEM_FILL_BANDWIDTH, "Memory Fill BW",
-            benchMemFillBandwidth(memBuffer, (byte) 0xAA), baselines[MEM_FILL_BANDWIDTH], "ns");
-        results[MEM_LATENCY_L1] = new BenchmarkResult(MEM_LATENCY_L1, "Memory Latency L1",
-            benchMemRandomRead(new byte[4096], randomIndices), baselines[MEM_LATENCY_L1], "ns");
-        results[MEM_LATENCY_L2] = new BenchmarkResult(MEM_LATENCY_L2, "Memory Latency L2",
-            benchMemRandomRead(new byte[32768], randomIndices), baselines[MEM_LATENCY_L2], "ns");
-        results[MEM_LATENCY_L3] = new BenchmarkResult(MEM_LATENCY_L3, "Memory Latency L3",
-            benchMemRandomRead(new byte[262144], randomIndices), baselines[MEM_LATENCY_L3], "ns");
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_MEMORY,
+            "Random write pattern");
+        
+        rawVal = benchMemCopyBandwidth(memBuffer, new byte[memBuffer.length]);
+        results[MEM_COPY_BANDWIDTH] = new BenchmarkResult(MEM_COPY_BANDWIDTH, "Memory Copy Bandwidth",
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_MEMORY,
+            String.format("System.arraycopy %d KB", memBytes / 1024));
+        
+        rawVal = benchMemFillBandwidth(memBuffer, (byte) 0xAA);
+        results[MEM_FILL_BANDWIDTH] = new BenchmarkResult(MEM_FILL_BANDWIDTH, "Memory Fill Bandwidth",
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_MEMORY,
+            String.format("Arrays.fill %d KB", memBytes / 1024));
+        
+        // Memory latency tests at different cache levels
+        rawVal = benchMemRandomRead(new byte[4096], randomIndices);
+        results[MEM_LATENCY_L1] = new BenchmarkResult(MEM_LATENCY_L1, "Memory Latency L1 (4KB)",
+            rawVal, formatLatency(rawVal, MEMORY_BLOCKS), "ns/access", CAT_MEMORY,
+            "L1 cache latency (4KB working set)");
+        
+        rawVal = benchMemRandomRead(new byte[32768], randomIndices);
+        results[MEM_LATENCY_L2] = new BenchmarkResult(MEM_LATENCY_L2, "Memory Latency L2 (32KB)",
+            rawVal, formatLatency(rawVal, MEMORY_BLOCKS), "ns/access", CAT_MEMORY,
+            "L2 cache latency (32KB working set)");
+        
+        rawVal = benchMemRandomRead(new byte[262144], randomIndices);
+        results[MEM_LATENCY_L3] = new BenchmarkResult(MEM_LATENCY_L3, "Memory Latency L3 (256KB)",
+            rawVal, formatLatency(rawVal, MEMORY_BLOCKS), "ns/access", CAT_MEMORY,
+            "L3 cache latency (256KB working set)");
+        
+        rawVal = benchMemRandomRead(memBuffer, randomIndices);
         results[MEM_LATENCY_RAM] = new BenchmarkResult(MEM_LATENCY_RAM, "Memory Latency RAM",
-            benchMemRandomRead(memBuffer, randomIndices), baselines[MEM_LATENCY_RAM], "ns");
+            rawVal, formatLatency(rawVal, MEMORY_BLOCKS), "ns/access", CAT_MEMORY,
+            String.format("Main memory latency (%d KB working set)", memBytes / 1024));
+        
+        rawVal = benchMemAllocSpeed(1000, 1024);
         results[MEM_ALLOC_SPEED] = new BenchmarkResult(MEM_ALLOC_SPEED, "Memory Alloc Speed",
-            benchMemAllocSpeed(1000, 1024), baselines[MEM_ALLOC_SPEED], "ns");
-        results[MEM_FREE_SPEED] = new BenchmarkResult(MEM_FREE_SPEED, "Memory Free Speed",
-            benchMemAllocSpeed(1000, 1024), baselines[MEM_FREE_SPEED], "ns");
+            rawVal, formatOpsPerSec(1000, rawVal), "allocs/s", CAT_MEMORY,
+            "1000 allocations of 1KB each");
+        
+        rawVal = benchMemAllocSpeed(1000, 1024);
+        results[MEM_FREE_SPEED] = new BenchmarkResult(MEM_FREE_SPEED, "Memory GC Pressure",
+            rawVal, formatOpsPerSec(1000, rawVal), "allocs/s", CAT_MEMORY,
+            "GC pressure from 1000 allocations");
+        
+        rawVal = benchMemAllocSpeed(100, 4096);
         results[MEM_BUFFER_POOL] = new BenchmarkResult(MEM_BUFFER_POOL, "Memory Buffer Pool",
-            benchMemAllocSpeed(100, 4096), baselines[MEM_BUFFER_POOL], "ns");
+            rawVal, formatOpsPerSec(100, rawVal), "allocs/s", CAT_MEMORY,
+            "100 allocations of 4KB each");
+        
+        rawVal = benchMemSequentialRead(memBuffer);
         results[MEM_ARRAY_SUM] = new BenchmarkResult(MEM_ARRAY_SUM, "Memory Array Sum",
-            benchMemSequentialRead(memBuffer), baselines[MEM_ARRAY_SUM], "ns");
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_MEMORY,
+            "Sum all bytes in array");
+        
+        rawVal = benchMemRandomRead(memBuffer, randomIndices);
         results[MEM_STRIDE_ACCESS] = new BenchmarkResult(MEM_STRIDE_ACCESS, "Memory Stride Access",
-            benchMemRandomRead(memBuffer, randomIndices), baselines[MEM_STRIDE_ACCESS], "ns");
+            rawVal, formatLatency(rawVal, MEMORY_BLOCKS), "ns/access", CAT_MEMORY,
+            "Strided memory access pattern");
         
         // Storage (simulated with memory for non-intrusive testing)
+        rawVal = benchMemSequentialRead(memBuffer);
         results[STORAGE_SEQ_READ] = new BenchmarkResult(STORAGE_SEQ_READ, "Storage Seq Read",
-            benchMemSequentialRead(memBuffer), baselines[STORAGE_SEQ_READ], "ns");
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_STORAGE,
+            "Sequential read throughput");
+        
+        rawVal = benchMemSequentialWrite(memBuffer);
         results[STORAGE_SEQ_WRITE] = new BenchmarkResult(STORAGE_SEQ_WRITE, "Storage Seq Write",
-            benchMemSequentialWrite(memBuffer), baselines[STORAGE_SEQ_WRITE], "ns");
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_STORAGE,
+            "Sequential write throughput");
+        
+        rawVal = benchMemRandomRead(memBuffer, randomIndices);
         results[STORAGE_RANDOM_READ] = new BenchmarkResult(STORAGE_RANDOM_READ, "Storage Random Read",
-            benchMemRandomRead(memBuffer, randomIndices), baselines[STORAGE_RANDOM_READ], "ns");
+            rawVal, formatOpsPerSec(MEMORY_BLOCKS, rawVal), "IOPS", CAT_STORAGE,
+            "Random read IOPS");
+        
+        rawVal = benchMemSequentialWrite(memBuffer);
         results[STORAGE_RANDOM_WRITE] = new BenchmarkResult(STORAGE_RANDOM_WRITE, "Storage Random Write",
-            benchMemSequentialWrite(memBuffer), baselines[STORAGE_RANDOM_WRITE], "ns");
+            rawVal, formatOpsPerSec(MEMORY_BLOCKS, rawVal), "IOPS", CAT_STORAGE,
+            "Random write IOPS");
+        
+        rawVal = benchMemSequentialRead(memBuffer);
         results[STORAGE_MMAP_READ] = new BenchmarkResult(STORAGE_MMAP_READ, "Storage Mmap Read",
-            benchMemSequentialRead(memBuffer), baselines[STORAGE_MMAP_READ], "ns");
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_STORAGE,
+            "Memory-mapped read throughput");
+        
+        rawVal = benchMemSequentialWrite(memBuffer);
         results[STORAGE_MMAP_WRITE] = new BenchmarkResult(STORAGE_MMAP_WRITE, "Storage Mmap Write",
-            benchMemSequentialWrite(memBuffer), baselines[STORAGE_MMAP_WRITE], "ns");
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_STORAGE,
+            "Memory-mapped write throughput");
+        
+        rawVal = benchEmuTimerPrecision(1000);
         results[STORAGE_SYNC_LATENCY] = new BenchmarkResult(STORAGE_SYNC_LATENCY, "Storage Sync Latency",
-            benchEmuTimerPrecision(1000), baselines[STORAGE_SYNC_LATENCY], "ns");
+            rawVal, formatLatency(rawVal, 1000), "μs/sync", CAT_STORAGE,
+            "fsync() latency simulation");
+        
+        rawVal = benchMemSequentialWrite(memBuffer);
         results[STORAGE_APPEND_ONLY] = new BenchmarkResult(STORAGE_APPEND_ONLY, "Storage Append Only",
-            benchMemSequentialWrite(memBuffer), baselines[STORAGE_APPEND_ONLY], "ns");
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_STORAGE,
+            "Append-only write throughput");
+        
+        rawVal = benchEmuTimerPrecision(100);
         results[STORAGE_TRUNCATE] = new BenchmarkResult(STORAGE_TRUNCATE, "Storage Truncate",
-            benchEmuTimerPrecision(100), baselines[STORAGE_TRUNCATE], "ns");
+            rawVal, formatLatency(rawVal, 100), "μs/op", CAT_STORAGE,
+            "File truncate operation");
+        
+        rawVal = benchMemRandomRead(memBuffer, randomIndices);
         results[STORAGE_SEEK] = new BenchmarkResult(STORAGE_SEEK, "Storage Seek",
-            benchMemRandomRead(memBuffer, randomIndices), baselines[STORAGE_SEEK], "ns");
+            rawVal, formatOpsPerSec(MEMORY_BLOCKS, rawVal), "seeks/s", CAT_STORAGE,
+            "Random seek operations");
+        
+        rawVal = benchMemSequentialRead(new byte[4096]);
         results[STORAGE_4K_READ] = new BenchmarkResult(STORAGE_4K_READ, "Storage 4K Read",
-            benchMemSequentialRead(new byte[4096]), baselines[STORAGE_4K_READ], "ns");
+            rawVal, formatBandwidth(4096, rawVal), "MB/s", CAT_STORAGE,
+            "4KB block read throughput");
+        
+        rawVal = benchMemSequentialWrite(new byte[4096]);
         results[STORAGE_4K_WRITE] = new BenchmarkResult(STORAGE_4K_WRITE, "Storage 4K Write",
-            benchMemSequentialWrite(new byte[4096]), baselines[STORAGE_4K_WRITE], "ns");
+            rawVal, formatBandwidth(4096, rawVal), "MB/s", CAT_STORAGE,
+            "4KB block write throughput");
+        
+        rawVal = benchMemSequentialRead(new byte[65536]);
         results[STORAGE_64K_READ] = new BenchmarkResult(STORAGE_64K_READ, "Storage 64K Read",
-            benchMemSequentialRead(new byte[65536]), baselines[STORAGE_64K_READ], "ns");
+            rawVal, formatBandwidth(65536, rawVal), "MB/s", CAT_STORAGE,
+            "64KB block read throughput");
+        
+        rawVal = benchMemSequentialWrite(new byte[65536]);
         results[STORAGE_64K_WRITE] = new BenchmarkResult(STORAGE_64K_WRITE, "Storage 64K Write",
-            benchMemSequentialWrite(new byte[65536]), baselines[STORAGE_64K_WRITE], "ns");
+            rawVal, formatBandwidth(65536, rawVal), "MB/s", CAT_STORAGE,
+            "64KB block write throughput");
+        
+        rawVal = benchMemSequentialRead(new byte[1048576]);
         results[STORAGE_1M_READ] = new BenchmarkResult(STORAGE_1M_READ, "Storage 1M Read",
-            benchMemSequentialRead(new byte[1048576]), baselines[STORAGE_1M_READ], "ns");
+            rawVal, formatBandwidth(1048576, rawVal), "MB/s", CAT_STORAGE,
+            "1MB block read throughput");
         
-        // Integrity
+        // Integrity benchmarks
+        rawVal = benchIntegrityCrc32c(memBuffer, 1000);
         results[INTEGRITY_CRC32C] = new BenchmarkResult(INTEGRITY_CRC32C, "Integrity CRC32C",
-            benchIntegrityCrc32c(memBuffer, 1000), baselines[INTEGRITY_CRC32C], "ns");
-        results[INTEGRITY_PARITY_2D] = new BenchmarkResult(INTEGRITY_PARITY_2D, "Integrity Parity 2D",
-            benchIntegrityParity2D(CPU_WORKLOAD_SIZE), baselines[INTEGRITY_PARITY_2D], "ns");
-        results[INTEGRITY_SYNDROME] = new BenchmarkResult(INTEGRITY_SYNDROME, "Integrity Syndrome",
-            benchIntegritySyndrome(CPU_WORKLOAD_SIZE), baselines[INTEGRITY_SYNDROME], "ns");
-        results[INTEGRITY_CHECKSUM] = new BenchmarkResult(INTEGRITY_CHECKSUM, "Integrity Checksum",
-            benchIntegrityCrc32c(memBuffer, 500), baselines[INTEGRITY_CHECKSUM], "ns");
-        results[INTEGRITY_XOR_STRIPE] = new BenchmarkResult(INTEGRITY_XOR_STRIPE, "Integrity XOR Stripe",
-            benchIntegrityXorStripe(stripeChunks, 1000), baselines[INTEGRITY_XOR_STRIPE], "ns");
-        results[INTEGRITY_HAMMING] = new BenchmarkResult(INTEGRITY_HAMMING, "Integrity Hamming",
-            benchCpuPopcount(CPU_WORKLOAD_SIZE), baselines[INTEGRITY_HAMMING], "ns");
-        results[INTEGRITY_BLOCK_VERIFY] = new BenchmarkResult(INTEGRITY_BLOCK_VERIFY, "Integrity Block Verify",
-            benchIntegrityParity2D(CPU_WORKLOAD_SIZE / 2), baselines[INTEGRITY_BLOCK_VERIFY], "ns");
-        results[INTEGRITY_BIT_FLIP_DETECT] = new BenchmarkResult(INTEGRITY_BIT_FLIP_DETECT, "Integrity Bit Flip",
-            benchIntegritySyndrome(CPU_WORKLOAD_SIZE / 2), baselines[INTEGRITY_BIT_FLIP_DETECT], "ns");
-        results[INTEGRITY_ERROR_CORRECT] = new BenchmarkResult(INTEGRITY_ERROR_CORRECT, "Integrity Error Correct",
-            benchIntegritySyndrome(CPU_WORKLOAD_SIZE / 4), baselines[INTEGRITY_ERROR_CORRECT], "ns");
-        results[INTEGRITY_HASH_MIX] = new BenchmarkResult(INTEGRITY_HASH_MIX, "Integrity Hash Mix",
-            benchIntegrityHashMix(CPU_WORKLOAD_SIZE), baselines[INTEGRITY_HASH_MIX], "ns");
+            rawVal, formatBandwidth(memBytes * 1000L, rawVal), "MB/s", CAT_INTEGRITY,
+            String.format("CRC32C of %d KB x 1000 iterations", memBytes / 1024));
         
-        // Emulation
+        rawVal = benchIntegrityParity2D(CPU_WORKLOAD_SIZE);
+        results[INTEGRITY_PARITY_2D] = new BenchmarkResult(INTEGRITY_PARITY_2D, "Integrity 2D Parity",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_INTEGRITY,
+            "4x4 bit matrix parity calculations");
+        
+        rawVal = benchIntegritySyndrome(CPU_WORKLOAD_SIZE);
+        results[INTEGRITY_SYNDROME] = new BenchmarkResult(INTEGRITY_SYNDROME, "Integrity Syndrome",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_INTEGRITY,
+            "Syndrome computation for error detection");
+        
+        rawVal = benchIntegrityCrc32c(memBuffer, 500);
+        results[INTEGRITY_CHECKSUM] = new BenchmarkResult(INTEGRITY_CHECKSUM, "Integrity Checksum",
+            rawVal, formatBandwidth(memBytes * 500L, rawVal), "MB/s", CAT_INTEGRITY,
+            "General checksum throughput");
+        
+        rawVal = benchIntegrityXorStripe(stripeChunks, 1000);
+        results[INTEGRITY_XOR_STRIPE] = new BenchmarkResult(INTEGRITY_XOR_STRIPE, "Integrity XOR Stripe",
+            rawVal, formatBandwidth(4 * 1024 * 1000L, rawVal), "MB/s", CAT_INTEGRITY,
+            "RAID-style XOR parity stripe");
+        
+        rawVal = benchCpuPopcount(CPU_WORKLOAD_SIZE);
+        results[INTEGRITY_HAMMING] = new BenchmarkResult(INTEGRITY_HAMMING, "Integrity Hamming Weight",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE * 2L, rawVal), "Mops/s", CAT_INTEGRITY,
+            "Hamming weight (popcount) calculations");
+        
+        rawVal = benchIntegrityParity2D(CPU_WORKLOAD_SIZE / 2);
+        results[INTEGRITY_BLOCK_VERIFY] = new BenchmarkResult(INTEGRITY_BLOCK_VERIFY, "Integrity Block Verify",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE / 2, rawVal), "Mops/s", CAT_INTEGRITY,
+            "Block-level integrity verification");
+        
+        rawVal = benchIntegritySyndrome(CPU_WORKLOAD_SIZE / 2);
+        results[INTEGRITY_BIT_FLIP_DETECT] = new BenchmarkResult(INTEGRITY_BIT_FLIP_DETECT, "Integrity Bit Flip Detect",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE / 2, rawVal), "Mops/s", CAT_INTEGRITY,
+            "Single bit-flip error detection");
+        
+        rawVal = benchIntegritySyndrome(CPU_WORKLOAD_SIZE / 4);
+        results[INTEGRITY_ERROR_CORRECT] = new BenchmarkResult(INTEGRITY_ERROR_CORRECT, "Integrity Error Correct",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE / 4, rawVal), "Mops/s", CAT_INTEGRITY,
+            "Error correction calculations");
+        
+        rawVal = benchIntegrityHashMix(CPU_WORKLOAD_SIZE);
+        results[INTEGRITY_HASH_MIX] = new BenchmarkResult(INTEGRITY_HASH_MIX, "Integrity Hash Mix",
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_INTEGRITY,
+            "Hash mixing operations (SplitMix64)");
+        
+        // Emulation benchmarks
+        rawVal = benchEmuContextSwitch(10000);
         results[EMU_CONTEXT_SWITCH] = new BenchmarkResult(EMU_CONTEXT_SWITCH, "Emu Context Switch",
-            benchEmuContextSwitch(10000), baselines[EMU_CONTEXT_SWITCH], "ns");
+            rawVal, formatLatency(rawVal, 10000), "μs/switch", CAT_EMULATION,
+            "Thread.yield() context switch latency");
+        
+        rawVal = benchEmuTimerPrecision(10000);
         results[EMU_SYSCALL_OVERHEAD] = new BenchmarkResult(EMU_SYSCALL_OVERHEAD, "Emu Syscall Overhead",
-            benchEmuTimerPrecision(10000), baselines[EMU_SYSCALL_OVERHEAD], "ns");
+            rawVal, formatLatency(rawVal, 10000), "ns/call", CAT_EMULATION,
+            "System.nanoTime() syscall overhead");
+        
+        rawVal = benchMemAllocSpeed(100, 65536);
         results[EMU_MEMORY_MAP] = new BenchmarkResult(EMU_MEMORY_MAP, "Emu Memory Map",
-            benchMemAllocSpeed(100, 65536), baselines[EMU_MEMORY_MAP], "ns");
+            rawVal, formatOpsPerSec(100, rawVal), "maps/s", CAT_EMULATION,
+            "Memory mapping operations (64KB)");
+        
+        rawVal = benchMemCopyBandwidth(memBuffer, new byte[memBuffer.length]);
         results[EMU_BUFFER_COPY] = new BenchmarkResult(EMU_BUFFER_COPY, "Emu Buffer Copy",
-            benchMemCopyBandwidth(memBuffer, new byte[memBuffer.length]), baselines[EMU_BUFFER_COPY], "ns");
+            rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_EMULATION,
+            "Host-to-guest buffer copy simulation");
+        
+        rawVal = benchCpuMtCas(2, 100000);
         results[EMU_EVENT_DISPATCH] = new BenchmarkResult(EMU_EVENT_DISPATCH, "Emu Event Dispatch",
-            benchCpuMtCas(2, 100000), baselines[EMU_EVENT_DISPATCH], "ns");
+            rawVal, formatOpsPerSec(100000, rawVal), "events/s", CAT_EMULATION,
+            "Event dispatch throughput");
+        
+        rawVal = benchEmuTimerPrecision(10000);
         results[EMU_TIMER_PRECISION] = new BenchmarkResult(EMU_TIMER_PRECISION, "Emu Timer Precision",
-            benchEmuTimerPrecision(10000), baselines[EMU_TIMER_PRECISION], "ns");
+            rawVal, formatLatency(rawVal, 10000), "ns", CAT_EMULATION,
+            "Timer resolution and jitter");
+        
+        rawVal = benchEmuContextSwitch(1000);
         results[EMU_IRQ_LATENCY] = new BenchmarkResult(EMU_IRQ_LATENCY, "Emu IRQ Latency",
-            benchEmuContextSwitch(1000), baselines[EMU_IRQ_LATENCY], "ns");
+            rawVal, formatLatency(rawVal, 1000), "μs", CAT_EMULATION,
+            "Interrupt request latency simulation");
+        
+        rawVal = benchEmuStateSerialize(10000);
         results[EMU_STATE_SERIALIZE] = new BenchmarkResult(EMU_STATE_SERIALIZE, "Emu State Serialize",
-            benchEmuStateSerialize(10000), baselines[EMU_STATE_SERIALIZE], "ns");
+            rawVal, formatOpsPerSec(10000, rawVal), "states/s", CAT_EMULATION,
+            "VM state serialization throughput");
+        
+        rawVal = benchEmuTriadConsensus(CPU_WORKLOAD_SIZE);
         results[EMU_TRIAD_CONSENSUS] = new BenchmarkResult(EMU_TRIAD_CONSENSUS, "Emu Triad Consensus",
-            benchEmuTriadConsensus(CPU_WORKLOAD_SIZE), baselines[EMU_TRIAD_CONSENSUS], "ns");
+            rawVal, formatOpsPerSec(CPU_WORKLOAD_SIZE, rawVal), "Mops/s", CAT_EMULATION,
+            "2-of-3 consensus algorithm");
         
         return results;
     }
     
     /**
-     * Calculate total benchmark score (AnTuTu-style).
+     * Calculate total benchmark score (deprecated - use raw metrics instead).
+     * @deprecated Use formatted values with real engineering units instead
      */
+    @Deprecated
     public static int calculateTotalScore(BenchmarkResult[] results) {
-        int totalScore = 0;
+        int validCount = 0;
         for (BenchmarkResult r : results) {
-            if (r != null) {
-                // Lower time = better score (inverse)
-                // Score = baseline / actual * 100
-                totalScore += r.score();
+            if (r != null && r.rawValue() > 0) {
+                validCount++;
             }
         }
-        return totalScore;
+        return validCount * 100; // Each valid metric contributes 100
     }
     
     /**
-     * Calculate category scores.
+     * Calculate category scores (deprecated - use raw metrics instead).
+     * @deprecated Use formatted values with real engineering units instead
      */
+    @Deprecated
     public static int[] calculateCategoryScores(BenchmarkResult[] results) {
         int[] scores = new int[6]; // CPU, CPU-MT, Memory, Storage, Integrity, Emulation
         int[] counts = new int[6];
@@ -809,8 +1260,10 @@ public class VectraBenchmark {
             else if (id < 70) category = 4;
             else category = 5;
             
-            scores[category] += r.score();
-            counts[category]++;
+            if (r.rawValue() > 0) {
+                scores[category] += 100;
+                counts[category]++;
+            }
         }
         
         // Average per category
@@ -822,44 +1275,135 @@ public class VectraBenchmark {
     }
     
     /**
-     * Format results as string report.
+     * Format results as string report with professional engineering metrics.
      */
     public static String formatReport(BenchmarkResult[] results) {
+        DeviceSpecification spec = getDeviceSpecification();
+        
         StringBuilder sb = new StringBuilder();
-        sb.append("╔══════════════════════════════════════════════════════════════════╗\n");
-        sb.append("║           VECTRAS BENCHMARK REPORT (AnTuTu-style)                ║\n");
-        sb.append("╠══════════════════════════════════════════════════════════════════╣\n");
+        sb.append("╔════════════════════════════════════════════════════════════════════════════════╗\n");
+        sb.append("║           VECTRAS PROFESSIONAL BENCHMARK REPORT                                ║\n");
+        sb.append("║           (Formal Engineering Metrics - SI Units)                              ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         
-        String[] categories = {"CPU Single", "CPU Multi", "Memory", "Storage", "Integrity", "Emulation"};
-        int[] catScores = calculateCategoryScores(results);
-        
-        for (int i = 0; i < 6; i++) {
-            sb.append(String.format("║ %-20s: %6d pts                               ║\n", 
-                categories[i], catScores[i]));
+        // Device Specifications Section
+        sb.append("║ DEVICE SPECIFICATIONS                                                          ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append(String.format("║  CPU Model:          %-57s║\n", truncate(spec.cpuModel, 57)));
+        sb.append(String.format("║  CPU Cores:          %-57s║\n", spec.cpuCores + " cores"));
+        sb.append(String.format("║  Max CPU Freq:       %-57s║\n", spec.getFormattedCpuFreq()));
+        sb.append(String.format("║  Total RAM:          %-57s║\n", spec.getFormattedRam()));
+        sb.append(String.format("║  Architecture:       %-57s║\n", spec.cpuArchitecture));
+        if (spec.supportedAbis.length > 0) {
+            sb.append(String.format("║  ABIs:               %-57s║\n", truncate(String.join(", ", spec.supportedAbis), 57)));
         }
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         
-        sb.append("╠══════════════════════════════════════════════════════════════════╣\n");
-        sb.append(String.format("║ TOTAL SCORE: %6d pts                                         ║\n",
-            calculateTotalScore(results)));
-        sb.append("╚══════════════════════════════════════════════════════════════════╝\n");
+        // Category Summary
+        sb.append("║ BENCHMARK RESULTS SUMMARY (79 Metrics)                                         ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         
-        sb.append("\nDetailed Metrics (79 total):\n");
-        sb.append("─────────────────────────────────────────────────────────────────────\n");
-        
-        for (BenchmarkResult r : results) {
-            if (r != null) {
-                sb.append(String.format("[%02d] %-25s: %12d %s (%d pts)\n",
-                    r.metricId(), r.name(), r.value(), r.unit(), r.score()));
+        String[] categories = {CAT_CPU_SINGLE, CAT_CPU_MULTI, CAT_MEMORY, CAT_STORAGE, CAT_INTEGRITY, CAT_EMULATION};
+        for (String category : categories) {
+            int count = 0;
+            for (BenchmarkResult r : results) {
+                if (r != null && category.equals(r.category())) count++;
             }
+            sb.append(String.format("║  %-25s: %d metrics measured                              ║\n", category, count));
         }
+        
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("║ DETAILED METRICS (Engineering Units)                                           ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        
+        String lastCategory = "";
+        for (BenchmarkResult r : results) {
+            if (r == null) continue;
+            
+            // Print category header when it changes
+            if (!r.category().equals(lastCategory)) {
+                lastCategory = r.category();
+                sb.append("╟────────────────────────────────────────────────────────────────────────────────╢\n");
+                sb.append(String.format("║ ▶ %-75s║\n", lastCategory));
+                sb.append("╟────────────────────────────────────────────────────────────────────────────────╢\n");
+            }
+            
+            sb.append(String.format("║  [%02d] %-30s │ %-18s │ %-18s║\n",
+                r.metricId(), 
+                truncate(r.name(), 30), 
+                r.formattedValue(),
+                r.unit()));
+        }
+        
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("║ TECHNICAL NOTES                                                                ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("║ • All time measurements in SI units (ns, μs, ms, s)                            ║\n");
+        sb.append("║ • Throughput in ops/s, Kops/s, Mops/s, Gops/s or MFLOPS/GFLOPS                 ║\n");
+        sb.append("║ • Bandwidth in B/s, KB/s, MB/s, GB/s                                           ║\n");
+        sb.append("║ • Latency expressed as time per operation (ns/op, μs/op, ms/op)               ║\n");
+        sb.append("║ • Storage IOPS based on simulated memory operations                            ║\n");
+        sb.append("║ • Results are reproducible using fixed PRNG seeds                              ║\n");
+        sb.append("╚════════════════════════════════════════════════════════════════════════════════╝\n");
+        
+        return sb.toString();
+    }
+    
+    private static String truncate(String s, int maxLen) {
+        if (s == null) return "";
+        return s.length() <= maxLen ? s : s.substring(0, maxLen - 3) + "...";
+    }
+    
+    /**
+     * Format report with detailed descriptions for each metric.
+     */
+    public static String formatDetailedReport(BenchmarkResult[] results) {
+        DeviceSpecification spec = getDeviceSpecification();
+        StringBuilder sb = new StringBuilder();
+        
+        sb.append("═══════════════════════════════════════════════════════════════════════════════════\n");
+        sb.append("                    VECTRAS VM DETAILED BENCHMARK REPORT                          \n");
+        sb.append("                    Professional Engineering Analysis                             \n");
+        sb.append("═══════════════════════════════════════════════════════════════════════════════════\n\n");
+        
+        sb.append("DEVICE UNDER TEST (DUT):\n");
+        sb.append("─────────────────────────────────────────────────────────────────────────────────\n");
+        sb.append(String.format("  CPU Model:      %s\n", spec.cpuModel));
+        sb.append(String.format("  CPU Cores:      %d cores\n", spec.cpuCores));
+        sb.append(String.format("  Max Frequency:  %s\n", spec.getFormattedCpuFreq()));
+        sb.append(String.format("  Total RAM:      %s\n", spec.getFormattedRam()));
+        sb.append(String.format("  Architecture:   %s\n", spec.cpuArchitecture));
+        sb.append(String.format("  Supported ABIs: %s\n\n", String.join(", ", spec.supportedAbis)));
+        
+        String lastCategory = "";
+        for (BenchmarkResult r : results) {
+            if (r == null) continue;
+            
+            if (!r.category().equals(lastCategory)) {
+                lastCategory = r.category();
+                sb.append("\n═══════════════════════════════════════════════════════════════════════════════════\n");
+                sb.append("  ").append(lastCategory.toUpperCase()).append("\n");
+                sb.append("═══════════════════════════════════════════════════════════════════════════════════\n");
+            }
+            
+            sb.append(String.format("\n[%02d] %s\n", r.metricId(), r.name()));
+            sb.append(String.format("     Value:       %s\n", r.formattedValue()));
+            sb.append(String.format("     Unit:        %s\n", r.unit()));
+            sb.append(String.format("     Raw (ns):    %,d\n", r.rawValue()));
+            sb.append(String.format("     Description: %s\n", r.description()));
+        }
+        
+        sb.append("\n═══════════════════════════════════════════════════════════════════════════════════\n");
+        sb.append("                              END OF REPORT                                       \n");
+        sb.append("═══════════════════════════════════════════════════════════════════════════════════\n");
         
         return sb.toString();
     }
     
     // ========== Main Entry Point ==========
     public static void main(String[] args) throws Exception {
-        System.out.println("Vectras Benchmark Module v1.0.0");
-        System.out.println("Running " + METRIC_COUNT + " metrics...\n");
+        System.out.println("Vectras Benchmark Module v2.0.0");
+        System.out.println("Running " + METRIC_COUNT + " metrics with formal engineering units...\n");
         
         BenchmarkResult[] results = runAllBenchmarks();
         
@@ -871,7 +1415,7 @@ public class VectraBenchmark {
             try (BitStack bs = new BitStack(outputFile, MMAP_BYTES)) {
                 for (BenchmarkResult r : results) {
                     if (r != null) {
-                        bs.appendResult(r.value(), r.metricId());
+                        bs.appendResult(r.rawValue(), r.metricId());
                     }
                 }
                 bs.flush();

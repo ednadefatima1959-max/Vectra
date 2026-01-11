@@ -380,19 +380,34 @@ public class ProfessionalToolsActivity extends AppCompatActivity {
                                                    List<String> methodologies) {
         AnalysisReport report = new AnalysisReport();
         
-        // Calculate scores
-        int totalScore = VectraBenchmark.calculateTotalScore(results);
-        int[] categoryScores = VectraBenchmark.calculateCategoryScores(results);
+        // Get device specifications
+        VectraBenchmark.DeviceSpecification deviceSpec = VectraBenchmark.getDeviceSpecification();
         
-        report.totalScore = totalScore;
-        report.categoryScores = categoryScores;
+        // Calculate metrics count
+        int totalMetrics = 0;
+        for (VectraBenchmark.BenchmarkResult r : results) {
+            if (r != null) totalMetrics++;
+        }
+        
+        report.totalScore = totalMetrics; // Use metric count instead of arbitrary score
+        report.categoryScores = new int[6]; // Not used in new format
         report.methodologies = methodologies;
         report.selectedCategories = selectedCategories;
         
-        // Statistical analysis
+        // Store device specifications
+        report.deviceModel = deviceSpec.cpuModel;
+        report.deviceManufacturer = Build.MANUFACTURER;
+        report.cpuCores = deviceSpec.cpuCores;
+        report.maxCpuFreqGHz = deviceSpec.maxCpuFreqHz / 1_000_000_000.0;
+        report.totalRamGB = deviceSpec.totalRamBytes / (1024.0 * 1024.0 * 1024.0);
+        report.cpuArchitecture = deviceSpec.cpuArchitecture;
+        report.androidVersion = Build.VERSION.RELEASE;
+        report.cpuAbi = Build.SUPPORTED_ABIS[0];
+        
+        // Statistical analysis using raw nanosecond values
         long[] values = Arrays.stream(results)
                 .filter(r -> r != null)
-                .mapToLong(VectraBenchmark.BenchmarkResult::value)
+                .mapToLong(VectraBenchmark.BenchmarkResult::rawValue)
                 .toArray();
         
         report.mean = calculateMean(values);
@@ -408,17 +423,12 @@ public class ProfessionalToolsActivity extends AppCompatActivity {
         report.isAcademicGrade = assessAcademicGrade(report);
         report.isScientificGrade = assessScientificGrade(report);
         
-        // Generate executive summary
-        report.executiveSummary = generateExecutiveSummary(report);
+        // Generate executive summary with device specs
+        report.executiveSummary = generateExecutiveSummary(report, deviceSpec);
         
         // Generate grade justification
         report.gradeJustification = generateGradeJustification(report);
         
-        // System metadata
-        report.deviceModel = Build.MODEL;
-        report.deviceManufacturer = Build.MANUFACTURER;
-        report.androidVersion = Build.VERSION.RELEASE;
-        report.cpuAbi = Build.SUPPORTED_ABIS[0];
         report.timestamp = new Date();
         
         return report;
@@ -464,19 +474,23 @@ public class ProfessionalToolsActivity extends AppCompatActivity {
     private double assessReproducibility(VectraBenchmark.BenchmarkResult[] results) {
         // Calculate coefficient of variation as reproducibility metric
         // Lower CV = higher reproducibility
-        long[] scores = Arrays.stream(results)
+        // Use raw values in nanoseconds for consistent measurement
+        long[] rawValues = Arrays.stream(results)
                 .filter(r -> r != null)
-                .mapToLong(r -> r.score())
+                .mapToLong(VectraBenchmark.BenchmarkResult::rawValue)
                 .toArray();
         
-        double mean = calculateMean(scores);
-        double stdDev = calculateStdDev(scores, mean);
+        if (rawValues.length == 0) return 0;
         
-        if (mean == 0) return 0;
+        double mean = calculateMean(rawValues);
+        double stdDev = calculateStdDev(rawValues, mean);
+        
+        if (mean == 0) return 100; // Perfect reproducibility if all zeros
         double cv = (stdDev / mean) * 100;
         
         // Convert to reproducibility percentage (inverse of CV, capped at 100%)
-        return Math.max(0, Math.min(100, 100 - cv));
+        // For typical benchmarks, CV < 5% is excellent
+        return Math.max(0, Math.min(100, 100 - Math.min(cv, 100)));
     }
     
     private boolean assessIndustryGrade(AnalysisReport report) {
@@ -515,28 +529,44 @@ public class ProfessionalToolsActivity extends AppCompatActivity {
                 && report.confidenceInterval95 != null;
     }
     
-    private String generateExecutiveSummary(AnalysisReport report) {
+    private String generateExecutiveSummary(AnalysisReport report, VectraBenchmark.DeviceSpecification deviceSpec) {
         StringBuilder sb = new StringBuilder();
         
-        sb.append(getString(R.string.pro_tools_summary_intro, report.totalScore));
-        sb.append("\n\n");
+        // Device specifications header
+        sb.append("DEVICE UNDER TEST (DUT)\n");
+        sb.append("───────────────────────────────────\n");
+        sb.append("CPU: ").append(deviceSpec.cpuModel).append("\n");
+        sb.append("Cores: ").append(deviceSpec.cpuCores).append(" @ ").append(deviceSpec.getFormattedCpuFreq()).append("\n");
+        sb.append("RAM: ").append(deviceSpec.getFormattedRam()).append("\n");
+        sb.append("Architecture: ").append(deviceSpec.cpuArchitecture).append("\n\n");
         
-        // Categories summary
-        String[] categoryNames = {"CPU Single", "CPU Multi", "Memory", "Storage", "Integrity", "Emulation"};
-        sb.append(getString(R.string.pro_tools_summary_categories));
-        for (int i = 0; i < report.categoryScores.length && i < categoryNames.length; i++) {
-            sb.append("\n• ").append(categoryNames[i]).append(": ").append(report.categoryScores[i]).append(" pts");
-        }
-        sb.append("\n\n");
+        // Metrics summary
+        sb.append("BENCHMARK SUMMARY\n");
+        sb.append("───────────────────────────────────\n");
+        sb.append("Total Metrics Measured: ").append(report.totalScore).append(" / 79\n");
+        sb.append("Categories Selected: ").append(report.selectedCategories.size()).append(" / 6\n\n");
         
         // Methodologies applied
-        sb.append(getString(R.string.pro_tools_summary_methodologies, String.join(", ", report.methodologies)));
-        sb.append("\n\n");
+        sb.append("METHODOLOGIES APPLIED\n");
+        sb.append("───────────────────────────────────\n");
+        for (String method : report.methodologies) {
+            sb.append("• ").append(method).append("\n");
+        }
+        sb.append("\n");
         
-        // Reproducibility assessment
-        sb.append(getString(R.string.pro_tools_summary_reproducibility, String.format(Locale.US, "%.1f%%", report.reproducibilityScore)));
+        // Statistical summary
+        sb.append("STATISTICAL SUMMARY\n");
+        sb.append("───────────────────────────────────\n");
+        sb.append("Mean Execution Time: ").append(VectraBenchmark.formatTime((long) report.mean)).append("\n");
+        sb.append("Median Execution Time: ").append(VectraBenchmark.formatTime((long) report.median)).append("\n");
+        sb.append("Reproducibility: ").append(String.format(Locale.US, "%.1f%%", report.reproducibilityScore));
         
         return sb.toString();
+    }
+    
+    // Overload for backward compatibility
+    private String generateExecutiveSummary(AnalysisReport report) {
+        return generateExecutiveSummary(report, VectraBenchmark.getDeviceSpecification());
     }
     
     private String generateGradeJustification(AnalysisReport report) {
@@ -565,29 +595,23 @@ public class ProfessionalToolsActivity extends AppCompatActivity {
         chipGradeScientific.setChecked(report.isScientificGrade);
         tvGradeJustification.setText(report.gradeJustification);
         
-        // Statistical Analysis
-        tvStatMean.setText(formatNumber(report.mean));
-        tvStatMedian.setText(formatNumber(report.median));
-        tvStatStdDev.setText(formatNumber(report.stdDev));
+        // Statistical Analysis - Display with proper SI units
+        tvStatMean.setText(VectraBenchmark.formatTime((long) report.mean));
+        tvStatMedian.setText(VectraBenchmark.formatTime((long) report.median));
+        tvStatStdDev.setText(VectraBenchmark.formatTime((long) report.stdDev));
         
         if (report.confidenceInterval95 != null) {
-            tvStatConfidence.setText(String.format(Locale.US, "95%%: [%.0f, %.0f]", 
-                    report.confidenceInterval95[0], report.confidenceInterval95[1]));
+            String ciLow = VectraBenchmark.formatTime((long) report.confidenceInterval95[0]);
+            String ciHigh = VectraBenchmark.formatTime((long) report.confidenceInterval95[1]);
+            tvStatConfidence.setText(String.format(Locale.US, "[%s, %s]", ciLow, ciHigh));
         }
         
         tvStatReproducibility.setText(String.format(Locale.US, "%.1f%%", report.reproducibilityScore));
     }
     
     private String formatNumber(double value) {
-        if (value >= 1_000_000_000) {
-            return String.format(Locale.US, "%.2fB", value / 1_000_000_000);
-        } else if (value >= 1_000_000) {
-            return String.format(Locale.US, "%.2fM", value / 1_000_000);
-        } else if (value >= 1_000) {
-            return String.format(Locale.US, "%.2fK", value / 1_000);
-        } else {
-            return String.format(Locale.US, "%.2f", value);
-        }
+        // Use VectraBenchmark's formatTime for time-based values
+        return VectraBenchmark.formatTime((long) value);
     }
     
     private void showFullReport() {
@@ -602,9 +626,9 @@ public class ProfessionalToolsActivity extends AppCompatActivity {
         messageView.setText(fullReport);
         messageView.setTextIsSelectable(true);
         messageView.setTypeface(android.graphics.Typeface.MONOSPACE);
-        // Use 10sp which is small but readable for monospace report
-        messageView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10);
-        messageView.setPadding(32, 32, 32, 32);
+        // Use 9sp for smaller font to fit more content
+        messageView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 9);
+        messageView.setPadding(16, 16, 16, 16);
         
         android.widget.ScrollView scrollView = new android.widget.ScrollView(this);
         scrollView.addView(messageView);
@@ -620,75 +644,87 @@ public class ProfessionalToolsActivity extends AppCompatActivity {
         StringBuilder sb = new StringBuilder();
         
         // Header
-        sb.append("╔══════════════════════════════════════════════════════════════════════════════╗\n");
-        sb.append("║         VECTRAS PROFESSIONAL ANALYSIS REPORT                                 ║\n");
-        sb.append("║         Engineering / Benchmark / Scientific System                          ║\n");
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("╔════════════════════════════════════════════════════════════════════════════════╗\n");
+        sb.append("║         VECTRAS PROFESSIONAL ANALYSIS REPORT                                   ║\n");
+        sb.append("║         Engineering / Benchmark / Scientific System                            ║\n");
+        sb.append("║         (Formal Engineering Metrics - SI Units)                                ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         
         // Metadata
-        sb.append(String.format("║ Report Generated: %-58s ║\n", 
+        sb.append(String.format("║ Report Generated: %-60s║\n", 
                 new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(report.timestamp)));
-        sb.append(String.format("║ Device: %-68s ║\n", 
-                report.deviceManufacturer + " " + report.deviceModel));
-        sb.append(String.format("║ Android: %-67s ║\n", report.androidVersion));
-        sb.append(String.format("║ CPU ABI: %-67s ║\n", report.cpuAbi));
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        
+        // Section 0: Device Specifications
+        sb.append("║ 0. DEVICE UNDER TEST (DUT) - TECHNICAL SPECIFICATIONS                         ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append(String.format("║  Manufacturer:         %-55s║\n", report.deviceManufacturer));
+        sb.append(String.format("║  Model:                %-55s║\n", truncateStr(report.deviceModel, 55)));
+        sb.append(String.format("║  CPU Cores:            %-55s║\n", report.cpuCores + " physical cores"));
+        sb.append(String.format("║  Max CPU Frequency:    %-55s║\n", String.format(Locale.US, "%.2f GHz", report.maxCpuFreqGHz)));
+        sb.append(String.format("║  Total RAM:            %-55s║\n", String.format(Locale.US, "%.1f GB", report.totalRamGB)));
+        sb.append(String.format("║  Architecture:         %-55s║\n", report.cpuArchitecture != null ? report.cpuArchitecture : "N/A"));
+        sb.append(String.format("║  Android Version:      %-55s║\n", report.androidVersion));
+        sb.append(String.format("║  CPU ABI:              %-55s║\n", report.cpuAbi));
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         
         // Section 1: Executive Summary
-        sb.append("║ 1. EXECUTIVE TECHNICAL SUMMARY                                               ║\n");
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
-        sb.append(wrapText(report.executiveSummary, 76));
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("║ 1. EXECUTIVE TECHNICAL SUMMARY                                                ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append(wrapText(report.executiveSummary, 78));
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         
         // Section 2: Methodology Standards
-        sb.append("║ 2. METHODOLOGY STANDARDS APPLIED                                             ║\n");
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("║ 2. METHODOLOGY STANDARDS APPLIED                                              ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         for (String method : report.methodologies) {
-            sb.append(String.format("║ ✓ %-74s ║\n", method));
+            sb.append(String.format("║  ✓ %-75s║\n", method));
         }
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         
-        // Section 3: Statistical Analysis
-        sb.append("║ 3. STATISTICAL ROBUSTNESS                                                    ║\n");
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
-        sb.append(String.format("║ Mean:                  %-53s ║\n", formatNumber(report.mean)));
-        sb.append(String.format("║ Median:                %-53s ║\n", formatNumber(report.median)));
-        sb.append(String.format("║ Standard Deviation:    %-53s ║\n", formatNumber(report.stdDev)));
+        // Section 3: Statistical Analysis with SI Units
+        sb.append("║ 3. STATISTICAL ROBUSTNESS (SI Units)                                          ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append(String.format("║  Mean Execution Time:     %-52s║\n", VectraBenchmark.formatTime((long) report.mean)));
+        sb.append(String.format("║  Median Execution Time:   %-52s║\n", VectraBenchmark.formatTime((long) report.median)));
+        sb.append(String.format("║  Standard Deviation:      %-52s║\n", VectraBenchmark.formatTime((long) report.stdDev)));
         if (report.confidenceInterval95 != null) {
-            String ciValue = String.format(Locale.US, "[%.0f, %.0f]", 
-                    report.confidenceInterval95[0], report.confidenceInterval95[1]);
-            sb.append(String.format("║ 95%% Confidence:        %-53s ║\n", ciValue));
+            String ciLow = VectraBenchmark.formatTime((long) report.confidenceInterval95[0]);
+            String ciHigh = VectraBenchmark.formatTime((long) report.confidenceInterval95[1]);
+            sb.append(String.format("║  95%% Confidence Interval: [%s, %s]%-20s║\n", ciLow, ciHigh, ""));
         }
-        sb.append(String.format("║ Reproducibility Score: %-53s ║\n", 
+        sb.append(String.format("║  Reproducibility Score:   %-52s║\n", 
                 String.format(Locale.US, "%.1f%%", report.reproducibilityScore)));
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         
         // Section 4: Validation Grade
-        sb.append("║ 4. ALIGNMENT WITH ACADEMIC STANDARDS                                         ║\n");
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
-        sb.append(String.format("║ Industry-grade:        %-53s ║\n", report.isIndustryGrade ? "✓ PASSED" : "✗ NOT MET"));
-        sb.append(String.format("║ Academic-grade:        %-53s ║\n", report.isAcademicGrade ? "✓ PASSED" : "✗ NOT MET"));
-        sb.append(String.format("║ Scientific-grade:      %-53s ║\n", report.isScientificGrade ? "✓ PASSED" : "✗ NOT MET"));
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
-        sb.append("║ Justification:                                                               ║\n");
-        sb.append(wrapText(report.gradeJustification, 76));
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("║ 4. ALIGNMENT WITH ACADEMIC STANDARDS                                          ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append(String.format("║  Industry-grade:        %-54s║\n", report.isIndustryGrade ? "✓ PASSED" : "✗ NOT MET"));
+        sb.append(String.format("║  Academic-grade:        %-54s║\n", report.isAcademicGrade ? "✓ PASSED" : "✗ NOT MET"));
+        sb.append(String.format("║  Scientific-grade:      %-54s║\n", report.isScientificGrade ? "✓ PASSED" : "✗ NOT MET"));
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("║  Justification:                                                               ║\n");
+        sb.append(wrapText(report.gradeJustification, 78));
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         
-        // Section 5: Category Scores
-        sb.append("║ 5. METRIC TAXONOMY - CATEGORY SCORES                                         ║\n");
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        // Section 5: Metrics Summary
+        sb.append("║ 5. METRICS TAXONOMY SUMMARY                                                   ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         String[] categoryNames = {"CPU Single-threaded", "CPU Multi-threaded", "Memory", "Storage", "Integrity", "Emulation"};
-        for (int i = 0; i < report.categoryScores.length && i < categoryNames.length; i++) {
-            sb.append(String.format("║ %-24s: %6d pts%s ║\n", 
-                    categoryNames[i], report.categoryScores[i],
-                    String.format("%" + 42 + "s", "")));
+        int[] metricCounts = {20, 10, 15, 15, 10, 9}; // Standard metric counts per category
+        for (int i = 0; i < categoryNames.length; i++) {
+            boolean selected = report.selectedCategories.contains(i);
+            String status = selected ? "✓ Measured" : "○ Not selected";
+            sb.append(String.format("║  %-25s: %d metrics (%s)%-20s║\n", 
+                    categoryNames[i], metricCounts[i], status, ""));
         }
-        sb.append(String.format("║ %-24s: %6d pts%s ║\n", "TOTAL SCORE", report.totalScore, String.format("%" + 42 + "s", "")));
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append(String.format("║  %-25s: %d metrics total%-30s║\n", "TOTAL MEASURED", report.totalScore, ""));
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         
         // Section 6: Formal Technical Verdict
-        sb.append("║ 6. FORMAL TECHNICAL VERDICT                                                  ║\n");
-        sb.append("╠══════════════════════════════════════════════════════════════════════════════╣\n");
+        sb.append("║ 6. FORMAL TECHNICAL VERDICT                                                   ║\n");
+        sb.append("╠════════════════════════════════════════════════════════════════════════════════╣\n");
         String verdict;
         if (report.isScientificGrade) {
             verdict = "This analysis meets SCIENTIFIC-GRADE standards and is suitable for peer-reviewed publications, technical audits, and expert testimony.";
@@ -699,10 +735,10 @@ public class ProfessionalToolsActivity extends AppCompatActivity {
         } else {
             verdict = "This analysis is INFORMAL engineering-grade. Additional metrics, methodologies, or reproducibility improvements are recommended.";
         }
-        sb.append(wrapText(verdict, 76));
+        sb.append(wrapText(verdict, 78));
         
         // Footer
-        sb.append("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+        sb.append("╚════════════════════════════════════════════════════════════════════════════════╝\n");
         
         // Detailed Results (if available)
         if (lastResults != null) {
@@ -713,20 +749,32 @@ public class ProfessionalToolsActivity extends AppCompatActivity {
         return sb.toString();
     }
     
+    private String truncateStr(String s, int maxLen) {
+        if (s == null) return "";
+        return s.length() <= maxLen ? s : s.substring(0, maxLen - 3) + "...";
+    }
+    
     private String wrapText(String text, int width) {
         StringBuilder result = new StringBuilder();
-        String[] words = text.split(" ");
-        StringBuilder line = new StringBuilder();
-        
-        for (String word : words) {
-            if (line.length() + word.length() + 1 > width) {
-                result.append(String.format("║ %-" + width + "s ║\n", line.toString().trim()));
-                line = new StringBuilder();
+        String[] lines = text.split("\n");
+        for (String textLine : lines) {
+            if (textLine.isEmpty()) {
+                result.append(String.format("║ %-" + width + "s║\n", ""));
+                continue;
             }
-            line.append(word).append(" ");
-        }
-        if (line.length() > 0) {
-            result.append(String.format("║ %-" + width + "s ║\n", line.toString().trim()));
+            String[] words = textLine.split(" ");
+            StringBuilder line = new StringBuilder();
+            
+            for (String word : words) {
+                if (line.length() + word.length() + 1 > width) {
+                    result.append(String.format("║ %-" + width + "s║\n", line.toString().trim()));
+                    line = new StringBuilder();
+                }
+                line.append(word).append(" ");
+            }
+            if (line.length() > 0) {
+                result.append(String.format("║ %-" + width + "s║\n", line.toString().trim()));
+            }
         }
         return result.toString();
     }
@@ -820,11 +868,15 @@ public class ProfessionalToolsActivity extends AppCompatActivity {
         String executiveSummary;
         String gradeJustification;
         
-        // Metadata
+        // Device specifications
         String deviceModel;
         String deviceManufacturer;
         String androidVersion;
         String cpuAbi;
+        String cpuArchitecture;
+        int cpuCores;
+        double maxCpuFreqGHz;
+        double totalRamGB;
         Date timestamp;
     }
 }
