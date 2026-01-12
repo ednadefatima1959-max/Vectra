@@ -65,7 +65,7 @@ public class BenchmarkManagerTest {
     }
     
     @Test
-    public void validationReport_formatOutput_containsKey Elements() {
+    public void validationReport_formatOutput_containsKeyElements() {
         List<String> warnings = new ArrayList<>();
         warnings.add("Test warning");
         

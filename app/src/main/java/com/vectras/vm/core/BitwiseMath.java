@@ -737,4 +737,243 @@ public final class BitwiseMath {
     public static int countTrailingZeros(int x) {
         return Integer.numberOfTrailingZeros(x);
     }
+    
+    // ========== Advanced Bitwise Operations ==========
+    
+    /**
+     * Parallel bit deposit (PDEP-like operation).
+     * Deposits bits from source according to mask.
+     * 
+     * @param source Source bits
+     * @param mask Bit mask
+     * @return Deposited result
+     */
+    public static int parallelBitDeposit(int source, int mask) {
+        int result = 0;
+        int sourceBit = 0;
+        
+        for (int i = 0; i < 32; i++) {
+            if ((mask & (1 << i)) != 0) {
+                if ((source & (1 << sourceBit)) != 0) {
+                    result |= (1 << i);
+                }
+                sourceBit++;
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Parallel bit extract (PEXT-like operation).
+     * Extracts bits according to mask into contiguous result.
+     * 
+     * @param source Source bits
+     * @param mask Bit mask
+     * @return Extracted result
+     */
+    public static int parallelBitExtract(int source, int mask) {
+        int result = 0;
+        int resultBit = 0;
+        
+        for (int i = 0; i < 32; i++) {
+            if ((mask & (1 << i)) != 0) {
+                if ((source & (1 << i)) != 0) {
+                    result |= (1 << resultBit);
+                }
+                resultBit++;
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Computes parity of all bits (even/odd).
+     * 
+     * @param x Input value
+     * @return 1 if odd number of 1-bits, 0 if even
+     */
+    public static int computeParity(int x) {
+        x ^= x >>> 16;
+        x ^= x >>> 8;
+        x ^= x >>> 4;
+        x ^= x >>> 2;
+        x ^= x >>> 1;
+        return x & 1;
+    }
+    
+    /**
+     * Finds next power of 2 greater than or equal to x.
+     * 
+     * @param x Input value
+     * @return Next power of 2
+     */
+    public static int nextPowerOf2(int x) {
+        if (x <= 0) return 1;
+        x--;
+        x |= x >>> 1;
+        x |= x >>> 2;
+        x |= x >>> 4;
+        x |= x >>> 8;
+        x |= x >>> 16;
+        return x + 1;
+    }
+    
+    /**
+     * Checks if x is a power of 2.
+     * 
+     * @param x Input value
+     * @return true if power of 2
+     */
+    public static boolean isPowerOf2(int x) {
+        return x > 0 && (x & (x - 1)) == 0;
+    }
+    
+    /**
+     * Fast log2 approximation (integer).
+     * 
+     * @param x Input value (must be positive)
+     * @return Floor(log2(x))
+     */
+    public static int fastLog2(int x) {
+        return 31 - Integer.numberOfLeadingZeros(x);
+    }
+    
+    /**
+     * Branchless sign function.
+     * 
+     * @param x Input value
+     * @return -1 if x < 0, 0 if x == 0, 1 if x > 0
+     */
+    public static int sign(int x) {
+        return (x >> 31) | (-x >>> 31);
+    }
+    
+    /**
+     * Swaps two values without temporary variable.
+     * Modifies array in-place at indices i and j.
+     * 
+     * @param arr Array
+     * @param i First index
+     * @param j Second index
+     */
+    public static void xorSwap(int[] arr, int i, int j) {
+        if (i != j && arr != null && i >= 0 && j >= 0 && i < arr.length && j < arr.length) {
+            arr[i] ^= arr[j];
+            arr[j] ^= arr[i];
+            arr[i] ^= arr[j];
+        }
+    }
+    
+    /**
+     * Gray code encoding (binary to Gray).
+     * 
+     * @param binary Binary value
+     * @return Gray code
+     */
+    public static int binaryToGray(int binary) {
+        return binary ^ (binary >>> 1);
+    }
+    
+    /**
+     * Gray code decoding (Gray to binary).
+     * 
+     * @param gray Gray code value
+     * @return Binary value
+     */
+    public static int grayToBinary(int gray) {
+        int binary = gray;
+        for (int shift = 1; shift < 32; shift <<= 1) {
+            binary ^= binary >>> shift;
+        }
+        return binary;
+    }
+    
+    /**
+     * Bit interleaving for 3D Morton codes (Z-order curve).
+     * 
+     * @param x X coordinate (10 bits)
+     * @param y Y coordinate (10 bits)
+     * @param z Z coordinate (10 bits)
+     * @return 30-bit Morton code
+     */
+    public static int interleave3D(int x, int y, int z) {
+        x = (x | (x << 16)) & 0x030000FF;
+        x = (x | (x << 8)) & 0x0300F00F;
+        x = (x | (x << 4)) & 0x030C30C3;
+        x = (x | (x << 2)) & 0x09249249;
+        
+        y = (y | (y << 16)) & 0x030000FF;
+        y = (y | (y << 8)) & 0x0300F00F;
+        y = (y | (y << 4)) & 0x030C30C3;
+        y = (y | (y << 2)) & 0x09249249;
+        
+        z = (z | (z << 16)) & 0x030000FF;
+        z = (z | (z << 8)) & 0x0300F00F;
+        z = (z | (z << 4)) & 0x030C30C3;
+        z = (z | (z << 2)) & 0x09249249;
+        
+        return x | (y << 1) | (z << 2);
+    }
+    
+    /**
+     * Fast multiplication by 10 using shifts and adds.
+     * 
+     * @param x Input value
+     * @return x * 10
+     */
+    public static int multiplyBy10(int x) {
+        return (x << 3) + (x << 1); // x*8 + x*2 = x*10
+    }
+    
+    /**
+     * Fast division by 10 using multiplication and shift.
+     * Works for non-negative integers up to ~2^31/10.
+     * 
+     * @param x Input value (non-negative)
+     * @return x / 10
+     */
+    public static int divideBy10(int x) {
+        // Magic number: ceil(2^35 / 10)
+        long q = ((x * 0xCCCCCCCDL) >>> 35);
+        return (int) q;
+    }
+    
+    /**
+     * Computes Hamming distance between two integers.
+     * Number of bit positions where they differ.
+     * 
+     * @param x First value
+     * @param y Second value
+     * @return Hamming distance
+     */
+    public static int hammingDistance(int x, int y) {
+        return Integer.bitCount(x ^ y);
+    }
+    
+    /**
+     * Fast absolute value without branching.
+     * 
+     * @param x Input value
+     * @return |x|
+     */
+    public static int fastAbs(int x) {
+        int mask = x >> 31;
+        return (x + mask) ^ mask;
+    }
+    
+    /**
+     * Branchless conditional move.
+     * Returns a if condition is true (non-zero), b otherwise.
+     * 
+     * @param condition Condition (0 = false, non-zero = true)
+     * @param a Value if true
+     * @param b Value if false
+     * @return Selected value
+     */
+    public static int conditionalMove(int condition, int a, int b) {
+        int mask = -(condition != 0 ? 1 : 0);
+        return (mask & a) | (~mask & b);
+    }
 }

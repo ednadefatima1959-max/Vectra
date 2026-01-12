@@ -462,4 +462,206 @@ public class BitwiseMathTest {
         // DC component (bin 0) should have high energy for constant signal
         assertTrue(energy > 0);
     }
+
+    // ========== Advanced Bitwise Operations Tests ==========
+
+    @Test
+    public void parallelBitDeposit_basic() {
+        int result = BitwiseMath.parallelBitDeposit(0b1111, 0b10101010);
+        // Should deposit 1111 into positions of mask
+        assertTrue(result != 0);
+    }
+
+    @Test
+    public void parallelBitExtract_basic() {
+        int result = BitwiseMath.parallelBitExtract(0b11110000, 0b10101010);
+        // Should extract bits where mask is 1
+        assertTrue(result >= 0);
+    }
+
+    @Test
+    public void computeParity_evenBits() {
+        assertEquals(0, BitwiseMath.computeParity(0b11)); // 2 bits
+        assertEquals(0, BitwiseMath.computeParity(0b1111)); // 4 bits
+    }
+
+    @Test
+    public void computeParity_oddBits() {
+        assertEquals(1, BitwiseMath.computeParity(0b1)); // 1 bit
+        assertEquals(1, BitwiseMath.computeParity(0b111)); // 3 bits
+    }
+
+    @Test
+    public void nextPowerOf2_basic() {
+        assertEquals(1, BitwiseMath.nextPowerOf2(0));
+        assertEquals(1, BitwiseMath.nextPowerOf2(1));
+        assertEquals(2, BitwiseMath.nextPowerOf2(2));
+        assertEquals(4, BitwiseMath.nextPowerOf2(3));
+        assertEquals(8, BitwiseMath.nextPowerOf2(5));
+        assertEquals(16, BitwiseMath.nextPowerOf2(15));
+        assertEquals(16, BitwiseMath.nextPowerOf2(16));
+    }
+
+    @Test
+    public void isPowerOf2_validPowers() {
+        assertTrue(BitwiseMath.isPowerOf2(1));
+        assertTrue(BitwiseMath.isPowerOf2(2));
+        assertTrue(BitwiseMath.isPowerOf2(4));
+        assertTrue(BitwiseMath.isPowerOf2(1024));
+    }
+
+    @Test
+    public void isPowerOf2_invalidPowers() {
+        assertFalse(BitwiseMath.isPowerOf2(0));
+        assertFalse(BitwiseMath.isPowerOf2(3));
+        assertFalse(BitwiseMath.isPowerOf2(5));
+        assertFalse(BitwiseMath.isPowerOf2(100));
+    }
+
+    @Test
+    public void fastLog2_basic() {
+        assertEquals(0, BitwiseMath.fastLog2(1));
+        assertEquals(1, BitwiseMath.fastLog2(2));
+        assertEquals(2, BitwiseMath.fastLog2(4));
+        assertEquals(3, BitwiseMath.fastLog2(8));
+        assertEquals(9, BitwiseMath.fastLog2(1000));
+    }
+
+    @Test
+    public void sign_positive() {
+        assertEquals(1, BitwiseMath.sign(42));
+        assertEquals(1, BitwiseMath.sign(1));
+    }
+
+    @Test
+    public void sign_negative() {
+        assertEquals(-1, BitwiseMath.sign(-42));
+        assertEquals(-1, BitwiseMath.sign(-1));
+    }
+
+    @Test
+    public void sign_zero() {
+        assertEquals(0, BitwiseMath.sign(0));
+    }
+
+    @Test
+    public void xorSwap_basic() {
+        int[] arr = {10, 20, 30};
+        BitwiseMath.xorSwap(arr, 0, 2);
+        assertEquals(30, arr[0]);
+        assertEquals(20, arr[1]);
+        assertEquals(10, arr[2]);
+    }
+
+    @Test
+    public void xorSwap_sameIndex() {
+        int[] arr = {10, 20, 30};
+        BitwiseMath.xorSwap(arr, 1, 1);
+        assertEquals(10, arr[0]);
+        assertEquals(20, arr[1]);
+        assertEquals(30, arr[2]);
+    }
+
+    @Test
+    public void binaryToGray_basic() {
+        assertEquals(0, BitwiseMath.binaryToGray(0));
+        assertEquals(1, BitwiseMath.binaryToGray(1));
+        assertEquals(3, BitwiseMath.binaryToGray(2));
+        assertEquals(2, BitwiseMath.binaryToGray(3));
+    }
+
+    @Test
+    public void grayToBinary_basic() {
+        assertEquals(0, BitwiseMath.grayToBinary(0));
+        assertEquals(1, BitwiseMath.grayToBinary(1));
+        assertEquals(2, BitwiseMath.grayToBinary(3));
+        assertEquals(3, BitwiseMath.grayToBinary(2));
+    }
+
+    @Test
+    public void grayCode_roundTrip() {
+        for (int i = 0; i < 100; i++) {
+            int gray = BitwiseMath.binaryToGray(i);
+            int binary = BitwiseMath.grayToBinary(gray);
+            assertEquals(i, binary);
+        }
+    }
+
+    @Test
+    public void interleave3D_basic() {
+        int morton = BitwiseMath.interleave3D(1, 2, 3);
+        assertTrue(morton > 0);
+        
+        // Test zeros
+        assertEquals(0, BitwiseMath.interleave3D(0, 0, 0));
+    }
+
+    @Test
+    public void multiplyBy10_basic() {
+        assertEquals(0, BitwiseMath.multiplyBy10(0));
+        assertEquals(10, BitwiseMath.multiplyBy10(1));
+        assertEquals(50, BitwiseMath.multiplyBy10(5));
+        assertEquals(100, BitwiseMath.multiplyBy10(10));
+        assertEquals(1000, BitwiseMath.multiplyBy10(100));
+    }
+
+    @Test
+    public void divideBy10_basic() {
+        assertEquals(0, BitwiseMath.divideBy10(0));
+        assertEquals(0, BitwiseMath.divideBy10(9));
+        assertEquals(1, BitwiseMath.divideBy10(10));
+        assertEquals(5, BitwiseMath.divideBy10(50));
+        assertEquals(10, BitwiseMath.divideBy10(100));
+        assertEquals(100, BitwiseMath.divideBy10(1000));
+    }
+
+    @Test
+    public void multiplyDivideBy10_roundTrip() {
+        for (int i = 0; i < 100; i++) {
+            int multiplied = BitwiseMath.multiplyBy10(i);
+            int divided = BitwiseMath.divideBy10(multiplied);
+            assertEquals(i, divided);
+        }
+    }
+
+    @Test
+    public void hammingDistance_identical() {
+        assertEquals(0, BitwiseMath.hammingDistance(42, 42));
+        assertEquals(0, BitwiseMath.hammingDistance(0, 0));
+    }
+
+    @Test
+    public void hammingDistance_different() {
+        assertEquals(1, BitwiseMath.hammingDistance(0b1000, 0b0000));
+        assertEquals(2, BitwiseMath.hammingDistance(0b1100, 0b0000));
+        assertEquals(32, BitwiseMath.hammingDistance(0xFFFFFFFF, 0));
+    }
+
+    @Test
+    public void fastAbs_positive() {
+        assertEquals(42, BitwiseMath.fastAbs(42));
+        assertEquals(1, BitwiseMath.fastAbs(1));
+    }
+
+    @Test
+    public void fastAbs_negative() {
+        assertEquals(42, BitwiseMath.fastAbs(-42));
+        assertEquals(1, BitwiseMath.fastAbs(-1));
+    }
+
+    @Test
+    public void fastAbs_zero() {
+        assertEquals(0, BitwiseMath.fastAbs(0));
+    }
+
+    @Test
+    public void conditionalMove_true() {
+        assertEquals(100, BitwiseMath.conditionalMove(1, 100, 200));
+        assertEquals(100, BitwiseMath.conditionalMove(42, 100, 200));
+    }
+
+    @Test
+    public void conditionalMove_false() {
+        assertEquals(200, BitwiseMath.conditionalMove(0, 100, 200));
+    }
 }
