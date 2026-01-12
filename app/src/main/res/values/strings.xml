@@ -25,6 +25,8 @@
     <string name="about_benchmark">About Professional Benchmark</string>
     <string name="benchmark_info">Vectras Professional Benchmark measures device performance using 79 formal engineering metrics with proper SI units. Results include: CPU throughput (Mops/s, MFLOPS), Memory bandwidth (MB/s, GB/s), Latency (ns, μs, ms), Storage IOPS, and CRC32C checksum throughput. Device specifications (CPU model, cores, frequency, RAM) are automatically detected and included in reports. Results are reproducible and suitable for academic/professional documentation.</string>
     <string name="benchmark_complete">Benchmark complete!</string>
+    <string name="benchmark_failed">Benchmark failed</string>
+    <string name="preparing_benchmark">Preparing benchmark environment…</string>
     <string name="pts">metrics</string>
     <string name="detailed_results">Detailed Engineering Report</string>
     <string name="results_exported">Results exported to: %s</string>
