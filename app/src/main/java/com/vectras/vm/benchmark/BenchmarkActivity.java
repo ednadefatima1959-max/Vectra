@@ -117,41 +117,98 @@ public class BenchmarkActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
     
+    private BenchmarkManager.BenchmarkResult lastBenchmarkResult;
+    
     private void runBenchmark() {
         // Show progress
         layoutProgress.setVisibility(View.VISIBLE);
         btnRunBenchmark.setEnabled(false);
         tvScoreStatus.setText(getString(R.string.running_benchmark));
+        tvProgressText.setText(getString(R.string.preparing_benchmark));
         
-        // Run benchmark in background
+        // Run benchmark in background using professional BenchmarkManager
         executor.execute(() -> {
             try {
-                // Run the benchmark
-                VectraBenchmark.BenchmarkResult[] results = VectraBenchmark.runAllBenchmarks();
-                lastResults = results;
+                BenchmarkManager manager = new BenchmarkManager(this);
                 
-                // Get device specifications
-                VectraBenchmark.DeviceSpecification deviceSpec = VectraBenchmark.getDeviceSpecification();
-                
-                // Update UI on main thread
-                mainHandler.post(() -> {
-                    updateScoreDisplay(results, deviceSpec);
-                    layoutProgress.setVisibility(View.GONE);
-                    btnRunBenchmark.setEnabled(true);
-                    tvScoreStatus.setText(getString(R.string.benchmark_complete));
-                    
-                    // Show result buttons
-                    btnViewDetails.setVisibility(View.VISIBLE);
-                    btnExportResults.setVisibility(View.VISIBLE);
-                    btnShareResults.setVisibility(View.VISIBLE);
-                    layoutCategoryScores.setVisibility(View.VISIBLE);
-                });
+                // Run with progress callbacks
+                BenchmarkManager.BenchmarkResult result = manager.runBenchmark(
+                    new BenchmarkManager.ProgressCallback() {
+                        @Override
+                        public void onProgress(int metricIndex, int totalMetrics, String currentMetric) {
+                            mainHandler.post(() -> {
+                                tvProgressText.setText(currentMetric);
+                                if (totalMetrics > 0) {
+                                    int percent = (metricIndex * 100) / totalMetrics;
+                                    tvScoreStatus.setText(String.format(java.util.Locale.US, 
+                                        "Running: %d%%", percent));
+                                }
+                            });
+                        }
+                        
+                        @Override
+                        public void onWarning(String warning) {
+                            mainHandler.post(() -> {
+                                // Show warnings in a non-intrusive way
+                                Toast.makeText(BenchmarkActivity.this, 
+                                    "⚠ " + warning, Toast.LENGTH_SHORT).show();
+                            });
+                        }
+                        
+                        @Override
+                        public void onComplete(BenchmarkManager.BenchmarkResult benchResult) {
+                            mainHandler.post(() -> {
+                                lastBenchmarkResult = benchResult;
+                                lastResults = benchResult.metrics;
+                                
+                                // Get device specifications
+                                VectraBenchmark.DeviceSpecification deviceSpec = 
+                                    VectraBenchmark.getDeviceSpecification();
+                                
+                                // Update display
+                                updateScoreDisplay(benchResult.metrics, deviceSpec);
+                                layoutProgress.setVisibility(View.GONE);
+                                btnRunBenchmark.setEnabled(true);
+                                
+                                // Show validation status
+                                String status = benchResult.isValid ? 
+                                    getString(R.string.benchmark_complete) + " ✓" : 
+                                    getString(R.string.benchmark_complete) + " ⚠";
+                                tvScoreStatus.setText(status);
+                                
+                                // Show result buttons
+                                btnViewDetails.setVisibility(View.VISIBLE);
+                                btnExportResults.setVisibility(View.VISIBLE);
+                                btnShareResults.setVisibility(View.VISIBLE);
+                                layoutCategoryScores.setVisibility(View.VISIBLE);
+                                
+                                // Show validation dialog if there are warnings
+                                if (!benchResult.validation.warnings.isEmpty() || 
+                                    !benchResult.validation.errors.isEmpty()) {
+                                    showValidationDialog(benchResult.validation);
+                                }
+                            });
+                        }
+                        
+                        @Override
+                        public void onError(String error) {
+                            mainHandler.post(() -> {
+                                layoutProgress.setVisibility(View.GONE);
+                                btnRunBenchmark.setEnabled(true);
+                                tvScoreStatus.setText(getString(R.string.benchmark_failed));
+                                Toast.makeText(BenchmarkActivity.this, 
+                                    "Error: " + error, Toast.LENGTH_LONG).show();
+                            });
+                        }
+                    });
                 
             } catch (Exception e) {
                 mainHandler.post(() -> {
                     layoutProgress.setVisibility(View.GONE);
                     btnRunBenchmark.setEnabled(true);
-                    Toast.makeText(this, "Benchmark failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    tvScoreStatus.setText(getString(R.string.benchmark_failed));
+                    Toast.makeText(this, "Benchmark failed: " + e.getMessage(), 
+                        Toast.LENGTH_LONG).show();
                 });
             }
         });
@@ -193,17 +250,47 @@ public class BenchmarkActivity extends AppCompatActivity {
         return "N/A";
     }
     
+    private void showValidationDialog(BenchmarkManager.ValidationReport validation) {
+        String validationReport = BenchmarkManager.formatValidationReport(validation);
+        
+        TextView messageView = new TextView(this);
+        messageView.setText(validationReport);
+        messageView.setTextIsSelectable(true);
+        messageView.setTypeface(android.graphics.Typeface.MONOSPACE);
+        messageView.setTextSize(9f);
+        messageView.setPadding(16, 16, 16, 16);
+        
+        android.widget.ScrollView scrollView = new android.widget.ScrollView(this);
+        scrollView.addView(messageView);
+        
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Validation Report")
+                .setView(scrollView)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+    }
+    
     private void showDetailedResults() {
         if (lastResults == null) {
             Toast.makeText(this, "No results to display", Toast.LENGTH_SHORT).show();
             return;
         }
         
-        String report = VectraBenchmark.formatReport(lastResults);
+        // Build comprehensive report with validation if available
+        StringBuilder fullReport = new StringBuilder();
+        
+        // Add validation report if available
+        if (lastBenchmarkResult != null && lastBenchmarkResult.validation != null) {
+            fullReport.append(BenchmarkManager.formatValidationReport(lastBenchmarkResult.validation));
+            fullReport.append("\n\n");
+        }
+        
+        // Add benchmark results
+        fullReport.append(VectraBenchmark.formatReport(lastResults));
         
         // Create a scrollable text view for the detailed results
         TextView messageView = new TextView(this);
-        messageView.setText(report);
+        messageView.setText(fullReport.toString());
         messageView.setTextIsSelectable(true);
         messageView.setTypeface(android.graphics.Typeface.MONOSPACE);
         messageView.setTextSize(9f);
@@ -235,9 +322,38 @@ public class BenchmarkActivity extends AppCompatActivity {
                 }
                 File exportFile = new File(exportDir, fileName);
                 
-                // Use detailed report format
-                String report = VectraBenchmark.formatDetailedReport(lastResults);
-                FileUtils.writeToFile(exportDir.getAbsolutePath(), fileName, report);
+                // Build comprehensive report with validation
+                StringBuilder fullReport = new StringBuilder();
+                
+                // Add header
+                fullReport.append("VECTRAS VM PROFESSIONAL BENCHMARK REPORT\n");
+                fullReport.append("Generated: ").append(timestamp).append("\n");
+                fullReport.append("═══════════════════════════════════════════════════════════\n\n");
+                
+                // Add validation report if available
+                if (lastBenchmarkResult != null && lastBenchmarkResult.validation != null) {
+                    fullReport.append(BenchmarkManager.formatValidationReport(lastBenchmarkResult.validation));
+                    fullReport.append("\n\n");
+                    
+                    // Add environment snapshot
+                    if (lastBenchmarkResult.environment != null) {
+                        BenchmarkManager.EnvironmentSnapshot env = lastBenchmarkResult.environment;
+                        fullReport.append("ENVIRONMENT SNAPSHOT\n");
+                        fullReport.append("─────────────────────────────────────────────────────────\n");
+                        fullReport.append(String.format("CPU Temperature: %.1f°C\n", env.cpuTempC));
+                        fullReport.append(String.format("Free Memory: %d MB\n", env.freeMemoryMb));
+                        fullReport.append(String.format("Running Processes: %d\n", env.runningProcesses));
+                        fullReport.append(String.format("CPU Governor: %s\n", env.cpuGovernor));
+                        fullReport.append(String.format("Benchmark Duration: %d ms\n", lastBenchmarkResult.durationMs));
+                        fullReport.append("\n\n");
+                    }
+                }
+                
+                // Add detailed benchmark results
+                fullReport.append(VectraBenchmark.formatDetailedReport(lastResults));
+                
+                // Write to file
+                FileUtils.writeToFile(exportDir.getAbsolutePath(), fileName, fullReport.toString());
                 
                 mainHandler.post(() -> {
                     Toast.makeText(this, 
@@ -260,12 +376,40 @@ public class BenchmarkActivity extends AppCompatActivity {
             return;
         }
         
-        String report = VectraBenchmark.formatReport(lastResults);
+        // Build comprehensive report
+        StringBuilder shareText = new StringBuilder();
+        
+        // Add summary
+        shareText.append("VECTRAS VM BENCHMARK RESULTS\n");
+        shareText.append("════════════════════════════\n\n");
+        
+        // Add validation summary if available
+        if (lastBenchmarkResult != null && lastBenchmarkResult.validation != null) {
+            BenchmarkManager.ValidationReport val = lastBenchmarkResult.validation;
+            shareText.append(String.format("Confidence Score: %.0f%%\n", val.confidenceScore * 100));
+            shareText.append(String.format("Result Variance: %.1f%%\n", val.resultVariance));
+            if (!val.warnings.isEmpty()) {
+                shareText.append(String.format("Warnings: %d\n", val.warnings.size()));
+            }
+            shareText.append("\n");
+        }
+        
+        // Add device info
+        VectraBenchmark.DeviceSpecification spec = VectraBenchmark.getDeviceSpecification();
+        shareText.append("Device: ").append(spec.cpuModel).append("\n");
+        shareText.append("Cores: ").append(spec.cpuCores).append("\n");
+        shareText.append("RAM: ").append(spec.getFormattedRam()).append("\n\n");
+        
+        // Add summary metrics
+        shareText.append("Metrics Completed: ").append(lastResults.length).append("/79\n\n");
+        
+        // Add full report
+        shareText.append(VectraBenchmark.formatReport(lastResults));
         
         Intent shareIntent = new Intent(Intent.ACTION_SEND);
         shareIntent.setType("text/plain");
         shareIntent.putExtra(Intent.EXTRA_SUBJECT, "Vectras VM Professional Benchmark Results");
-        shareIntent.putExtra(Intent.EXTRA_TEXT, report);
+        shareIntent.putExtra(Intent.EXTRA_TEXT, shareText.toString());
         startActivity(Intent.createChooser(shareIntent, getString(R.string.share_results)));
     }
     
