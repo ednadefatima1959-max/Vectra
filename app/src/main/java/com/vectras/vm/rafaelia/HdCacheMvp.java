@@ -8,6 +8,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayDeque;
@@ -17,6 +18,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
@@ -63,6 +65,9 @@ public final class HdCacheMvp {
     
     /** Harmonic frequencies for scheduling (symbolic -> scheduling weights) */
     public static final int[] HARMONICS = {12, 144, 288, 144000, 777, 555, 963, 999};
+    
+    /** Nanoseconds per second for time conversion */
+    private static final long NANOS_PER_SECOND = 1_000_000_000L;
     
     // Block format constants
     private static final byte[] MAGIC = {'R', 'B', 'F', '0'};
@@ -210,10 +215,8 @@ public final class HdCacheMvp {
          */
         public BlockStore(File storePath, File indexPath) throws IOException {
             File parent = storePath.getAbsoluteFile().getParentFile();
-            if (parent != null && !parent.exists()) {
-                if (!parent.mkdirs() && !parent.exists()) {
-                    throw new IOException("Unable to create directories for " + storePath);
-                }
+            if (parent != null) {
+                Files.createDirectories(parent.toPath());
             }
             
             this.raf = new RandomAccessFile(storePath, "rw");
@@ -647,7 +650,8 @@ public final class HdCacheMvp {
                 throw new IllegalArgumentException("unknown layer: " + layer);
             }
 
-            String eid = String.format("%x-%08x", System.nanoTime(), eventCounter.incrementAndGet());
+            // Use UUID for better uniqueness across restarts
+            String eid = UUID.randomUUID().toString();
             Object[] result = store.appendBlock(payload);
             long offset = (Long) result[0];
             int diskLen = (Integer) result[1];
@@ -672,12 +676,8 @@ public final class HdCacheMvp {
                 lock.unlock();
             }
 
-            // Drop control
-            int totalQueueSize = 0;
-            for (Deque<EventKey> q : queues.values()) {
-                totalQueueSize += q.size();
-            }
-            if (totalQueueSize > DROP_IF_QUEUE_GT) {
+            // Drop control - check total queue size
+            if (getTotalQueueSize() > DROP_IF_QUEUE_GT) {
                 dropOldestGlobal();
             }
 
@@ -717,7 +717,8 @@ public final class HdCacheMvp {
         }
 
         private boolean isExpired(EventMeta m) {
-            double ageSec = (System.nanoTime() - m.getCreatedNs()) / 1e9;
+            long ageNs = System.nanoTime() - m.getCreatedNs();
+            long ageSec = ageNs / NANOS_PER_SECOND;
             return ageSec > m.getTtlSec();
         }
 
@@ -763,14 +764,15 @@ public final class HdCacheMvp {
             try {
                 byte[] payload = fetchPayload(k);
 
-                // Matrix operation placeholder: hash-of-hash + parity-like folding
-                byte[] h1 = sha256(payload);
-                byte[] folded = new byte[h1.length];
-                for (int i = 0; i < h1.length; i++) {
-                    folded[i] = (byte) (h1[i] ^ h1[h1.length - 1 - i]);
+                // Lightweight placeholder: simple XOR fold (actual processing TBD)
+                int checksum = 0;
+                for (byte b : payload) {
+                    checksum ^= (b & 0xFF);
                 }
-                // Result computed but not stored (placeholder)
-                sha256(folded);
+                // Use checksum to prevent optimization
+                if (checksum < 0) {
+                    throw new IllegalStateException("Unexpected negative checksum");
+                }
 
                 m.setStatus(EventStatus.DONE);
                 store.writeIndex(m);

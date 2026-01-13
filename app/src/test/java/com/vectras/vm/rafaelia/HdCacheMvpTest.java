@@ -2,6 +2,7 @@ package com.vectras.vm.rafaelia;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -50,7 +51,7 @@ public class HdCacheMvpTest {
         
         assertEquals(k1, k2);
         assertEquals(k1.hashCode(), k2.hashCode());
-        assertTrue(!k1.equals(k3));
+        assertNotEquals(k1, k3);
     }
 
     // ========== BlockStore Tests ==========
