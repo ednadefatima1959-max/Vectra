@@ -43,6 +43,10 @@ public class BenchmarkManager {
     private static final double MIN_CONFIDENCE_THRESHOLD = 0.7;
     private static final double CPU_FREQ_VARIANCE_THRESHOLD_HOMOGENEOUS = 0.5;
     private static final double CPU_FREQ_VARIANCE_THRESHOLD_HETEROGENEOUS = 0.7;
+    private static final double MAX_TIME_DRIFT_PERCENT = 10.0;
+    private static final double MAX_TIMER_JITTER_PERCENT = 500.0;
+    private static final double MAX_STABILITY_VARIANCE_PERCENT = 30.0;
+    private static final int DIAGNOSTIC_DECIMALS = 2;
     
     // Progress callback interface
     public interface ProgressCallback {
@@ -57,19 +61,53 @@ public class BenchmarkManager {
         public final VectraBenchmark.BenchmarkResult[] metrics;
         public final ValidationReport validation;
         public final EnvironmentSnapshot environment;
+        public final List<DiagnosticMetric> diagnostics;
         public final long durationMs;
         public final boolean isValid;
         
         public BenchmarkResult(VectraBenchmark.BenchmarkResult[] metrics,
                              ValidationReport validation,
                              EnvironmentSnapshot environment,
+                             List<DiagnosticMetric> diagnostics,
                              long durationMs,
                              boolean isValid) {
             this.metrics = metrics;
             this.validation = validation;
             this.environment = environment;
+            this.diagnostics = diagnostics;
             this.durationMs = durationMs;
             this.isValid = isValid;
+        }
+    }
+
+    public static class DiagnosticMetric {
+        public final String name;
+        public final String value;
+        public final String unit;
+        public final String description;
+
+        public DiagnosticMetric(String name, String value, String unit, String description) {
+            this.name = name;
+            this.value = value;
+            this.unit = unit;
+            this.description = description;
+        }
+    }
+
+    private static class PreflightReport {
+        public final List<String> warnings;
+        public final double cpuStabilityVariance;
+        public final boolean emulatorLikely;
+        public final boolean abiMismatch;
+
+        private PreflightReport(List<String> warnings,
+                                double cpuStabilityVariance,
+                                boolean emulatorLikely,
+                                boolean abiMismatch) {
+            this.warnings = warnings;
+            this.cpuStabilityVariance = cpuStabilityVariance;
+            this.emulatorLikely = emulatorLikely;
+            this.abiMismatch = abiMismatch;
         }
     }
     
@@ -84,11 +122,23 @@ public class BenchmarkManager {
         public final boolean powerSaveMode;
         public final String cpuGovernor;
         public final long[] cpuFrequencies;
+        public final String cpuInfoModel;
+        public final String cpuInfoHardware;
+        public final String cpuAbi;
+        public final String buildFingerprint;
+        public final String buildHardware;
+        public final String buildProduct;
+        public final double timeSourceDriftPercent;
+        public final double timerJitterPercent;
         
         public EnvironmentSnapshot(long timestampMs, double cpuTempC, long freeMemoryMb,
                                  int runningProcesses, boolean thermalThrottling,
                                  boolean lowBattery, boolean powerSaveMode,
-                                 String cpuGovernor, long[] cpuFrequencies) {
+                                 String cpuGovernor, long[] cpuFrequencies,
+                                 String cpuInfoModel, String cpuInfoHardware,
+                                 String cpuAbi, String buildFingerprint,
+                                 String buildHardware, String buildProduct,
+                                 double timeSourceDriftPercent, double timerJitterPercent) {
             this.timestampMs = timestampMs;
             this.cpuTempC = cpuTempC;
             this.freeMemoryMb = freeMemoryMb;
@@ -98,6 +148,14 @@ public class BenchmarkManager {
             this.powerSaveMode = powerSaveMode;
             this.cpuGovernor = cpuGovernor;
             this.cpuFrequencies = cpuFrequencies;
+            this.cpuInfoModel = cpuInfoModel;
+            this.cpuInfoHardware = cpuInfoHardware;
+            this.cpuAbi = cpuAbi;
+            this.buildFingerprint = buildFingerprint;
+            this.buildHardware = buildHardware;
+            this.buildProduct = buildProduct;
+            this.timeSourceDriftPercent = timeSourceDriftPercent;
+            this.timerJitterPercent = timerJitterPercent;
         }
     }
     
@@ -130,6 +188,9 @@ public class BenchmarkManager {
     private final Context context;
     private final AtomicInteger progressMetric = new AtomicInteger(0);
     private final AtomicReference<ProgressCallback> callback = new AtomicReference<>();
+    private final ArrayList<String> warningBuffer = new ArrayList<>(64);
+    private final ArrayList<DiagnosticMetric> diagnosticsBuffer = new ArrayList<>(8);
+    private final StringBuilder scratchBuilder = new StringBuilder(128);
     
     public BenchmarkManager(Context context) {
         this.context = context.getApplicationContext();
@@ -147,9 +208,9 @@ public class BenchmarkManager {
             // Step 1: Pre-flight checks
             notifyProgress(0, VectraBenchmark.METRIC_COUNT, "Performing pre-flight checks...");
             EnvironmentSnapshot envBefore = captureEnvironment();
-            List<String> preflightWarnings = performPreflightChecks(envBefore);
+            PreflightReport preflight = performPreflightChecks(envBefore);
             
-            for (String warning : preflightWarnings) {
+            for (String warning : preflight.warnings) {
                 notifyWarning(warning);
             }
             
@@ -173,9 +234,10 @@ public class BenchmarkManager {
             long duration = System.currentTimeMillis() - startTime;
             boolean isValid = validation.errors.isEmpty() && 
                             validation.confidenceScore >= MIN_CONFIDENCE_THRESHOLD;
-            
+
+            List<DiagnosticMetric> diagnostics = buildDiagnostics(envBefore, preflight);
             BenchmarkResult result = new BenchmarkResult(
-                results, validation, envAfter, duration, isValid);
+                results, validation, envAfter, diagnostics, duration, isValid);
             
             notifyComplete(result);
             return result;
@@ -204,20 +266,20 @@ public class BenchmarkManager {
     /**
      * Perform 30+ pre-flight checks for interference detection.
      */
-    private List<String> performPreflightChecks(EnvironmentSnapshot env) {
-        List<String> warnings = new ArrayList<>();
+    private PreflightReport performPreflightChecks(EnvironmentSnapshot env) {
+        warningBuffer.clear();
         
         // Check 1-5: Thermal state
         if (env.cpuTempC > MAX_CPU_TEMP_C) {
-            warnings.add("High CPU temperature: " + env.cpuTempC + "°C (may cause throttling)");
+            warningBuffer.add("High CPU temperature: " + env.cpuTempC + "°C (may cause throttling)");
         }
         if (env.thermalThrottling) {
-            warnings.add("Thermal throttling detected");
+            warningBuffer.add("Thermal throttling detected");
         }
         
         // Check 6-10: Memory state
         if (env.freeMemoryMb < MIN_FREE_MEMORY_MB) {
-            warnings.add("Low free memory: " + env.freeMemoryMb + " MB");
+            warningBuffer.add("Low free memory: " + env.freeMemoryMb + " MB");
         }
         
         Runtime runtime = Runtime.getRuntime();
@@ -226,25 +288,25 @@ public class BenchmarkManager {
         double memoryUsagePercent = (usedMemory * 100.0) / maxMemory;
         
         if (memoryUsagePercent > 80) {
-            warnings.add("High memory usage: " + (int)memoryUsagePercent + "%");
+            warningBuffer.add("High memory usage: " + (int)memoryUsagePercent + "%");
         }
         
         // Check 11-15: System load
         if (env.runningProcesses > 100) {
-            warnings.add("High process count: " + env.runningProcesses + " processes");
+            warningBuffer.add("High process count: " + env.runningProcesses + " processes");
         }
         
         // Check 16-20: Power state
         if (env.lowBattery) {
-            warnings.add("Low battery detected (may trigger power saving)");
+            warningBuffer.add("Low battery detected (may trigger power saving)");
         }
         if (env.powerSaveMode) {
-            warnings.add("Power save mode enabled (may limit performance)");
+            warningBuffer.add("Power save mode enabled (may limit performance)");
         }
         
         // Check 21-25: CPU governor
         if (!"performance".equals(env.cpuGovernor) && !"schedutil".equals(env.cpuGovernor)) {
-            warnings.add("CPU governor not optimal: " + env.cpuGovernor);
+            warningBuffer.add("CPU governor not optimal: " + env.cpuGovernor);
         }
         
         // Check 26-30: CPU frequencies (with heterogeneous architecture awareness)
@@ -279,15 +341,42 @@ public class BenchmarkManager {
                 
                 // Warn if variance exceeds threshold
                 if (freqVariance > warnThreshold) {
-                    warnings.add(String.format(java.util.Locale.US,
-                        "High CPU frequency variance detected (%.1f%%, min: %d kHz, max: %d kHz, arch: %s)",
-                        freqVariance * 100, minFreq, maxFreq, 
+                    warningBuffer.add(buildFrequencyVarianceWarning(
+                        freqVariance * 100, minFreq, maxFreq,
                         isHeterogeneous ? "heterogeneous" : "homogeneous"));
                 }
             }
         }
+
+        // Check 31-35: Device fingerprint consistency (emulator/hardware spoofing)
+        boolean emulatorLikely = isLikelyEmulator(env);
+        if (emulatorLikely) {
+            warningBuffer.add("Potential emulator or spoofed fingerprint detected");
+        }
         
-        return warnings;
+        boolean abiMismatch = isAbiCpuMismatch(env.cpuAbi, env.cpuInfoModel, env.cpuInfoHardware);
+        if (abiMismatch) {
+            warningBuffer.add("CPU/ABI mismatch detected (possible hardware spoofing)");
+        }
+
+        if (env.timeSourceDriftPercent > MAX_TIME_DRIFT_PERCENT) {
+            warningBuffer.add(buildTimerWarning("Timer drift detected: ",
+                env.timeSourceDriftPercent, " difference between clocks"));
+        }
+
+        if (env.timerJitterPercent > MAX_TIMER_JITTER_PERCENT) {
+            warningBuffer.add(buildTimerWarning("High timer jitter detected: ",
+                env.timerJitterPercent, ""));
+        }
+
+        double stabilityVariance = measureCpuStabilityVariance();
+        if (stabilityVariance > MAX_STABILITY_VARIANCE_PERCENT) {
+            warningBuffer.add(buildTimerWarning(
+                "CPU stability variance high: ", stabilityVariance,
+                " (possible throttling or background load)"));
+        }
+        
+        return new PreflightReport(warningBuffer, stabilityVariance, emulatorLikely, abiMismatch);
     }
     
     /**
@@ -323,9 +412,53 @@ public class BenchmarkManager {
         boolean powerSave = isPowerSaveMode();
         String governor = getCpuGovernor();
         long[] freqs = getCpuFrequencies();
-        
+        String cpuInfoModel = getCpuInfoValue("model name");
+        if ("unknown".equals(cpuInfoModel)) {
+            cpuInfoModel = getCpuInfoValue("Processor");
+        }
+        String cpuInfoHardware = getCpuInfoValue("Hardware");
+        String cpuAbi = getPrimaryAbi();
+        String buildFingerprint = Build.FINGERPRINT;
+        String buildHardware = Build.HARDWARE;
+        String buildProduct = Build.PRODUCT;
+        double timeSourceDrift = measureTimeSourceDriftPercent();
+        double timerJitter = measureTimerJitterPercent();
+
         return new EnvironmentSnapshot(timestamp, cpuTemp, freeMem, procCount,
-                                     throttling, lowBat, powerSave, governor, freqs);
+                                     throttling, lowBat, powerSave, governor, freqs,
+                                     cpuInfoModel, cpuInfoHardware, cpuAbi,
+                                     buildFingerprint, buildHardware, buildProduct,
+                                     timeSourceDrift, timerJitter);
+    }
+
+    private List<DiagnosticMetric> buildDiagnostics(EnvironmentSnapshot env, PreflightReport preflight) {
+        diagnosticsBuffer.clear();
+        diagnosticsBuffer.add(new DiagnosticMetric(
+            "Timer Drift",
+            formatPercent(env.timeSourceDriftPercent, DIAGNOSTIC_DECIMALS),
+            "%",
+            "Difference between nanoTime and elapsedRealtime clocks"));
+        diagnosticsBuffer.add(new DiagnosticMetric(
+            "Timer Jitter",
+            formatPercent(env.timerJitterPercent, DIAGNOSTIC_DECIMALS),
+            "%",
+            "Max deviation across nanoTime samples"));
+        diagnosticsBuffer.add(new DiagnosticMetric(
+            "CPU Stability Variance",
+            formatPercent(preflight.cpuStabilityVariance, DIAGNOSTIC_DECIMALS),
+            "%",
+            "Variance across repeated integer add microbenchmarks"));
+        diagnosticsBuffer.add(new DiagnosticMetric(
+            "Emulator Signals",
+            preflight.emulatorLikely ? "DETECTED" : "NOT DETECTED",
+            "",
+            "Fingerprint and CPU info inspection"));
+        diagnosticsBuffer.add(new DiagnosticMetric(
+            "ABI/CPU Mismatch",
+            preflight.abiMismatch ? "DETECTED" : "NOT DETECTED",
+            "",
+            "ABI and cpuinfo consistency check"));
+        return new ArrayList<>(diagnosticsBuffer);
     }
     
     /**
@@ -516,6 +649,181 @@ public class BenchmarkManager {
             return pm != null && pm.isPowerSaveMode();
         }
         return false;
+    }
+
+    private String getCpuInfoValue(String key) {
+        try (BufferedReader reader = new BufferedReader(new FileReader("/proc/cpuinfo"))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith(key)) {
+                    String[] parts = line.split(":", 2);
+                    if (parts.length == 2) {
+                        return parts[1].trim();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore and fallback
+        }
+        return "unknown";
+    }
+
+    private String getPrimaryAbi() {
+        String[] abis = Build.SUPPORTED_ABIS;
+        if (abis != null && abis.length > 0) {
+            return abis[0];
+        }
+        return "unknown";
+    }
+
+    private boolean isLikelyEmulator(EnvironmentSnapshot env) {
+        String fingerprint = safeLower(env.buildFingerprint);
+        String hardware = safeLower(env.buildHardware);
+        String product = safeLower(env.buildProduct);
+        String cpuInfo = safeLower(env.cpuInfoModel + " " + env.cpuInfoHardware);
+        return fingerprint.contains("generic")
+            || fingerprint.contains("sdk")
+            || hardware.contains("goldfish")
+            || hardware.contains("ranchu")
+            || product.contains("sdk")
+            || cpuInfo.contains("qemu")
+            || cpuInfo.contains("virtual");
+    }
+
+    private boolean isAbiCpuMismatch(String abi, String cpuModel, String cpuHardware) {
+        String abiLower = safeLower(abi);
+        String cpuLower = safeLower(cpuModel + " " + cpuHardware);
+        boolean abiX86 = abiLower.contains("x86");
+        boolean abiArm = abiLower.contains("arm");
+        boolean cpuX86 = cpuLower.contains("intel") || cpuLower.contains("amd") || cpuLower.contains("x86");
+        boolean cpuArm = cpuLower.contains("arm") || cpuLower.contains("aarch") || cpuLower.contains("cortex");
+        if (abiX86 && cpuArm) {
+            return true;
+        }
+        if (abiArm && cpuX86) {
+            return true;
+        }
+        return false;
+    }
+
+    private double measureTimeSourceDriftPercent() {
+        long startNano = System.nanoTime();
+        long startElapsed = android.os.SystemClock.elapsedRealtimeNanos();
+        try {
+            Thread.sleep(20);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        long endNano = System.nanoTime();
+        long endElapsed = android.os.SystemClock.elapsedRealtimeNanos();
+        long deltaNano = endNano - startNano;
+        long deltaElapsed = endElapsed - startElapsed;
+        if (deltaNano <= 0 || deltaElapsed <= 0) {
+            return 0.0;
+        }
+        double avg = (deltaNano + deltaElapsed) / 2.0;
+        double diff = Math.abs(deltaNano - deltaElapsed);
+        return (diff / avg) * 100.0;
+    }
+
+    private double measureTimerJitterPercent() {
+        int samples = 200;
+        long prev = System.nanoTime();
+        long maxDelta = 0;
+        long sumDelta = 0;
+        for (int i = 0; i < samples; i++) {
+            long now = System.nanoTime();
+            long delta = now - prev;
+            if (delta > maxDelta) {
+                maxDelta = delta;
+            }
+            sumDelta += delta;
+            prev = now;
+        }
+        if (sumDelta == 0) {
+            return 0.0;
+        }
+        double avg = sumDelta / (double) samples;
+        return (maxDelta / avg) * 100.0;
+    }
+
+    private double measureCpuStabilityVariance() {
+        int samples = Math.max(2, CONSISTENCY_SAMPLES);
+        int workload = Math.max(10_000, VectraBenchmark.CPU_WORKLOAD_SIZE / 50);
+        double mean = 0;
+        double sumSquares = 0;
+        for (int i = 0; i < samples; i++) {
+            long duration = VectraBenchmark.benchCpuIntegerAdd(workload);
+            double delta = duration - mean;
+            mean += delta / (i + 1);
+            double delta2 = duration - mean;
+            sumSquares += delta * delta2;
+        }
+        if (mean <= 0) {
+            return 0.0;
+        }
+        double variance = Math.sqrt(sumSquares / samples);
+        return (variance / mean) * 100.0;
+    }
+
+    private String safeLower(String value) {
+        return value == null ? "" : value.toLowerCase(java.util.Locale.US);
+    }
+
+    private String buildFrequencyVarianceWarning(double variancePercent, long minFreq, long maxFreq, String arch) {
+        scratchBuilder.setLength(0);
+        scratchBuilder.append("High CPU frequency variance detected (");
+        appendFixed(scratchBuilder, variancePercent, 1);
+        scratchBuilder.append("%, min: ");
+        scratchBuilder.append(minFreq);
+        scratchBuilder.append(" kHz, max: ");
+        scratchBuilder.append(maxFreq);
+        scratchBuilder.append(" kHz, arch: ");
+        scratchBuilder.append(arch);
+        scratchBuilder.append(")");
+        return scratchBuilder.toString();
+    }
+
+    private String buildTimerWarning(String prefix, double percent, String suffix) {
+        scratchBuilder.setLength(0);
+        scratchBuilder.append(prefix);
+        appendFixed(scratchBuilder, percent, 1);
+        scratchBuilder.append("%");
+        scratchBuilder.append(suffix);
+        return scratchBuilder.toString();
+    }
+
+    private String formatPercent(double value, int decimals) {
+        scratchBuilder.setLength(0);
+        appendFixed(scratchBuilder, value, decimals);
+        return scratchBuilder.toString();
+    }
+
+    private void appendFixed(StringBuilder builder, double value, int decimals) {
+        boolean negative = value < 0;
+        double abs = negative ? -value : value;
+        long scale = 1;
+        for (int i = 0; i < decimals; i++) {
+            scale *= 10;
+        }
+        long scaled = Math.round(abs * scale);
+        long intPart = scaled / scale;
+        long fracPart = scaled - (intPart * scale);
+        if (negative) {
+            builder.append('-');
+        }
+        builder.append(intPart);
+        if (decimals > 0) {
+            builder.append('.');
+            for (int i = decimals - 1; i >= 0; i--) {
+                long div = 1;
+                for (int j = 0; j < i; j++) {
+                    div *= 10;
+                }
+                long digit = (fracPart / div) % 10;
+                builder.append((char) ('0' + digit));
+            }
+        }
     }
     
     private String getCpuGovernor() {
