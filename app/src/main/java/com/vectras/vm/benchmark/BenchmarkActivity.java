@@ -380,18 +380,23 @@ public class BenchmarkActivity extends AppCompatActivity {
                         }
                     }
 
-                    if (lastBenchmarkResult != null && lastBenchmarkResult.diagnostics != null
-                        && !lastBenchmarkResult.diagnostics.isEmpty()) {
+                    if (lastBenchmarkResult != null
+                        && lastBenchmarkResult.getDiagnosticsView() != null
+                        && lastBenchmarkResult.getDiagnosticsView().size() > 0) {
                         writeLine(writer, DIAGNOSTICS_HEADER);
                         writeLine(writer, SECTION_DIVIDER);
-                        for (BenchmarkManager.DiagnosticMetric metric : lastBenchmarkResult.diagnostics) {
-                            String unit = metric.unit == null || metric.unit.isEmpty()
+                        BenchmarkManager.DiagnosticMetricsView diagnostics =
+                            lastBenchmarkResult.getDiagnosticsView();
+                        for (int i = 0; i < diagnostics.size(); i++) {
+                            String unit = diagnostics.getUnit(i);
+                            String unitLabel = unit == null || unit.isEmpty()
                                 ? ""
-                                : " " + metric.unit;
-                            writeLine(writer, metric.name + ": "
-                                + safeValue(metric.value) + unit);
-                            if (metric.description != null && !metric.description.isEmpty()) {
-                                writeLine(writer, "  • " + metric.description);
+                                : " " + unit;
+                            writeLine(writer, diagnostics.getName(i) + ": "
+                                + diagnostics.getFormattedValue(i) + unitLabel);
+                            String description = diagnostics.getDescription(i);
+                            if (description != null && !description.isEmpty()) {
+                                writeLine(writer, "  • " + description);
                             }
                         }
                         writer.newLine();
@@ -444,18 +449,22 @@ public class BenchmarkActivity extends AppCompatActivity {
             shareText.append("\n");
         }
 
-        if (lastBenchmarkResult != null && lastBenchmarkResult.diagnostics != null
-            && !lastBenchmarkResult.diagnostics.isEmpty()) {
+        if (lastBenchmarkResult != null
+            && lastBenchmarkResult.getDiagnosticsView() != null
+            && lastBenchmarkResult.getDiagnosticsView().size() > 0) {
             shareText.append("Diagnostics:\n");
-            for (BenchmarkManager.DiagnosticMetric metric : lastBenchmarkResult.diagnostics) {
-                String unit = metric.unit == null || metric.unit.isEmpty()
+            BenchmarkManager.DiagnosticMetricsView diagnostics =
+                lastBenchmarkResult.getDiagnosticsView();
+            for (int i = 0; i < diagnostics.size(); i++) {
+                String unit = diagnostics.getUnit(i);
+                String unitLabel = unit == null || unit.isEmpty()
                     ? ""
-                    : " " + metric.unit;
+                    : " " + unit;
                 shareText.append("  - ")
-                    .append(metric.name)
+                    .append(diagnostics.getName(i))
                     .append(": ")
-                    .append(safeValue(metric.value))
-                    .append(unit)
+                    .append(diagnostics.getFormattedValue(i))
+                    .append(unitLabel)
                     .append("\n");
             }
             shareText.append("\n");
