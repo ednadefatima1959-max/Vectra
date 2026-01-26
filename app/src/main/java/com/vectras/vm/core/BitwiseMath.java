@@ -38,16 +38,16 @@ public final class BitwiseMath {
     public static final int FIXED_POINT_SCALE = 1 << FIXED_POINT_BITS;
     
     /** Pi in fixed-point representation */
-    public static final int FIXED_PI = (int) (Math.PI * FIXED_POINT_SCALE);
+    public static final int FIXED_PI = 205887;
     
     /** 2*Pi in fixed-point representation */
-    public static final int FIXED_TWO_PI = (int) (2.0 * Math.PI * FIXED_POINT_SCALE);
+    public static final int FIXED_TWO_PI = 411774;
     
     /** Euler's number in fixed-point representation */
-    public static final int FIXED_E = (int) (Math.E * FIXED_POINT_SCALE);
+    public static final int FIXED_E = 178145;
     
     /** Golden ratio in fixed-point representation */
-    public static final int FIXED_PHI = (int) (1.618033988749895 * FIXED_POINT_SCALE);
+    public static final int FIXED_PHI = 106039;
     
     // ========== Private Constructor ==========
     
