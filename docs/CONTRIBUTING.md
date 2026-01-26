@@ -573,6 +573,8 @@ By contributing to Vectras VM, you agree that:
 | [LICENSE](../LICENSE) | GNU GPL v2.0 license |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture |
 | [GLOSSARY.md](GLOSSARY.md) | Technical terminology |
+| [LEGAL_AND_LICENSES.md](LEGAL_AND_LICENSES.md) | Licensing, attribution, compliance |
+| [DOCUMENTATION_STANDARDS.md](DOCUMENTATION_STANDARDS.md) | Documentation standards |
 
 ---
 

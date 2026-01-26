@@ -26,6 +26,13 @@
 
 ## Índice Geral / General Index
 
+### 📌 Quick Links / Links Rápidos
+
+- **📚 Navegação principal**: [docs/navigation/INDEX.md](navigation/INDEX.md)
+- **⚖️ Licenças e conformidade**: [docs/LEGAL_AND_LICENSES.md](LEGAL_AND_LICENSES.md)
+- **🧭 Padrões de documentação**: [docs/DOCUMENTATION_STANDARDS.md](DOCUMENTATION_STANDARDS.md)
+- **🤝 Contribuição**: [docs/CONTRIBUTING.md](CONTRIBUTING.md)
+
 ### 🎯 Audience-Specific Navigation / Navegação por Audiência
 
 **New! Choose documentation tailored to your role:**
@@ -71,6 +78,8 @@
 | [BIBLIOGRAPHY.md](BIBLIOGRAPHY.md) | Academic bibliography and technical references |
 | [GLOSSARY.md](GLOSSARY.md) | Technical glossary and terminology |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
+| [LEGAL_AND_LICENSES.md](LEGAL_AND_LICENSES.md) | Licensing, attribution, and compliance guidance |
+| [DOCUMENTATION_STANDARDS.md](DOCUMENTATION_STANDARDS.md) | Documentation writing and navigation standards |
 
 ---
 
@@ -119,6 +128,8 @@ Vectras-VM-Android/
 │   ├── BIBLIOGRAPHY.md            # Academic references
 │   ├── GLOSSARY.md                # Technical glossary
 │   ├── CONTRIBUTING.md            # Contribution guidelines
+│   ├── LEGAL_AND_LICENSES.md      # Licensing and compliance guidance
+│   ├── DOCUMENTATION_STANDARDS.md # Documentation standards
 │   └── assets/                    # Documentation images and assets
 ├── VECTRA_CORE.md                 # Vectra Core technical documentation
 ├── IMPLEMENTATION_SUMMARY.md      # Implementation details
@@ -161,6 +172,12 @@ Vectras-VM-Android/
 1. Veja o [README.md principal](../README.md) para instruções de instalação
 2. Consulte [FIREBASE.md](../app/FIREBASE.md) para configuração de serviços
 3. Utilize o [GLOSSARY.md](GLOSSARY.md) para terminologia técnica
+
+### Para Conformidade / For Compliance
+
+1. Leia [LEGAL_AND_LICENSES.md](LEGAL_AND_LICENSES.md) para requisitos legais e de licenciamento
+2. Verifique as referências e citações em [BIBLIOGRAPHY.md](BIBLIOGRAPHY.md)
+3. Siga os padrões de atualização em [DOCUMENTATION_STANDARDS.md](DOCUMENTATION_STANDARDS.md)
 
 ---
 

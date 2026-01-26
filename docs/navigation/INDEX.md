@@ -144,6 +144,8 @@ For technical implementation details, refer to the core documentation:
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Contribution guidelines | Open source contributors |
 | [GLOSSARY.md](../GLOSSARY.md) | Technical terminology | All audiences |
 | [BIBLIOGRAPHY.md](../BIBLIOGRAPHY.md) | Academic references | Researchers, students |
+| [LEGAL_AND_LICENSES.md](../LEGAL_AND_LICENSES.md) | Licensing, attribution, compliance | Legal, compliance, maintainers |
+| [DOCUMENTATION_STANDARDS.md](../DOCUMENTATION_STANDARDS.md) | Documentation standards | Writers, maintainers |
 
 ---
 
