@@ -32,6 +32,7 @@
 - **⚖️ Licenças e conformidade**: [docs/LEGAL_AND_LICENSES.md](LEGAL_AND_LICENSES.md)
 - **🧭 Padrões de documentação**: [docs/DOCUMENTATION_STANDARDS.md](DOCUMENTATION_STANDARDS.md)
 - **🤝 Contribuição**: [docs/CONTRIBUTING.md](CONTRIBUTING.md)
+- **🗺️ Roadmap formal**: [docs/ROADMAP.md](ROADMAP.md)
 
 ### 🎯 Audience-Specific Navigation / Navegação por Audiência
 
