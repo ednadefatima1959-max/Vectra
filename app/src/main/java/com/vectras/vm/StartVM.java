@@ -144,7 +144,9 @@ public class StartVM {
 
             if (MainSettingsManager.get3dfxEnabled(activity)
                     && (MainSettingsManager.getArch(activity).equals("X86_64")
-                    || MainSettingsManager.getArch(activity).equals("I386"))) {
+                    || MainSettingsManager.getArch(activity).equals("I386"))
+                    && MainSettingsManager.getVmUi(activity).equals("X11")
+                    && MainSettingsManager.getUseSdl(activity)) {
                 String wrapperPath = get3dfxWrapperPath(activity);
                 if (wrapperPath != null && !finalextra.contains(wrapperPath)) {
                     String wrapperCdrom = "-drive index=4,media=cdrom,file='" + wrapperPath + "'";
@@ -313,6 +315,16 @@ public class StartVM {
     }
 
     private static String get3dfxWrapperPath(Activity activity) {
+        String customPath = MainSettingsManager.get3dfxWrapperPath(activity);
+        if (customPath != null) {
+            String trimmedCustomPath = customPath.trim();
+            if (!trimmedCustomPath.isEmpty()) {
+                File customFile = new File(trimmedCustomPath);
+                if (customFile.exists()) {
+                    return customFile.getPath();
+                }
+            }
+        }
         String wrapperValue = MainSettingsManager.get3dfxWrapperVersion(activity);
         if (wrapperValue == null) {
             return null;
@@ -331,6 +343,10 @@ public class StartVM {
             File altFile = new File(altDir, trimmedValue);
             if (altFile.exists()) {
                 return altFile.getPath();
+            }
+            File importedFile = new File(AppConfig.importedDriveFolder, trimmedValue);
+            if (importedFile.exists()) {
+                return importedFile.getPath();
             }
         }
         return wrapperFile.exists() ? wrapperFile.getPath() : null;

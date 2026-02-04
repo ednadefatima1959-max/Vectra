@@ -812,6 +812,11 @@ public class MainSettingsManager extends AppCompatActivity
         return prefs.getString("threedfxWrapperVersion", "3dfx-wrappers-3.5.0.iso");
     }
 
+    public static String get3dfxWrapperPath(Context context) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        return prefs.getString("threedfxWrapperPath", "");
+    }
+
     public static boolean copyFile(Context context) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
         return prefs.getBoolean("copyFile", true);

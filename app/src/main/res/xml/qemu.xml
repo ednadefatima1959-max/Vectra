@@ -149,6 +149,19 @@
             android:title="@string/threedfx_wrapper_version"
             app:icon="@drawable/round_info_24"
             app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:defaultValue=""
+            android:inputType="text"
+            android:key="threedfxWrapperPath"
+            android:selectAllOnFocus="true"
+            android:singleLine="true"
+            android:title="@string/threedfx_wrapper_path"
+            android:summary="@string/threedfx_wrapper_path_note"
+            app:useSimpleSummaryProvider="true"
+            app:icon="@drawable/round_folder_24" />
     </PreferenceCategory>
     <PreferenceCategory
         android:layout_width="wrap_content"
