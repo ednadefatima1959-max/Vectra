@@ -471,6 +471,30 @@ public class MainSettingsManager extends AppCompatActivity
                 });
             }
 
+            EditTextPreference rafaeliaTcgTbSize = findPreference("rafaeliaTcgTbSize");
+            if (rafaeliaTcgTbSize != null) {
+                rafaeliaTcgTbSize.setOnBindEditTextListener(editText -> {
+                    editText.setInputType(InputType.TYPE_CLASS_NUMBER);
+                    editText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(5)});
+                });
+            }
+
+            EditTextPreference rafaeliaBenchStride = findPreference("rafaeliaBenchStrideBytes");
+            if (rafaeliaBenchStride != null) {
+                rafaeliaBenchStride.setOnBindEditTextListener(editText -> {
+                    editText.setInputType(InputType.TYPE_CLASS_NUMBER);
+                    editText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4)});
+                });
+            }
+
+            EditTextPreference rafaeliaBenchMatrix = findPreference("rafaeliaBenchMatrixN");
+            if (rafaeliaBenchMatrix != null) {
+                rafaeliaBenchMatrix.setOnBindEditTextListener(editText -> {
+                    editText.setInputType(InputType.TYPE_CLASS_NUMBER);
+                    editText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(3)});
+                });
+            }
+
             ListPreference rafaeliaMode = findPreference("rafaeliaMode");
             if (rafaeliaMode != null) {
                 updateRafaeliaModeSummary(rafaeliaMode, rafaeliaMode.getValue());
@@ -776,6 +800,21 @@ public class MainSettingsManager extends AppCompatActivity
     public static boolean useLocalTime(Context context) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
         return prefs.getBoolean("useLocalTime", true);
+    }
+
+    public static boolean get3dfxEnabled(Context context) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        return prefs.getBoolean("enable3dfx", false);
+    }
+
+    public static String get3dfxWrapperVersion(Context context) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        return prefs.getString("threedfxWrapperVersion", "3dfx-wrappers-3.5.0.iso");
+    }
+
+    public static String get3dfxWrapperPath(Context context) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        return prefs.getString("threedfxWrapperPath", "");
     }
 
     public static boolean copyFile(Context context) {
