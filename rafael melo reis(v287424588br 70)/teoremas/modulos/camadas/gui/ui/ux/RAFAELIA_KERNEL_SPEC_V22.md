@@ -226,3 +226,11 @@ Mapeamento direto (spec → código):
 8) Score: S → `score`
 
 ---
+
+## Próximo passo (V22.1)
+
+1. Formalizar  (necessidade) e  (predição) no seu estilo (Fibonacci/mediana)
+
+2. Definir  (coerência por trilha) e  (ponto grande fora)
+
+3. Especificar  como 8 regras booleanas essenciais (Ethica[8] “hard gate”)
