@@ -74,11 +74,25 @@ public class VectraBenchmark {
     private static final int M4_ROWS = 1024;
     private static final int M4_COLS = 4096;
     private static final int M4_BYTES = M4_ROWS * M4_COLS;
-    private static final int COPY_STRIPE = BareMetalProfile.recommendedWorkBlockBytes();
+    private static volatile int copyStripeBytes = BareMetalProfile.recommendedWorkBlockBytes();
     private static final ThreadLocal<byte[]> COPY_SCRATCH_POOL =
             ThreadLocal.withInitial(() -> new byte[M4_BYTES]);
 
     
+
+    public static void setCopyStripeBytes(int bytes) {
+        if (bytes < 256) {
+            copyStripeBytes = 256;
+        } else if (bytes > M4_COLS) {
+            copyStripeBytes = M4_COLS;
+        } else {
+            copyStripeBytes = bytes;
+        }
+    }
+
+    public static int getCopyStripeBytes() {
+        return copyStripeBytes;
+    }
     // ========== Metric Categories ==========
     // Category 1: CPU (metrics 0-19)
     static final int CPU_INTEGER_ADD = 0;
@@ -699,8 +713,8 @@ public class VectraBenchmark {
             int copied = 0;
             while (copied < M4_COLS) {
                 int chunk = M4_COLS - copied;
-                if (chunk > COPY_STRIPE) {
-                    chunk = COPY_STRIPE;
+                if (chunk > copyStripeBytes) {
+                    chunk = copyStripeBytes;
                 }
                 NativeFastPath.copyBytes(row, copied, scratch, dstOffset + copied, chunk);
                 copied += chunk;
