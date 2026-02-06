@@ -7,6 +7,7 @@ import android.os.Debug;
 import android.os.Process;
 
 import com.vectras.vm.core.BareMetalProfile;
+import com.vectras.vm.core.NativeFastPath;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -457,8 +458,9 @@ public class BenchmarkManager {
                 int autoStripe = stripeBase;
                 if (cores >= 8) autoStripe <<= 1;
                 if (little && cores <= 4) autoStripe = Math.max(512, autoStripe >> 1);
+                String nativeTag = NativeFastPath.isNativeAvailable() ? " + JNI" : " + Java";
                 return new TuningProfile(mode, autoStripe, Process.THREAD_PRIORITY_MORE_FAVORABLE, 40,
-                        "Auto-adaptive / hardware-aware");
+                        "Auto-adaptive / hardware-aware" + nativeTag);
         }
     }
 

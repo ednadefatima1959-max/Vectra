@@ -8,13 +8,14 @@ package com.vectras.vm.core;
  */
 public final class NativeFastPath {
 
+    private static final int NATIVE_OK_MAGIC = 0x56414343;
     private static final boolean NATIVE_AVAILABLE;
 
     static {
         boolean loaded;
         try {
             System.loadLibrary("vectra_core_accel");
-            loaded = true;
+            loaded = (nativeInit() == NATIVE_OK_MAGIC);
         } catch (Throwable ignored) {
             loaded = false;
         }
@@ -99,6 +100,8 @@ public final class NativeFastPath {
         }
         return x;
     }
+
+    private static native int nativeInit();
 
     private static native int nativeCopyBytes(byte[] src, int srcOffset, byte[] dst, int dstOffset, int length);
 

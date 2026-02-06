@@ -77,6 +77,23 @@ public final class QemuArgsBuilder {
         }
     }
 
+
+    public static void applyVirtioStorageHints(ArrayList<String> params, String arch, String ifType) {
+        if (!"ARM64".equals(arch) && !"X86_64".equals(arch) && !"I386".equals(arch)) {
+            return;
+        }
+        if (!"virtio".equals(ifType)) {
+            return;
+        }
+
+        params.add("-object");
+        params.add("iothread,id=ioth0");
+        params.add("-device");
+        params.add("virtio-scsi-pci,id=scsi0,iothread=ioth0");
+        params.add("-device");
+        params.add("virtio-rng-pci");
+    }
+
     public static void applyVirtioNet(ArrayList<String> params, String extras) {
         if (extras == null) return;
         if (extras.contains("-net") || extras.contains("-nic") || extras.contains("virtio-net")) {
