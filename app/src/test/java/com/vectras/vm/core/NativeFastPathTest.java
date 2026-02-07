@@ -20,6 +20,32 @@ public class NativeFastPathTest {
         assertArrayEquals(src, dst);
     }
 
+
+
+    @Test
+    public void copyBytesHandlesOverlapDeterministically() {
+        byte[] data = new byte[32];
+        for (int i = 0; i < data.length; i++) {
+            data[i] = (byte) i;
+        }
+
+        NativeFastPath.copyBytes(data, 0, data, 4, 20);
+
+        for (int i = 0; i < 20; i++) {
+            assertEquals(i, data[4 + i] & 0xFF);
+        }
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void copyBytesRejectsOutOfBoundsRange() {
+        NativeFastPath.copyBytes(new byte[8], 4, new byte[8], 0, 8);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void xorChecksumRejectsOutOfBoundsRange() {
+        NativeFastPath.xorChecksum(new byte[8], 2, 7);
+    }
+
     @Test
     public void xorChecksumDeterministic() {
         byte[] data = new byte[33];

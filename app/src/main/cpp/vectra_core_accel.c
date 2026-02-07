@@ -130,6 +130,12 @@ Java_com_vectras_vm_core_NativeFastPath_nativeCopyBytes(JNIEnv* env, jclass claz
     (void)clazz;
     if (!src || !dst || length <= 0 || srcOffset < 0 || dstOffset < 0) return -1;
 
+    jsize srcLen = (*env)->GetArrayLength(env, src);
+    jsize dstLen = (*env)->GetArrayLength(env, dst);
+    if ((jint)srcLen < srcOffset + length || (jint)dstLen < dstOffset + length) return -3;
+
+    jboolean sameArray = (*env)->IsSameObject(env, src, dst);
+
     jbyte* s = (*env)->GetPrimitiveArrayCritical(env, src, 0);
     jbyte* d = (*env)->GetPrimitiveArrayCritical(env, dst, 0);
     if (!s || !d) {
@@ -140,6 +146,18 @@ Java_com_vectras_vm_core_NativeFastPath_nativeCopyBytes(JNIEnv* env, jclass claz
 
     const uint8_t* in = (const uint8_t*)s + srcOffset;
     uint8_t* out = (uint8_t*)d + dstOffset;
+
+    if (sameArray && dstOffset > srcOffset && dstOffset < srcOffset + length) {
+        jint i = length;
+        while (i > 0) {
+            i--;
+            out[i] = in[i];
+        }
+
+        (*env)->ReleasePrimitiveArrayCritical(env, src, s, JNI_ABORT);
+        (*env)->ReleasePrimitiveArrayCritical(env, dst, d, 0);
+        return 0;
+    }
 
     jint i = 0;
     jint end = length & ~31;
@@ -196,6 +214,9 @@ Java_com_vectras_vm_core_NativeFastPath_nativeXorChecksum(JNIEnv* env, jclass cl
                                                           jint length) {
     (void)clazz;
     if (!data || length <= 0 || offset < 0) return 0;
+
+    jsize dataLen = (*env)->GetArrayLength(env, data);
+    if ((jint)dataLen < offset + length) return INT32_MIN;
 
     jbyte* base = (*env)->GetPrimitiveArrayCritical(env, data, 0);
     if (!base) return INT32_MIN;
