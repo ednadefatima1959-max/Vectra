@@ -42,9 +42,9 @@ $(BENCH_BIN): bench/src/rmr_benchmark_main.c $(LIB_STATIC)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $< $(LIB_STATIC) $(LDFLAGS) -o $@
 
-$(SELFTEST_BIN): demo_cli/src/bitraf_selftest.c $(LIB_BITRAF_STATIC)
+$(SELFTEST_BIN): demo_cli/src/bitraf_selftest.c $(LIB_BITRAF_STATIC) $(LIB_STATIC)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $< $(LIB_BITRAF_STATIC) $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $< $(LIB_BITRAF_STATIC) $(LIB_STATIC) $(LDFLAGS) -o $@
 
 $(BITRAF_BIN): engine/rmr/src/rafaelia_bitraf_core.c $(LIB_STATIC)
 	@mkdir -p $(dir $@)

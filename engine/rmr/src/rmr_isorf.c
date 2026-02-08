@@ -1,6 +1,8 @@
 /* rmr_isorf.c - ISOraf: armazenamento lógico denso com físico esparso (sem compressão) */
 #include "rmr_isorf.h"
 
+#define RMR_ISORF_MANIFEST_MAGIC 0x49534F52464D414EuLL
+
 static void RmR_ZeroWords(u64 *p, u32 n){
   for(u32 i=0;i<n;i++) p[i] = 0u;
 }
@@ -97,4 +99,73 @@ void RmR_ISOraf_StatsGet(const RmR_ISOraf_Store *st, RmR_ISOraf_Stats *out){
   out->pages_used = used;
   out->physical_bits = (u64)st->data_word_used * 64u;
   out->logical_bits = (u64)used * (u64)st->page_bits;
+}
+
+u64 RmR_ISOraf_Identity(const RmR_ISOraf_Store *st){
+  if(!st) return 0u;
+  u64 mix = 0x9E3779B97F4A7C15uLL;
+  mix ^= (u64)st->page_bits;
+  mix ^= ((u64)st->page_count << 32);
+  mix ^= (u64)st->data_word_used;
+  for(u32 i=0;i<st->page_count;i++){
+    const RmR_ISOraf_Page *p = &st->pages[i];
+    if(!p->used) continue;
+    mix ^= p->base_bit + 0x517CC1B727220A95uLL;
+    mix ^= ((u64)p->word_offset << 21) ^ ((u64)p->word_count << 43);
+  }
+  for(u32 i=0;i<st->data_word_used;i++){
+    u64 v = st->data_words[i];
+    mix ^= (v + 0x94D049BB133111EBuLL + ((u64)i << 1));
+    mix = (mix << 7) | (mix >> 57);
+    mix ^= (mix >> 9);
+  }
+  return mix;
+}
+
+u8 RmR_ISOraf_ExportManifest(const RmR_ISOraf_Store *st, RmR_ISOraf_Manifest *out){
+  RmR_ISOraf_Stats s;
+  if(!st || !out) return 0u;
+  RmR_ISOraf_StatsGet(st, &s);
+  out->magic = RMR_ISORF_MANIFEST_MAGIC;
+  out->identity = RmR_ISOraf_Identity(st);
+  out->logical_bits = s.logical_bits;
+  out->physical_bits = s.physical_bits;
+  out->page_bits = st->page_bits;
+  out->page_count = st->page_count;
+  out->pages_used = s.pages_used;
+  out->data_word_used = st->data_word_used;
+  return 1u;
+}
+
+u8 RmR_ISOraf_RebuildCheck(const RmR_ISOraf_Store *st, const RmR_ISOraf_Manifest *mf){
+  RmR_ISOraf_Manifest current;
+  if(!st || !mf) return 0u;
+  if(mf->magic != RMR_ISORF_MANIFEST_MAGIC) return 0u;
+  if(!RmR_ISOraf_ExportManifest(st, &current)) return 0u;
+  if(current.identity != mf->identity) return 0u;
+  if(current.page_bits != mf->page_bits) return 0u;
+  if(current.page_count != mf->page_count) return 0u;
+  if(current.pages_used != mf->pages_used) return 0u;
+  if(current.data_word_used != mf->data_word_used) return 0u;
+  return 1u;
+}
+
+u32 RmR_ISOraf_ExportMatrixMap(const RmR_ISOraf_Store *st, u64 *base_bits_out, u32 max_entries){
+  u32 written = 0u;
+  if(!st || !base_bits_out || max_entries == 0u) return 0u;
+  for(u32 i=0;i<st->page_count && written<max_entries;i++){
+    if(st->pages[i].used){
+      base_bits_out[written++] = st->pages[i].base_bit;
+    }
+  }
+  for(u32 i=0;i<written;i++){
+    for(u32 j=i+1u;j<written;j++){
+      if(base_bits_out[j] < base_bits_out[i]){
+        u64 t = base_bits_out[i];
+        base_bits_out[i] = base_bits_out[j];
+        base_bits_out[j] = t;
+      }
+    }
+  }
+  return written;
 }

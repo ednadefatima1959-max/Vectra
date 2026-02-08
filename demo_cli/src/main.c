@@ -1,15 +1,38 @@
 #include "rmr_hw_detect.h"
 #include "rmr_bench.h"
+#include "rmr_isorf.h"
 #include <stdio.h>
 
 int main(void) {
   RmR_HW_Info hw;
   RmR_Bench_Result bench;
+
+  enum { PAGE_COUNT = 16, DATA_WORDS = 16 * 64 };
+  RmR_ISOraf_Page pages[PAGE_COUNT];
+  u64 data_words[DATA_WORDS];
+  RmR_ISOraf_Store store;
+  RmR_ISOraf_Manifest mf;
+  u64 matrix_map[PAGE_COUNT];
+
   RmR_HW_Detect(&hw);
   RmR_Bench_Run(8u, 8u, &bench);
+
+  RmR_ISOraf_Init(&store, pages, PAGE_COUNT, data_words, DATA_WORDS, 4096u);
+  RmR_ISOraf_SetBit(&store, 17u, 1u);
+  RmR_ISOraf_SetBit(&store, 4098u, 1u);
+  RmR_ISOraf_SetBit(&store, 12299u, 1u);
+  RmR_ISOraf_ExportManifest(&store, &mf);
+  u32 map_n = RmR_ISOraf_ExportMatrixMap(&store, matrix_map, PAGE_COUNT);
 
   printf("RAFAELIA demo_cli\n");
   printf("arch=%u ptr=%u endian=%u cycle=%u\n", hw.arch, hw.ptr_bits, hw.is_little_endian, hw.has_cycle_counter);
   printf("bench alu=%u mem=%u branch=%u matrix=%u\n", bench.alu, bench.mem, bench.branch, bench.matrix);
+  printf("isorf identity=%llu pages_used=%u logical_bits=%llu physical_bits=%llu rebuild=%u map=%u\n",
+         (unsigned long long)mf.identity,
+         mf.pages_used,
+         (unsigned long long)mf.logical_bits,
+         (unsigned long long)mf.physical_bits,
+         (unsigned)RmR_ISOraf_RebuildCheck(&store, &mf),
+         map_n);
   return 0;
 }
