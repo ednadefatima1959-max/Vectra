@@ -84,4 +84,16 @@ public class ScreenBufferTest extends TerminalTestCase {
 		assertEquals("AAAAA", screen.getSelectedText(0, 0, 4, 0));
 		assertEquals("", screen.getSelectedText(0, 1, 4, 1));
 	}
+
+	public void testBlockCopySameSourceAndDestinationIsNoop() {
+		TerminalBuffer screen = new TerminalBuffer(5, 3, 3);
+		screen.blockSet(0, 0, 5, 1, ' ', 0);
+		screen.setChar(0, 0, 'Q', 0);
+		screen.setChar(1, 0, 'W', 0);
+		screen.setChar(2, 0, 'E', 0);
+		screen.setChar(3, 0, 'R', 0);
+		screen.setChar(4, 0, 'T', 0);
+		screen.blockCopy(0, 0, 5, 1, 0, 0);
+		assertEquals("QWERT", screen.getSelectedText(0, 0, 4, 0));
+	}
 }

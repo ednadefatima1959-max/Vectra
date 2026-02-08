@@ -80,7 +80,8 @@ public final class TerminalBuffer {
             int x2Index = (x2 < mColumns) ? lineObject.findStartOfColumn(x2) : lineObject.getSpaceUsed();
             if (x2Index == x1Index) {
                 // Selected the start of a wide character.
-                x2Index = lineObject.findStartOfColumn(x2 + 1);
+                final int nextColumn = (x2 < mColumns) ? (x2 + 1) : mColumns;
+                x2Index = lineObject.findStartOfColumn(nextColumn);
             }
             char[] line = lineObject.mText;
             int lastPrintingCharIndex = -1;
@@ -275,10 +276,11 @@ public final class TerminalBuffer {
 
                 int currentOldCol = 0;
                 long styleAtCol = 0;
+                final char[] oldLineText = oldLine.mText;
                 for (int i = 0; i < lastNonSpaceIndex; i++) {
                     // Note that looping over java character, not cells.
-                    char c = oldLine.mText[i];
-                    int codePoint = (Character.isHighSurrogate(c)) ? Character.toCodePoint(c, oldLine.mText[++i]) : c;
+                    char c = oldLineText[i];
+                    int codePoint = (Character.isHighSurrogate(c)) ? Character.toCodePoint(c, oldLineText[++i]) : c;
                     int displayWidth = WcWidth.width(codePoint);
                     // Use the last style if this is a zero-width character:
                     if (displayWidth > 0) styleAtCol = oldLine.getStyle(currentOldCol);
@@ -396,6 +398,7 @@ public final class TerminalBuffer {
      */
     public void blockCopy(int sx, int sy, int w, int h, int dx, int dy) {
         if (w == 0 || h == 0) return;
+        if (sx == dx && sy == dy) return;
         if (sx < 0 || sx + w > mColumns || sy < 0 || sy + h > mScreenRows || dx < 0 || dx + w > mColumns || dy < 0 || dy + h > mScreenRows)
             throw new IllegalArgumentException();
         final boolean copyingUp = sy > dy;
