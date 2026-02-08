@@ -76,6 +76,7 @@
 | [BENCHMARKS.md](BENCHMARKS.md) | Guia reproduzível da suite benchmark RMR (CSV/JSON + p95) |
 | [WHITEPAPER.md](WHITEPAPER.md) | Whitepaper executivo da arquitetura de produto RAFAELIA |
 | [IP_MAP.md](IP_MAP.md) | Mapa de propriedade intelectual, forks, licenças e riscos |
+| [API.md](API.md) | API pública estável do Engine Bitraf (C) |
 | [VECTRA_CORE.md](../VECTRA_CORE.md) | Vectra Core MVP - Information-theoretic runtime framework |
 | [IMPLEMENTATION_SUMMARY.md](../IMPLEMENTATION_SUMMARY.md) | Implementation summary and deliverables |
 | [FIREBASE.md](../app/FIREBASE.md) | Firebase configuration and setup guide |

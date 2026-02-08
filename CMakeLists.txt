@@ -24,3 +24,13 @@ target_link_libraries(rmr_bench PRIVATE rmr)
 add_executable(bitraf_core engine/rmr/src/rafaelia_bitraf_core.c)
 target_compile_definitions(bitraf_core PRIVATE RAF_HOSTED_TEST=1)
 target_link_libraries(bitraf_core PRIVATE rmr)
+
+add_library(bitraf_static STATIC engine/rmr/src/bitraf.c)
+set_target_properties(bitraf_static PROPERTIES OUTPUT_NAME bitraf)
+target_include_directories(bitraf_static PUBLIC engine/rmr/include)
+target_compile_options(bitraf_static PRIVATE -O3 -Wall -Wextra -pedantic)
+
+add_library(bitraf_shared SHARED engine/rmr/src/bitraf.c)
+set_target_properties(bitraf_shared PROPERTIES OUTPUT_NAME bitraf)
+target_include_directories(bitraf_shared PUBLIC engine/rmr/include)
+target_compile_options(bitraf_shared PRIVATE -O3 -Wall -Wextra -pedantic)
