@@ -4,51 +4,44 @@ import junit.framework.TestCase;
 
 public class ByteQueueTest extends TestCase {
 
-	private static void assertArrayEquals(byte[] expected, byte[] actual) {
-		if (expected.length != actual.length) {
-			fail("Difference array length");
-		}
-		for (int i = 0; i < expected.length; i++) {
-			if (expected[i] != actual[i]) {
-				fail("Inequals at index=" + i + ", expected=" + (int) expected[i] + ", actual=" + (int) actual[i]);
-			}
-		}
-	}
+    public void testReadNonBlockingOnEmptyQueue() {
+        ByteQueue queue = new ByteQueue(8);
+        byte[] out = new byte[4];
 
-	public void testCompleteWrites() throws Exception {
-		ByteQueue q = new ByteQueue(10);
-		assertTrue(q.write(new byte[]{1, 2, 3}, 0, 3));
+        assertEquals(0, queue.read(out, false));
+    }
 
-		byte[] arr = new byte[10];
-		assertEquals(3, q.read(arr, true));
-		assertArrayEquals(new byte[]{1, 2, 3}, new byte[]{arr[0], arr[1], arr[2]});
+    public void testReadWriteWrapAround() {
+        ByteQueue queue = new ByteQueue(8);
 
-		assertTrue(q.write(new byte[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 0, 10));
-		assertEquals(10, q.read(arr, true));
-		assertArrayEquals(new byte[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, arr);
-	}
+        assertTrue(queue.write(new byte[]{1, 2, 3, 4, 5, 6}, 0, 6));
 
-	public void testQueueWraparound() throws Exception {
-		ByteQueue q = new ByteQueue(10);
+        byte[] firstRead = new byte[4];
+        assertEquals(4, queue.read(firstRead, false));
+        assertEquals(1, firstRead[0]);
+        assertEquals(2, firstRead[1]);
+        assertEquals(3, firstRead[2]);
+        assertEquals(4, firstRead[3]);
 
-		byte[] origArray = new byte[]{1, 2, 3, 4, 5, 6};
-		byte[] readArray = new byte[origArray.length];
-		for (int i = 0; i < 20; i++) {
-			q.write(origArray, 0, origArray.length);
-			assertEquals(origArray.length, q.read(readArray, true));
-			assertArrayEquals(origArray, readArray);
-		}
-	}
+        assertTrue(queue.write(new byte[]{7, 8, 9, 10, 11, 12}, 0, 6));
 
-	public void testWriteNotesClosing() throws Exception {
-		ByteQueue q = new ByteQueue(10);
-		q.close();
-		assertFalse(q.write(new byte[]{1, 2, 3}, 0, 3));
-	}
+        byte[] secondRead = new byte[8];
+        assertEquals(8, queue.read(secondRead, false));
+        assertEquals(5, secondRead[0]);
+        assertEquals(6, secondRead[1]);
+        assertEquals(7, secondRead[2]);
+        assertEquals(8, secondRead[3]);
+        assertEquals(9, secondRead[4]);
+        assertEquals(10, secondRead[5]);
+        assertEquals(11, secondRead[6]);
+        assertEquals(12, secondRead[7]);
+    }
 
-	public void testReadNonBlocking() throws Exception {
-		ByteQueue q = new ByteQueue(10);
-		assertEquals(0, q.read(new byte[128], false));
-	}
+    public void testCloseStopsFurtherReadsAndWrites() {
+        ByteQueue queue = new ByteQueue(4);
+        queue.close();
 
+        assertEquals(-1, queue.read(new byte[4], false));
+        assertFalse(queue.write(new byte[]{1}, 0, 1));
+    }
 }
