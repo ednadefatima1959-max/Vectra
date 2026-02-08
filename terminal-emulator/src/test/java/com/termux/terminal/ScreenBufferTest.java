@@ -45,4 +45,55 @@ public class ScreenBufferTest extends TerminalTestCase {
 		withTerminalSized(5, 3).enterString("ABC\r\nFG");
 		assertEquals("ABC\nFG", mTerminal.getScreen().getSelectedText(0, 0, 1, 1, true, true));
 	}
+
+	public void testBlockSetFullWidthClear() {
+		TerminalBuffer screen = new TerminalBuffer(5, 3, 3);
+		screen.blockSet(0, 0, 5, 3, 'X', 1);
+		screen.blockSet(0, 1, 5, 1, ' ', 2);
+		assertEquals("XXXXX\n\nXXXXX", screen.getTranscriptText());
+		for (int x = 0; x < 5; x++) {
+			assertEquals(2, screen.getStyleAt(1, x));
+		}
+	}
+
+	public void testBlockCopySameRowOverlapAscii() {
+		TerminalBuffer screen = new TerminalBuffer(5, 3, 3);
+		screen.blockSet(0, 0, 5, 1, ' ', 0);
+		screen.setChar(0, 0, 'A', 0);
+		screen.setChar(1, 0, 'B', 0);
+		screen.setChar(2, 0, 'C', 0);
+		screen.setChar(3, 0, 'D', 0);
+		screen.setChar(4, 0, 'E', 0);
+		screen.blockCopy(0, 0, 4, 1, 1, 0);
+		assertEquals("AABCD", screen.getSelectedText(0, 0, 4, 0));
+	}
+
+	public void testBlockCopyZeroHeightIsNoop() {
+		TerminalBuffer screen = new TerminalBuffer(5, 3, 3);
+		screen.blockSet(0, 0, 5, 1, 'Z', 0);
+		screen.blockCopy(0, 0, 5, 0, 0, 1);
+		assertEquals("ZZZZZ", screen.getSelectedText(0, 0, 4, 0));
+		assertEquals("", screen.getSelectedText(0, 1, 4, 1));
+	}
+
+	public void testBlockSetZeroAreaIsNoop() {
+		TerminalBuffer screen = new TerminalBuffer(5, 3, 3);
+		screen.blockSet(0, 0, 5, 1, 'A', 0);
+		screen.blockSet(0, 1, 0, 1, 'B', 0);
+		screen.blockSet(0, 1, 5, 0, 'C', 0);
+		assertEquals("AAAAA", screen.getSelectedText(0, 0, 4, 0));
+		assertEquals("", screen.getSelectedText(0, 1, 4, 1));
+	}
+
+	public void testBlockCopySameSourceAndDestinationIsNoop() {
+		TerminalBuffer screen = new TerminalBuffer(5, 3, 3);
+		screen.blockSet(0, 0, 5, 1, ' ', 0);
+		screen.setChar(0, 0, 'Q', 0);
+		screen.setChar(1, 0, 'W', 0);
+		screen.setChar(2, 0, 'E', 0);
+		screen.setChar(3, 0, 'R', 0);
+		screen.setChar(4, 0, 'T', 0);
+		screen.blockCopy(0, 0, 5, 1, 0, 0);
+		assertEquals("QWERT", screen.getSelectedText(0, 0, 4, 0));
+	}
 }
