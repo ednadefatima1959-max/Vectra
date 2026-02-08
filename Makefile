@@ -14,8 +14,9 @@ LIB_BITRAF_STATIC := build/engine/libbitraf.a
 LIB_BITRAF_SHARED := build/engine/libbitraf.so
 DEMO_BIN := build/demo/rafaelia_demo
 BENCH_BIN := build/bench/rmr_bench
+SELFTEST_BIN := build/demo/bitraf_selftest
 
-all: $(LIB_STATIC) $(LIB_BITRAF_STATIC) $(LIB_BITRAF_SHARED) $(DEMO_BIN) $(BENCH_BIN) $(BITRAF_BIN)
+all: $(LIB_STATIC) $(LIB_BITRAF_STATIC) $(LIB_BITRAF_SHARED) $(DEMO_BIN) $(BENCH_BIN) $(BITRAF_BIN) $(SELFTEST_BIN)
 
 build/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -41,6 +42,10 @@ $(BENCH_BIN): bench/src/rmr_benchmark_main.c $(LIB_STATIC)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $< $(LIB_STATIC) $(LDFLAGS) -o $@
 
+$(SELFTEST_BIN): demo_cli/src/bitraf_selftest.c $(LIB_BITRAF_STATIC)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $< $(LIB_BITRAF_STATIC) $(LDFLAGS) -o $@
+
 $(BITRAF_BIN): engine/rmr/src/rafaelia_bitraf_core.c $(LIB_STATIC)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -DRAF_HOSTED_TEST=1 $< $(LIB_STATIC) $(LDFLAGS) -o $@
@@ -48,10 +53,13 @@ $(BITRAF_BIN): engine/rmr/src/rafaelia_bitraf_core.c $(LIB_STATIC)
 run-demo: $(DEMO_BIN)
 	./$(DEMO_BIN)
 
+run-selftest: $(SELFTEST_BIN)
+	./$(SELFTEST_BIN)
+
 run-bench: $(BENCH_BIN)
 	./$(BENCH_BIN) bench/results/latest.csv bench/results/latest.json
 
 clean:
 	rm -rf build
 
-.PHONY: all clean run-demo run-bench
+.PHONY: all clean run-demo run-selftest run-bench

@@ -18,18 +18,28 @@ for i in $(seq 1 "$runs"); do
   echo "$score" >> "$scores_file"
 done
 
-python3 - "$scores_file" "$out_dir/summary.json" <<'PY'
-import json,sys,statistics,math
-p=sys.argv[1]
-out=sys.argv[2]
-vals=[int(x.strip()) for x in open(p) if x.strip()]
-vals_sorted=sorted(vals)
-if not vals_sorted:
-    raise SystemExit(1)
-med=statistics.median(vals_sorted)
-idx=max(0, math.ceil(0.95*len(vals_sorted))-1)
-p95=vals_sorted[idx]
-obj={"runs":len(vals_sorted),"median":med,"p95":p95,"min":vals_sorted[0],"max":vals_sorted[-1],"scores":vals_sorted}
-open(out,'w').write(json.dumps(obj,indent=2)+"\n")
-print(json.dumps(obj))
-PY
+sorted_file="$out_dir/scores_sorted.txt"
+sort -n "$scores_file" > "$sorted_file"
+count=$(wc -l < "$sorted_file" | tr -d ' ')
+if [ "$count" -eq 0 ]; then
+  echo "no scores" >&2
+  exit 1
+fi
+median=$(awk -v n="$count" '{a[NR]=$1} END{if(n%2==1){print a[(n+1)/2]}else{print int((a[n/2]+a[n/2+1])/2)}}' "$sorted_file")
+p95_index=$(( (95*count + 99)/100 ))
+if [ "$p95_index" -lt 1 ]; then p95_index=1; fi
+p95=$(awk -v idx="$p95_index" 'NR==idx{print $1}' "$sorted_file")
+minv=$(awk 'NR==1{print $1}' "$sorted_file")
+maxv=$(awk -v n="$count" 'NR==n{print $1}' "$sorted_file")
+scores_json=$(awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "%s", $1} END{printf "]"}' "$sorted_file")
+cat > "$out_dir/summary.json" <<JSON
+{
+  "runs": $count,
+  "median": $median,
+  "p95": $p95,
+  "min": $minv,
+  "max": $maxv,
+  "scores": $scores_json
+}
+JSON
+cat "$out_dir/summary.json"

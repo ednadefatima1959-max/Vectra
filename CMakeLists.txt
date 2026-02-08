@@ -34,3 +34,6 @@ add_library(bitraf_shared SHARED engine/rmr/src/bitraf.c)
 set_target_properties(bitraf_shared PROPERTIES OUTPUT_NAME bitraf)
 target_include_directories(bitraf_shared PUBLIC engine/rmr/include)
 target_compile_options(bitraf_shared PRIVATE -O3 -Wall -Wextra -pedantic)
+
+add_executable(bitraf_selftest demo_cli/src/bitraf_selftest.c)
+target_link_libraries(bitraf_selftest PRIVATE bitraf_static)

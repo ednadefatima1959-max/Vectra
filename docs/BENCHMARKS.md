@@ -5,6 +5,11 @@
 make clean && make all
 ```
 
+## Selftest da API Bitraf
+```bash
+make run-selftest
+```
+
 ## Rodar 1 execução
 ```bash
 ./build/bench/rmr_bench bench/results/latest.csv bench/results/latest.json
@@ -12,7 +17,7 @@ make clean && make all
 
 ## Rodar N execuções + mediana/p95
 ```bash
-bench/scripts/run_bench.sh 9 bench/results
+bench/scripts/run_bench.sh 9 bench/results  # script shell + awk/sort (sem python)
 ```
 
 Saídas:
