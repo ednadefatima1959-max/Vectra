@@ -1,44 +1,20 @@
 # Índice de Documentação do Repositório
 
-Este índice resume os documentos prioritários para manutenção e evolução do projeto.
+## Entradas principais
+- [`README.md`](README.md): visão institucional + navegação por camadas.
+- [`docs/README.md`](docs/README.md): curadoria técnica.
+- [`docs/THREE_LAYER_ANALYSIS.md`](docs/THREE_LAYER_ANALYSIS.md): análise estrutural em 3 camadas.
+- [`docs/ROOT_FILE_CHAIN.md`](docs/ROOT_FILE_CHAIN.md): reflexão arquivo-a-arquivo da raiz.
 
-## 1) Documentos de entrada
+## Diretórios com documentação completa
+Cada diretório tem:
+1) `README.md` (camadas 1 e 2)
+2) `FILES_MAP.md` (camada 3)
 
-- `README.md` — visão geral do projeto, estrutura de módulos e build local.
-- `docs/README.md` — índice principal da documentação técnica.
+- `app/`, `engine/`, `terminal-emulator/`, `terminal-view/`, `shell-loader/`, `bench/`, `demo_cli/`, `tools/`, `docs/`, `reports/`, `resources/`, `runtime/`, `web/`, `archive/`, `fastlane/`, `gradle/`, `3dfx/`.
 
-## 2) Arquitetura e estado técnico
-
-- `docs/ARCHITECTURE.md` — arquitetura funcional e componentes.
-- `docs/SOURCE_TRACEABILITY_MATRIX.md` — mapeamento entre código e documentação.
-- `PROJECT_STATE.md` — estado atual do projeto.
-- `VECTRA_CORE.md` — documentação do módulo Vectra Core.
-
-## 3) Performance e benchmark
-
-- `docs/PERFORMANCE_INTEGRITY.md` — critérios de medição e integridade.
-- `docs/BENCHMARKS.md` — guia de benchmark reproduzível.
-- `docs/BENCHMARK_MANAGER.md` — comportamento do BenchmarkManager.
-- `BENCHMARK_REFACTORING_SUMMARY.md` — histórico de refatoração de benchmark.
-- `ADVANCED_OPTIMIZATIONS.md` — otimizações implementadas e direcionamentos.
-
-## 4) Implementação e entregáveis
-
-- `IMPLEMENTATION_COMPLETE.md`
-- `IMPLEMENTATION_SUMMARY.md`
-- `docs/DETERMINISTIC_VM_MUTATION_LAYER.md` — policy kernel C para mutação determinística auditável.
-
-## 5) Licenças, terceiros e conformidade
-
-- `LICENSE`
-- `docs/LEGAL_AND_LICENSES.md`
-- `THIRD_PARTY_NOTICES.md`
-- `docs/IP_MAP.md`
-
-## 6) Navegação orientada por público
-
-- `docs/navigation/INDEX.md`
-- `docs/navigation/ENTERPRISE_COMPANIES.md`
-- `docs/navigation/SCIENTISTS_RESEARCH.md`
-- `docs/navigation/UNIVERSITIES_ACADEMIC.md`
-- `docs/navigation/BENCHMARK_COMPARISONS.md`
+## Documentos técnicos especializados
+- Arquitetura: `docs/ARCHITECTURE.md`
+- Operação: `docs/OPERATIONS.md`
+- Performance: `docs/PERFORMANCE_INTEGRITY.md`, `docs/BENCHMARKS.md`
+- Conformidade: `docs/LEGAL_AND_LICENSES.md`, `docs/IP_MAP.md`, `THIRD_PARTY_NOTICES.md`

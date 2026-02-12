@@ -1,45 +1,47 @@
-# Vectras VM Android — Plataforma de Virtualização Determinística
+# Vectras VM Android
 
-> **Resumo (EN):** This release hardens process execution and logging paths to prevent deadlocks/zombies, introduces deterministic process supervision with failover, modernizes Android storage permissions (Scoped Storage/SAF), and adds operational audit ledgering.
+> Plataforma Android de virtualização com base híbrida (Android + C/C++ + Rust), foco em determinismo operacional, rastreabilidade e governança documental.
 
-![Android](https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white)
-![QEMU](https://img.shields.io/badge/QEMU-Supervised-00599C)
-![Logs](https://img.shields.io/badge/Logs-Backpressure%20Safe-6A1B9A)
-![Status](https://img.shields.io/badge/Release-Exec%20Stability%20Patch-0A66C2)
+## Abstract
+Esta revisão consolida a documentação em três camadas por diretório (propósito, estrutura e arquivo-a-arquivo), conectando documentação raiz, mapas locais e cadeia de comandos de inspeção. O objetivo é eliminar lacunas entre arquivos soltos, módulos ativos e documentação técnica, com navegação formal e auditável.
 
----
+## Dissertação analítica (modelo de 3 camadas)
+1. **Camada 1 — Diretório**: define responsabilidade técnica de cada domínio.
+2. **Camada 2 — Estrutura**: explicita subdiretórios e fronteiras de módulo.
+3. **Camada 3 — Arquivos**: descreve cada arquivo com papel, ligação e comando de inspeção.
 
-## 🎯 Visão do produto
-O Vectras VM Android executa VMs com foco em mobilidade, compatibilidade e estabilidade operacional. Nesta atualização, o foco foi tornar o runtime resiliente sob pressão (flood de logs, processos long-running e encerramento controlado).
+Referências estruturais:
+- [`docs/THREE_LAYER_ANALYSIS.md`](docs/THREE_LAYER_ANALYSIS.md)
+- [`docs/ROOT_FILE_CHAIN.md`](docs/ROOT_FILE_CHAIN.md)
 
-## 🧱 Arquitetura (alto nível)
-```mermaid
-flowchart LR
-    UI[UI / Activities] --> VM[VMManager]
-    VM --> PS[ProcessSupervisor]
-    VM --> QMP[QMP Client]
-    UI --> TERM[Terminal]
-    TERM --> DRN[ProcessOutputDrainer]
-    DRN --> RL[TokenBucketRateLimiter]
-    RL --> RB[BoundedStringRingBuffer]
-    RB --> LOGS[VectrasStatus + Snapshot]
-    PS --> AUD[AuditLedger]
+## Mapa de diretórios (com READMEs + FILES_MAP)
+| Diretório | README | Mapa de Arquivos |
+|---|---|---|
+| `app/` | [app/README.md](app/README.md) | [app/FILES_MAP.md](app/FILES_MAP.md) |
+| `engine/` | [engine/README.md](engine/README.md) | [engine/FILES_MAP.md](engine/FILES_MAP.md) |
+| `terminal-emulator/` | [terminal-emulator/README.md](terminal-emulator/README.md) | [terminal-emulator/FILES_MAP.md](terminal-emulator/FILES_MAP.md) |
+| `terminal-view/` | [terminal-view/README.md](terminal-view/README.md) | [terminal-view/FILES_MAP.md](terminal-view/FILES_MAP.md) |
+| `shell-loader/` | [shell-loader/README.md](shell-loader/README.md) | [shell-loader/FILES_MAP.md](shell-loader/FILES_MAP.md) |
+| `bench/` | [bench/README.md](bench/README.md) | [bench/FILES_MAP.md](bench/FILES_MAP.md) |
+| `demo_cli/` | [demo_cli/README.md](demo_cli/README.md) | [demo_cli/FILES_MAP.md](demo_cli/FILES_MAP.md) |
+| `tools/` | [tools/README.md](tools/README.md) | [tools/FILES_MAP.md](tools/FILES_MAP.md) |
+| `docs/` | [docs/README.md](docs/README.md) | [docs/FILES_MAP.md](docs/FILES_MAP.md) |
+| `reports/` | [reports/README.md](reports/README.md) | [reports/FILES_MAP.md](reports/FILES_MAP.md) |
+| `resources/` | [resources/README.md](resources/README.md) | [resources/FILES_MAP.md](resources/FILES_MAP.md) |
+| `runtime/` | [runtime/README.md](runtime/README.md) | [runtime/FILES_MAP.md](runtime/FILES_MAP.md) |
+| `web/` | [web/README.md](web/README.md) | [web/FILES_MAP.md](web/FILES_MAP.md) |
+| `archive/` | [archive/README.md](archive/README.md) | [archive/FILES_MAP.md](archive/FILES_MAP.md) |
+| `fastlane/` | [fastlane/README.md](fastlane/README.md) | [fastlane/FILES_MAP.md](fastlane/FILES_MAP.md) |
+| `gradle/` | [gradle/README.md](gradle/README.md) | [gradle/FILES_MAP.md](gradle/FILES_MAP.md) |
+| `3dfx/` | [3dfx/README.md](3dfx/README.md) | [3dfx/FILES_MAP.md](3dfx/FILES_MAP.md) |
+
+## Cadeia de comando recomendada
+```bash
+git ls-files
+find . -maxdepth 2 -type d | sort
+./gradlew verifyRepoFileDependencies
 ```
 
-## 🚀 Como rodar
-1. Configure Android SDK/NDK e JDK 17.
-2. Build debug:
-   ```bash
-   ./gradlew :app:assembleDebug
-   ```
-3. Testes unitários:
-   ```bash
-   ./gradlew :app:testDebugUnitTest
-   ```
-
-## 📚 Documentação técnica
-- [Arquitetura](docs/ARCHITECTURE.md)
-- [Segurança](docs/SECURITY.md)
-- [Operações](docs/OPERATIONS.md)
-- [Release Notes](RELEASE_NOTES.md)
-- [Changelog](CHANGELOG.md)
+## Índices
+- [DOC_INDEX.md](DOC_INDEX.md)
+- [docs/README.md](docs/README.md)
