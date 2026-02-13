@@ -1,27 +1,50 @@
+#include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
+
 #include "rmr_apk_module.h"
 
-static u32 parse_u32(const char *s){
-  u32 v = 0u;
-  u32 i = 0u;
-  if(!s) return 0u;
-  while(s[i] != '\0'){
-    if(s[i] < '0' || s[i] > '9') return 0u;
-    v = (v * 10u) + (u32)(s[i] - '0');
-    i++;
+static int parse_u32(const char *src, u32 *out) {
+  char *end = NULL;
+  unsigned long value;
+
+  if (src == NULL || src[0] == '\0') {
+    return -1;
   }
-  return v;
+
+  errno = 0;
+  value = strtoul(src, &end, 10);
+  if (errno != 0 || end == src || (end != NULL && *end != '\0') || value > 0xFFFFFFFFul) {
+    return -1;
+  }
+
+  *out = (u32)value;
+  return 0;
 }
 
-int main(int argc, char **argv){
+int main(int argc, char **argv) {
   RmR_ApkProfile profile;
   RmR_ApkStableIdentity stable;
   char plan[4096];
   u64 fp_stable;
+  u32 compile_sdk;
+  u32 ndk_major;
+  u32 build_tools_major;
+  u32 build_tools_minor;
+  u32 build_tools_patch;
 
-  if(argc != 13){
+  if (argc != 13) {
     printf("uso: %s <keystore> <store_pass> <alias> <key_pass> <termux_prefix> <home> <shell> <compile_sdk> <ndk_major> <build_tools_major> <build_tools_minor> <build_tools_patch>\n", argv[0]);
     return 1;
+  }
+
+  if (parse_u32(argv[8], &compile_sdk) != 0 ||
+      parse_u32(argv[9], &ndk_major) != 0 ||
+      parse_u32(argv[10], &build_tools_major) != 0 ||
+      parse_u32(argv[11], &build_tools_minor) != 0 ||
+      parse_u32(argv[12], &build_tools_patch) != 0) {
+    fprintf(stderr, "falha ao converter versão numérica do toolchain.\n");
+    return 2;
   }
 
   RmR_ApkModule_InitProfile(&profile);
@@ -30,14 +53,15 @@ int main(int argc, char **argv){
   RmR_ApkModule_AutotuneProfile(&profile);
 
   RmR_ApkModule_FillStableIdentity(&profile,
-                                   parse_u32(argv[8]),
-                                   parse_u32(argv[9]),
-                                   parse_u32(argv[10]),
-                                   parse_u32(argv[11]),
-                                   parse_u32(argv[12]),
+                                   compile_sdk,
+                                   ndk_major,
+                                   build_tools_major,
+                                   build_tools_minor,
+                                   build_tools_patch,
                                    &stable);
 
-  if(RmR_ApkModule_BuildPlan(&profile, argv[1], argv[2], argv[3], argv[4], plan, (u32)sizeof(plan)) == 0u){
+  if (RmR_ApkModule_BuildPlan(&profile, argv[1], argv[2], argv[3], argv[4], plan,
+                              (u32)sizeof(plan)) == 0u) {
     printf("falha ao gerar plano determinístico de compilação/assinatura.\n");
     return 2;
   }

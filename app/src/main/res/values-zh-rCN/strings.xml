@@ -30,7 +30,6 @@
     <string name="username">用户名</string>
     <string name="save">保存</string>
     <string name="memory_usage">内存使用量</string>
-    <!-- TODO: Remove or change this placeholder text -->
     <string name="external_vnc">允许外部VNC连接</string>
     <string name="display">显示</string>
     <string name="remove">移除</string>

@@ -28,7 +28,6 @@
     <string name="username">اسم المستخدم</string>
     <string name="save">حفظ</string>
     <string name="memory_usage">استخدام الذاكرة</string>
-    <!-- TODO: Remove or change this placeholder text -->
     <string name="display">الشاشة</string>
     <string name="remove">إزالة</string>
     <string name="view_logs">عرض السجلات</string>
