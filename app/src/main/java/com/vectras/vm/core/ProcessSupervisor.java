@@ -1,8 +1,6 @@
 package com.vectras.vm.core;
 
 import android.content.Context;
-import android.os.SystemClock;
-
 import com.vectras.qemu.utils.QmpClient;
 import com.vectras.vm.audit.AuditEvent;
 import com.vectras.vm.audit.AuditLedger;
@@ -35,6 +33,26 @@ public class ProcessSupervisor {
         long wallMs();
     }
 
+
+    private static final QmpTransport DEFAULT_QMP_TRANSPORT =
+            () -> QmpClient.sendCommand("{ \"execute\": \"system_powerdown\" }");
+
+    private static final TransitionSink NOOP_TRANSITION_SINK =
+            (from, to, cause, action, stallMs, droppedLogs, bytes) -> {
+            };
+
+    private static final Clock SYSTEM_CLOCK = new Clock() {
+        @Override
+        public long monoMs() {
+            return ProcessRuntimeOps.monoMs();
+        }
+
+        @Override
+        public long wallMs() {
+            return ProcessRuntimeOps.wallMs();
+        }
+    };
+
     /** Estados operacionais suportados pelo supervisor. */
     public enum State {
         /** Supervisor criado e ainda sem processo vinculado. */
@@ -62,22 +80,7 @@ public class ProcessSupervisor {
     private volatile long startMonoMs;
 
     public ProcessSupervisor(Context context, String vmId) {
-        this(context,
-                vmId,
-                () -> QmpClient.sendCommand("{ \"execute\": \"system_powerdown\" }"),
-                (from, to, cause, action, stallMs, droppedLogs, bytes) -> {
-                },
-                new Clock() {
-                    @Override
-                    public long monoMs() {
-                        return SystemClock.elapsedRealtime();
-                    }
-
-                    @Override
-                    public long wallMs() {
-                        return System.currentTimeMillis();
-                    }
-                });
+        this(context, vmId, DEFAULT_QMP_TRANSPORT, NOOP_TRANSITION_SINK, SYSTEM_CLOCK);
     }
 
     ProcessSupervisor(Context context,
@@ -132,7 +135,7 @@ public class ProcessSupervisor {
         if (tryQmp) {
             qmpRequested = true;
             String result = qmpTransport.sendPowerdown();
-            if (result != null && result.contains("return")) {
+            if (ProcessRuntimeOps.isQmpAck(result)) {
                 if (awaitExit(3_000)) {
                     transition(state, State.STOP, "qmp_shutdown", 0, 0, stallMs, "qmp");
                     return true;
@@ -186,14 +189,7 @@ public class ProcessSupervisor {
     }
 
     public long getPid() {
-        if (process == null) return -1L;
-        try {
-            java.lang.reflect.Method method = Process.class.getMethod("pid");
-            Object value = method.invoke(process);
-            return (value instanceof Long) ? ((Long) value) : -1L;
-        } catch (Exception ignored) {
-            return -1L;
-        }
+        return ProcessRuntimeOps.safePid(process);
     }
 
     public State getState() {

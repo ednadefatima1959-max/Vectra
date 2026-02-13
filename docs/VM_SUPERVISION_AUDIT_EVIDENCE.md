@@ -21,3 +21,7 @@
 ## Fontes de validação
 - `app/src/test/java/com/vectras/vm/core/ProcessSupervisorFailoverTest.java`
 - `app/src/main/java/com/vectras/vm/core/ProcessSupervisor.java`
+
+## Harmonização low-level aplicada
+- centralização de operações runtime em `ProcessRuntimeOps` (`safePid`, `monoMs`, `wallMs`, `isQmpAck`) para reduzir redundância e fragilidade entre módulos.
+- `ProcessSupervisor` usa defaults estáticos (`DEFAULT_QMP_TRANSPORT`, `NOOP_TRANSITION_SINK`, `SYSTEM_CLOCK`) para menor overhead de instanciação e coerência operacional.

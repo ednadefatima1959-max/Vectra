@@ -10,6 +10,7 @@ Fechar o ciclo do complemento arquitetural com validação técnica, rastreabili
 - ✅ Build de teste alvo executado com sucesso após saneamento de toolchain + correções de compilação prioritárias.
 - ✅ Passo 3 concluído com testes de failover completos do `ProcessSupervisor` (QMP→TERM, TERM→KILL).
 - ✅ Auditoria operacional consolidada em `docs/VM_SUPERVISION_AUDIT_EVIDENCE.md`.
+- ✅ Harmonização low-level aplicada com módulo central `ProcessRuntimeOps` para eliminar redundâncias de runtime/processo.
 
 ## Passo 1 — Validar toolchain e build determinístico
 - Fixar JDK/Gradle compatíveis para eliminar erro `Unsupported class file major version 69`.
