@@ -7,6 +7,8 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
@@ -71,6 +73,7 @@ public class VectraBenchmark {
     static final long GOLDEN_GAMMA = 0x9E3779B97F4A7C15L;
     static final long MIX_A = 0xBF58476D1CE4E5B9L;
     static final long MIX_B = 0x94D049BB133111EBL;
+    static final long BENCH_AUDIT_SEED = 0xC0DEC0DEF00DBA5EL;
     
     // CRC32C thread-local pool
     private static final ThreadLocal<CRC32C> CRC32C_POOL = ThreadLocal.withInitial(CRC32C::new);
@@ -1778,6 +1781,84 @@ public class VectraBenchmark {
         if (s == null) return "";
         return s.length() <= maxLen ? s : s.substring(0, maxLen - 3) + "...";
     }
+
+    private static String csvEscape(String v) {
+        if (v == null) return "";
+        boolean needsQuote = v.indexOf(',') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0;
+        if (!needsQuote) return v;
+        return '"' + v.replace("\"", "\"\"") + '"';
+    }
+
+    private static String jsonEscape(String v) {
+        if (v == null) return "";
+        StringBuilder out = new StringBuilder(v.length() + 16);
+        for (int i = 0; i < v.length(); i++) {
+            char c = v.charAt(i);
+            if (c == '\\') out.append("\\\\");
+            else if (c == '"') out.append("\\\"");
+            else if (c == '\n') out.append("\\n");
+            else if (c == '\r') out.append("\\r");
+            else if (c == '\t') out.append("\\t");
+            else out.append(c);
+        }
+        return out.toString();
+    }
+
+    public static void exportCsvAndAudit(BenchmarkResult[] results, File csvFile, File auditJsonlFile)
+            throws IOException {
+        File csvParent = csvFile.getAbsoluteFile().getParentFile();
+        if (csvParent != null && !csvParent.exists()) {
+            csvParent.mkdirs();
+        }
+        File auditParent = auditJsonlFile.getAbsoluteFile().getParentFile();
+        if (auditParent != null && !auditParent.exists()) {
+            auditParent.mkdirs();
+        }
+
+        DeviceSpecification spec = getDeviceSpecification();
+        long ts = System.currentTimeMillis();
+
+        try (BufferedWriter csv = new BufferedWriter(new FileWriter(csvFile, false))) {
+            csv.write("metric_id,name,category,raw_ns,formatted_value,unit,description\n");
+            for (BenchmarkResult r : results) {
+                if (r == null) continue;
+                csv.write(r.metricId() + ","
+                    + csvEscape(r.name()) + ","
+                    + csvEscape(r.category()) + ","
+                    + r.rawValue() + ","
+                    + csvEscape(r.formattedValue()) + ","
+                    + csvEscape(r.unit()) + ","
+                    + csvEscape(r.description()) + "\n");
+            }
+        }
+
+        try (BufferedWriter audit = new BufferedWriter(new FileWriter(auditJsonlFile, false))) {
+            audit.write("{\"type\":\"run\","
+                + "\"timestamp_ms\":" + ts + ","
+                + "\"seed\":" + BENCH_AUDIT_SEED + ","
+                + "\"warmup\":" + WARMUP_ITERATIONS + ","
+                + "\"samples\":" + TEST_ITERATIONS + ","
+                + "\"min_test_duration_ns\":" + MIN_TEST_DURATION_NS + ","
+                + "\"sink\":" + SINK + ","
+                + "\"cpu_model\":\"" + jsonEscape(spec.cpuModel) + "\","
+                + "\"cpu_arch\":\"" + jsonEscape(spec.cpuArchitecture) + "\","
+                + "\"cpu_cores\":" + spec.cpuCores + ","
+                + "\"ram_bytes\":" + spec.totalRamBytes
+                + "}\n");
+            for (BenchmarkResult r : results) {
+                if (r == null) continue;
+                audit.write("{\"type\":\"metric\","
+                    + "\"timestamp_ms\":" + ts + ","
+                    + "\"metric_id\":" + r.metricId() + ","
+                    + "\"name\":\"" + jsonEscape(r.name()) + "\","
+                    + "\"category\":\"" + jsonEscape(r.category()) + "\","
+                    + "\"raw_ns\":" + r.rawValue() + ","
+                    + "\"formatted\":\"" + jsonEscape(r.formattedValue()) + "\","
+                    + "\"unit\":\"" + jsonEscape(r.unit()) + "\""
+                    + "}\n");
+            }
+        }
+    }
     
     /**
      * Format report with detailed descriptions for each metric.
@@ -1846,6 +1927,15 @@ public class VectraBenchmark {
                 bs.flush();
                 System.out.println("\nResults saved to: " + outputFile.getAbsolutePath());
             }
+        }
+
+        if (args.length > 1) {
+            File outDir = new File(args[1]);
+            File csvFile = new File(outDir, "bench.csv");
+            File auditJsonl = new File(outDir, "audit.jsonl");
+            exportCsvAndAudit(results, csvFile, auditJsonl);
+            System.out.println("CSV exported to: " + csvFile.getAbsolutePath());
+            System.out.println("JSONL audit exported to: " + auditJsonl.getAbsolutePath());
         }
     }
 }
