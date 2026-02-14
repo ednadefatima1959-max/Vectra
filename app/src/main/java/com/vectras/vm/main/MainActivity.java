@@ -45,6 +45,7 @@ import com.vectras.vm.Minitools;
 import com.vectras.vm.R;
 import com.vectras.vm.WebViewActivity;
 import com.vectras.vm.benchmark.BenchmarkActivity;
+import com.vectras.vm.core.LogcatRuntime;
 import com.vectras.vm.databinding.ActivityMainBinding;
 import com.vectras.vm.databinding.ActivityMainContentBinding;
 import com.vectras.vm.main.softwarestore.SoftwareStoreFragment;
@@ -78,15 +79,11 @@ import com.vectras.vm.utils.UIUtils;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class MainActivity extends AppCompatActivity implements RomStoreFragment.RomStoreCallToHomeListener, VmsFragment.VmsCallToHomeListener, SoftwareStoreFragment.SoftwareStoreCallToHomeListener {
@@ -120,11 +117,6 @@ public class MainActivity extends AppCompatActivity implements RomStoreFragment.
     public void openRomStore() {
         bindingContent.bottomNavigation.setSelectedItemId(R.id.item_romstore);
     }
-
-    Handler handlerUpdateLog = new Handler(Looper.getMainLooper());
-    Runnable updateLogTask = () -> {
-
-    };
 
     @Override
     protected void onCreate(Bundle bundle) {
@@ -734,45 +726,16 @@ public class MainActivity extends AppCompatActivity implements RomStoreFragment.
         // Scroll to bottom button
         binding.btnScrollBottom.setOnClickListener(v -> mLogAdapter.scrollToLastPosition());
 
-        AtomicBoolean isStop = new AtomicBoolean(false);
-
-        try {
-            Process process = Runtime.getRuntime().exec("logcat -e");
-            BufferedReader bufferedReader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream()));
-            Process process2 = Runtime.getRuntime().exec("logcat -w");
-            BufferedReader bufferedReader2 = new BufferedReader(
-                    new InputStreamReader(process2.getInputStream()));
-
-
-            updateLogTask = new Runnable() {
-                @Override
-                public void run() {
-                    if (isStop.get()) return;
-
-                    try {
-                        if (bufferedReader.readLine() != null || bufferedReader2.readLine() != null) {
-                            String logLine = bufferedReader.readLine();
-                            String logLine2 = bufferedReader2.readLine();
-                            VectrasStatus.logError("<font color='red'>[E] " + logLine + "</font>");
-                            VectrasStatus.logError("<font color='#FFC107'>[W] " + logLine2 + "</font>");
-                            runOnUiThread(() -> updateLogCount(binding, mLogAdapter.getItemCount()));
-                        }
-                    } catch (IOException e) {
-                        Log.e(TAG, "Log: ", e);
-                    }
-                    handlerUpdateLog.postDelayed(this, 1000);
-                }
-            };
-
-            handlerUpdateLog.post(updateLogTask);
-        } catch (IOException e) {
-            Log.e(TAG, "Log: ", e);
-        }
+        final LogcatRuntime logcatRuntime = LogcatRuntime.getInstance();
+        final LogcatRuntime.Listener logListener = appended -> runOnUiThread(
+                () -> updateLogCount(binding, mLogAdapter.getItemCount())
+        );
+        logcatRuntime.addListener(logListener);
+        logcatRuntime.acquire();
 
         bottomSheetDialog.setOnDismissListener(menuItem1 -> {
-            isStop.set(true);
-            handlerUpdateLog.removeCallbacks(updateLogTask);
+            logcatRuntime.removeListener(logListener);
+            logcatRuntime.release();
         });
     }
     

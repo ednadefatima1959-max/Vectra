@@ -1,6 +1,10 @@
 #include <jni.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <string.h>
+#include <pthread.h>
+#include <stdatomic.h>
 
 #if defined(__ARM_NEON)
 #include <arm_neon.h>
@@ -403,4 +407,192 @@ Java_com_vectras_vm_core_NativeFastPath_nativeFeatureMask(JNIEnv* env, jclass cl
     (void)env;
     (void)clazz;
     return (jint)vectra_feature_mask();
+}
+
+
+#define LOGCAT_RING_MAX_ENTRIES 1024
+#define LOGCAT_ENTRY_MAX_BYTES 1024
+#define LOGCAT_BATCH_PAYLOAD_BYTES (LOGCAT_ENTRY_MAX_BYTES * 64)
+
+typedef struct {
+    char text[LOGCAT_ENTRY_MAX_BYTES];
+    uint16_t len;
+} logcat_entry_t;
+
+static logcat_entry_t g_ring[LOGCAT_RING_MAX_ENTRIES];
+static uint32_t g_ring_entries = 0;
+static uint32_t g_entry_bytes = 0;
+static uint32_t g_head = 0;
+static uint32_t g_tail = 0;
+static pthread_mutex_t g_ring_lock = PTHREAD_MUTEX_INITIALIZER;
+static atomic_int g_capture_running = 0;
+static pthread_t g_capture_thread;
+static FILE* g_logcat_pipe = NULL;
+
+static uint32_t logcat_safe_copy(char* dst, uint32_t dst_cap, const char* src) {
+    if (!dst || dst_cap == 0 || !src) return 0;
+    uint32_t i = 0;
+    while (i + 1 < dst_cap && src[i] != '\0' && src[i] != '\n' && src[i] != '\r') {
+        dst[i] = src[i];
+        i++;
+    }
+    dst[i] = '\0';
+    return i;
+}
+
+static void logcat_push_line(const char* line) {
+    if (!line || g_ring_entries == 0 || g_entry_bytes == 0) return;
+
+    pthread_mutex_lock(&g_ring_lock);
+    logcat_entry_t* slot = &g_ring[g_head];
+    slot->len = (uint16_t)logcat_safe_copy(slot->text, g_entry_bytes, line);
+
+    uint32_t next = g_head + 1;
+    if (next >= g_ring_entries) next = 0;
+
+    if (next == g_tail) {
+        g_tail++;
+        if (g_tail >= g_ring_entries) g_tail = 0;
+    }
+
+    g_head = next;
+    pthread_mutex_unlock(&g_ring_lock);
+}
+
+static void append_formatted_line(const char* prefix, const char* source) {
+    char formatted[LOGCAT_ENTRY_MAX_BYTES];
+    uint32_t pos = 0;
+
+    while (prefix[pos] != '\0' && pos + 1 < sizeof(formatted)) {
+        formatted[pos] = prefix[pos];
+        pos++;
+    }
+
+    uint32_t copied = logcat_safe_copy(formatted + pos, (uint32_t)(sizeof(formatted) - pos), source);
+    pos += copied;
+
+    const char* suffix = "</font>";
+    for (uint32_t i = 0; suffix[i] != '\0' && pos + 1 < sizeof(formatted); i++) {
+        formatted[pos++] = suffix[i];
+    }
+
+    formatted[pos] = '\0';
+    logcat_push_line(formatted);
+}
+
+static void* logcat_capture_loop(void* arg) {
+    (void)arg;
+
+    g_logcat_pipe = popen("logcat -v brief", "r");
+    if (!g_logcat_pipe) {
+        atomic_store(&g_capture_running, 0);
+        return NULL;
+    }
+
+    char line[LOGCAT_ENTRY_MAX_BYTES];
+    while (atomic_load(&g_capture_running)) {
+        if (!fgets(line, (int)sizeof(line), g_logcat_pipe)) {
+            break;
+        }
+
+        if (line[0] == 'E' && line[1] == '/') {
+            append_formatted_line("<font color='red'>[E] ", line);
+        } else if (line[0] == 'W' && line[1] == '/') {
+            append_formatted_line("<font color='#FFC107'>[W] ", line);
+        }
+    }
+
+    if (g_logcat_pipe) {
+        pclose(g_logcat_pipe);
+        g_logcat_pipe = NULL;
+    }
+    atomic_store(&g_capture_running, 0);
+    return NULL;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_vectras_vm_core_NativeLogcatBridge_nativeInitCapture(JNIEnv* env, jclass clazz,
+                                                               jint ringEntries, jint entryBytes) {
+    (void)env;
+    (void)clazz;
+
+    if (ringEntries <= 0) ringEntries = 256;
+    if (ringEntries > LOGCAT_RING_MAX_ENTRIES) ringEntries = LOGCAT_RING_MAX_ENTRIES;
+    if (entryBytes <= 64) entryBytes = 256;
+    if (entryBytes > LOGCAT_ENTRY_MAX_BYTES) entryBytes = LOGCAT_ENTRY_MAX_BYTES;
+
+    pthread_mutex_lock(&g_ring_lock);
+    g_ring_entries = (uint32_t)ringEntries;
+    g_entry_bytes = (uint32_t)entryBytes;
+    g_head = 0;
+    g_tail = 0;
+    for (uint32_t i = 0; i < g_ring_entries; i++) {
+        g_ring[i].len = 0;
+        g_ring[i].text[0] = '\0';
+    }
+    pthread_mutex_unlock(&g_ring_lock);
+
+    if (atomic_exchange(&g_capture_running, 1) == 1) {
+        return 0;
+    }
+
+    if (pthread_create(&g_capture_thread, NULL, logcat_capture_loop, NULL) != 0) {
+        atomic_store(&g_capture_running, 0);
+        return -1;
+    }
+
+    return 0;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_vectras_vm_core_NativeLogcatBridge_nativeReadBatch(JNIEnv* env, jclass clazz, jint maxEvents) {
+    (void)clazz;
+    if (maxEvents <= 0) maxEvents = 1;
+    if (maxEvents > 256) maxEvents = 256;
+
+    char payload[LOGCAT_BATCH_PAYLOAD_BYTES];
+    uint32_t out = 0;
+    int readCount = 0;
+
+    pthread_mutex_lock(&g_ring_lock);
+    while (g_tail != g_head && readCount < maxEvents && out + 2 < sizeof(payload)) {
+        logcat_entry_t* slot = &g_ring[g_tail];
+        if (slot->len > 0) {
+            uint32_t copyLen = slot->len;
+            if (out + copyLen + 1 >= sizeof(payload)) {
+                copyLen = (uint32_t)(sizeof(payload) - out - 2);
+            }
+            memcpy(payload + out, slot->text, copyLen);
+            out += copyLen;
+            payload[out++] = '\n';
+            readCount++;
+        }
+        slot->len = 0;
+        slot->text[0] = '\0';
+        g_tail++;
+        if (g_tail >= g_ring_entries) g_tail = 0;
+    }
+    pthread_mutex_unlock(&g_ring_lock);
+
+    payload[out] = '\0';
+    return (*env)->NewStringUTF(env, payload);
+}
+
+JNIEXPORT void JNICALL
+Java_com_vectras_vm_core_NativeLogcatBridge_nativeShutdownCapture(JNIEnv* env, jclass clazz) {
+    (void)env;
+    (void)clazz;
+
+    if (atomic_exchange(&g_capture_running, 0) == 1) {
+        pthread_join(g_capture_thread, NULL);
+    }
+
+    pthread_mutex_lock(&g_ring_lock);
+    g_head = 0;
+    g_tail = 0;
+    for (uint32_t i = 0; i < g_ring_entries; i++) {
+        g_ring[i].len = 0;
+        g_ring[i].text[0] = '\0';
+    }
+    pthread_mutex_unlock(&g_ring_lock);
 }
