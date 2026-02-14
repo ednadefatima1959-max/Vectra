@@ -61,6 +61,7 @@ import java.util.HashMap;
 import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * VMManager concentra o ciclo de vida de VMs, persistência de configuração
@@ -83,6 +84,7 @@ public class VMManager {
     public static String latestUnsafeCommandReason = "";
     public static String lastQemuCommand = "";
     private static final ConcurrentHashMap<String, ProcessSupervisor> SUPERVISORS = new ConcurrentHashMap<>();
+    private static final int MAX_SUPERVISED_VM_PROCESSES = 32;
 
 
     /**
@@ -92,11 +94,56 @@ public class VMManager {
      * @param vmId identificador da VM (nulo/vazio cai para {@code unknown})
      * @param process processo QEMU ativo
      */
-    public static void registerVmProcess(Context context, String vmId, Process process) {
+    public static synchronized void registerVmProcess(Context context, String vmId, Process process) {
         if (process == null) return;
         String key = (vmId == null || vmId.isEmpty()) ? "unknown" : vmId;
-        ProcessSupervisor supervisor = SUPERVISORS.computeIfAbsent(key, k -> new ProcessSupervisor(context, k));
-        supervisor.bindProcess(process);
+
+        pruneInactiveSupervisors();
+
+        ProcessSupervisor previous = SUPERVISORS.remove(key);
+        if (previous != null) {
+            previous.stopGracefully(false);
+        }
+
+        if (SUPERVISORS.size() >= MAX_SUPERVISED_VM_PROCESSES) {
+            safeTerminateDetachedProcess(process);
+            Log.w(TAG, "registerVmProcess rejected: active supervisor cap reached (" + MAX_SUPERVISED_VM_PROCESSES + ")");
+            return;
+        }
+
+        ProcessSupervisor supervisor = new ProcessSupervisor(context, key);
+        try {
+            supervisor.bindProcess(process);
+            SUPERVISORS.put(key, supervisor);
+        } catch (RuntimeException registerError) {
+            safeTerminateDetachedProcess(process);
+            throw registerError;
+        }
+    }
+
+    private static void pruneInactiveSupervisors() {
+        for (String key : SUPERVISORS.keySet()) {
+            ProcessSupervisor supervisor = SUPERVISORS.get(key);
+            if (supervisor == null) continue;
+            long pid = supervisor.getPid();
+            if (pid <= 0L || supervisor.getState() == ProcessSupervisor.State.STOP) {
+                SUPERVISORS.remove(key, supervisor);
+            }
+        }
+    }
+
+    private static void safeTerminateDetachedProcess(Process process) {
+        if (process == null) return;
+        process.destroy();
+        try {
+            if (!process.waitFor(1200, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly();
+                process.waitFor(600, TimeUnit.MILLISECONDS);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            process.destroyForcibly();
+        }
     }
 
     /**
