@@ -17,21 +17,26 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.termux.app.TermuxService;
 import com.vectras.vm.AppConfig;
 import com.vectras.vm.R;
+import com.vectras.vm.core.ProcessOutputDrainer;
 import com.vectras.vterm.view.ZoomableTextView;
 
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.util.Enumeration;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 public class TerminalBottomSheetDialog {
+    private static final long PROCESS_TIMEOUT_MS = 5_000L;
+    private static final long INTERACTIVE_PROCESS_TIMEOUT_MS = 1_500L;
     private final ZoomableTextView terminalOutput;
     private final EditText commandInput;
     private final View view;
@@ -197,48 +202,77 @@ public class TerminalBottomSheetDialog {
                     };
 
                     processBuilder.command(prootCommand);
-                    Process process = processBuilder.start();
-                    // Get the input and output streams of the process
-                    BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                    BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+                    Process process = null;
+                    ProcessOutputDrainer drainer = new ProcessOutputDrainer();
+                    BufferedWriter writer = null;
+                    ExecutorService drainExecutor = Executors.newSingleThreadExecutor();
+                    Future<?> drainFuture = null;
+                    try {
+                        process = processBuilder.start();
+                        writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
 
-                    // Send user command to PRoot
-                    writer.write(userCommand);
-                    writer.newLine();
-                    writer.flush();
-                    writer.close();
+                        // Send user command to PRoot
+                        writer.write(userCommand);
+                        writer.newLine();
+                        writer.flush();
+                        writer.close();
+                        writer = null;
 
-                    // Read the input stream for the output of the command
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        final String outputLine = line;
+                        Process runningProcess = process;
+                        drainFuture = drainExecutor.submit(() -> {
+                            try {
+                                drainer.drain(runningProcess, (stream, line) -> activity.runOnUiThread(() ->
+                                appendTextAndScroll("[" + stream + "] " + line + "\n")));
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        });
+
+                        long timeoutMs = isLikelyInteractiveCommand(userCommand)
+                                ? INTERACTIVE_PROCESS_TIMEOUT_MS
+                                : PROCESS_TIMEOUT_MS;
+                        if (!runningProcess.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+                            runningProcess.destroy();
+                            if (!runningProcess.waitFor(300, TimeUnit.MILLISECONDS)) {
+                                runningProcess.destroyForcibly();
+                            }
+                            activity.runOnUiThread(() -> appendTextAndScroll(
+                                    "[stderr] timeout after " + timeoutMs + "ms\n"));
+                        }
+                        if (drainFuture != null) {
+                            try {
+                                drainFuture.get(750, TimeUnit.MILLISECONDS);
+                            } catch (Exception ignored) {
+                                drainFuture.cancel(true);
+                            }
+                        }
+                    } finally {
+                        if (writer != null) {
+                            try {
+                                writer.close();
+                            } catch (IOException ignored) {
+                                // best effort
+                            }
+                        }
+                        if (drainFuture != null) {
+                            drainFuture.cancel(true);
+                        }
+                        drainExecutor.shutdownNow();
+                        drainer.shutdown();
+                        if (process != null) {
+                            process.destroy();
+                        }
                         activity.runOnUiThread(() -> {
-                            appendTextAndScroll(outputLine + "\n");
                             inputContainer.setVisibility(View.VISIBLE);
                             forcusCommandInput();
                         });
                     }
-
-                    // Read any errors from the error stream
-                    while ((line = errorReader.readLine()) != null) {
-                        final String errorLine = line;
-                        activity.runOnUiThread(() -> {
-                            appendTextAndScroll(errorLine + "\n");
-                            inputContainer.setVisibility(View.VISIBLE);
-                            forcusCommandInput();
-                        });
-                    }
-
-                    // Clean up
-                    reader.close();
-                    errorReader.close();
-
-                    // Wait for the process to finish
-                    process.waitFor();
 
                 } catch (IOException | InterruptedException e) {
                     // Handle exceptions by printing the stack trace in the terminal output
+                    if (e instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
                     final String errorMessage = e.getMessage();
                     activity.runOnUiThread(() -> {
                         appendTextAndScroll("Error: " + errorMessage + "n");
@@ -259,6 +293,18 @@ public class TerminalBottomSheetDialog {
         String filesDir = activity.getFilesDir().getAbsolutePath();
         File distro = new File(filesDir, "distro");
         return distro.exists();
+    }
+
+    private boolean isLikelyInteractiveCommand(String command) {
+        String normalized = command == null ? "" : command.trim().toLowerCase();
+        return normalized.isEmpty()
+                || "bash".equals(normalized)
+                || "sh".equals(normalized)
+                || normalized.startsWith("top")
+                || normalized.startsWith("vi")
+                || normalized.startsWith("vim")
+                || normalized.startsWith("less")
+                || normalized.startsWith("more");
     }
 
     private void forcusCommandInput() {

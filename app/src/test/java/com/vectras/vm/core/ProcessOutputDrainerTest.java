@@ -27,6 +27,32 @@ public class ProcessOutputDrainerTest {
     }
 
 
+
+
+    @Test
+    public void shouldDrainWhenStderrFloods() throws Exception {
+        int stderrLines = 2000;
+        StringBuilder stderr = new StringBuilder();
+        for (int i = 0; i < stderrLines; i++) {
+            stderr.append("e").append(i).append("\n");
+        }
+        Process fake = new FakeProcess("o1\n", stderr.toString());
+        ProcessOutputDrainer drainer = new ProcessOutputDrainer();
+        AtomicInteger out = new AtomicInteger();
+        AtomicInteger err = new AtomicInteger();
+
+        try {
+            drainer.drain(fake, (stream, line) -> {
+                if ("stderr".equals(stream)) err.incrementAndGet();
+                else out.incrementAndGet();
+            });
+        } finally {
+            drainer.shutdown();
+        }
+
+        Assert.assertEquals(1, out.get());
+        Assert.assertEquals(stderrLines, err.get());
+    }
     @Test(expected = IllegalStateException.class)
     public void shouldPropagateWorkerFailure() throws Exception {
         Process fake = new FakeProcess("ok\n", "err\n");
