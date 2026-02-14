@@ -28,6 +28,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import com.vectras.qemu.Config;
@@ -731,9 +732,9 @@ public class VMManager {
 
     public static void restoreVMs() {
         int _startRepeat = 0;
-        StringBuilder _resulttemp = new StringBuilder();
-        StringBuilder _result = new StringBuilder();
         restoredVMs = 0;
+        JsonArray restoredEntries = new JsonArray();
+        JsonArray mainEntries = readJsonArrayOrEmpty(FileUtils.readAFile(AppConfig.maindirpath + "/roms-data.json"));
         ArrayList<String> _filelist = new ArrayList<>();
         FileUtils.getAListOfAllFilesAndFoldersInADirectory(AppConfig.vmFolder, _filelist);
         if (!_filelist.isEmpty()) {
@@ -741,40 +742,20 @@ public class VMManager {
                 if (_startRepeat < _filelist.size()) {
                     if (!isFileExists(_filelist.get(_startRepeat) + "/vmID.txt")) {
                         if (isFileExists(_filelist.get(_startRepeat) + "/rom-data.json")) {
-                            if (JSONUtils.isValidFromString(FileUtils.readAFile(_filelist.get(_startRepeat) + "/rom-data.json"))) {
-                                if (_resulttemp.toString().contains("}")) {
-                                    _resulttemp.append(",").append(FileUtils.readAFile(_filelist.get(_startRepeat) + "/rom-data.json"));
-                                } else {
-                                    _resulttemp = new StringBuilder(FileUtils.readAFile(_filelist.get(_startRepeat) + "/rom-data.json"));
-                                }
-                                if (JSONUtils.isValidFromString(FileUtils.readAFile(AppConfig.maindirpath + "/roms-data.json").replaceAll("]", _resulttemp + "]"))) {
-                                    if (_result.toString().contains("}")) {
-                                        _result.append(",").append(FileUtils.readAFile(_filelist.get(_startRepeat) + "/rom-data.json"));
-                                    } else {
-                                        _result = new StringBuilder(FileUtils.readAFile(_filelist.get(_startRepeat) + "/rom-data.json"));
-                                    }
+                            String romDataContent = FileUtils.readAFile(_filelist.get(_startRepeat) + "/rom-data.json");
+                            if (JSONUtils.isValidFromString(romDataContent)) {
+                                JsonElement candidate = JsonParser.parseString(romDataContent);
+                                if (candidate.isJsonObject()) {
+                                    mainEntries.add(candidate.deepCopy());
+                                    restoredEntries.add(candidate.deepCopy());
                                     if (isFileExists(_filelist.get(_startRepeat) + "/vmID.old.txt")) {
                                         enableVMID(FileUtils.readAFile(_filelist.get(_startRepeat) + "/vmID.old.txt"));
                                     } else {
                                         FileUtils.writeToFile(_filelist.get(_startRepeat), "/vmID.txt", VMManager.idGenerator());
                                     }
                                     restoredVMs++;
-                                } else if (JSONUtils.isValidFromString(FileUtils.readAFile(AppConfig.maindirpath + "/roms-data.json").replaceAll("]", "," + _resulttemp + "]"))) {
-                                    if (_result.toString().contains("}")) {
-                                        _result.append(",").append(FileUtils.readAFile(_filelist.get(_startRepeat) + "/rom-data.json"));
-                                    } else {
-                                        _result = new StringBuilder("," + FileUtils.readAFile(_filelist.get(_startRepeat) + "/rom-data.json"));
-                                    }
-                                    if (isFileExists(_filelist.get(_startRepeat) + "/vmID.old.txt")) {
-                                        enableVMID(FileUtils.readAFile(_filelist.get(_startRepeat) + "/vmID.old.txt"));
-                                    } else {
-                                        FileUtils.writeToFile(_filelist.get(_startRepeat), "/vmID.txt", VMManager.idGenerator());
-                                    }
-                                    restoredVMs++;
-                                } else {
-                                    if (BuildConfig.DEBUG) {
-                                        Log.i("CqcmActivity", FileUtils.readAFile(AppConfig.maindirpath + "/roms-data.json").replaceAll("]", _resulttemp + "]"));
-                                    }
+                                } else if (BuildConfig.DEBUG) {
+                                    Log.i("CqcmActivity", "Ignoring non-object rom-data.json during restore: " + _filelist.get(_startRepeat));
                                 }
                             }
                         }
@@ -782,23 +763,10 @@ public class VMManager {
 
                     _startRepeat++;
                     if (_startRepeat == _filelist.size()) {
-                        if (_result.length() > 0) {
-                            if (JSONUtils.isValidFromString("[" + _result + "]")) {
-                                if (isFileExists(AppConfig.romsdatajson)) {
-                                    if (JSONUtils.isValidFromFile(AppConfig.romsdatajson)) {
-                                        String _JSONcontent = FileUtils.readAFile(AppConfig.romsdatajson);
-                                        String _JSONcontentnew = _JSONcontent.replaceAll("]", _result + "]");
-                                        if (JSONUtils.isValidFromString(_JSONcontentnew)) {
-                                            FileUtils.writeToFile(AppConfig.maindirpath, "roms-data.json", _JSONcontentnew);
-                                        } else {
-                                            restoredVMs = 0;
-                                        }
-                                    } else {
-                                        restoredVMs = 0;
-                                    }
-                                } else {
-                                    FileUtils.writeToFile(AppConfig.maindirpath, "roms-data.json", "[" + _result + "]");
-                                }
+                        if (restoredEntries.size() > 0) {
+                            String serialized = new Gson().toJson(mainEntries);
+                            if (JSONUtils.isValidFromString(serialized)) {
+                                FileUtils.writeToFile(AppConfig.maindirpath, "roms-data.json", serialized);
                             } else {
                                 restoredVMs = 0;
                             }
@@ -810,6 +778,39 @@ public class VMManager {
             }
 
         }
+    }
+
+    static String appendVmEntriesJson(String currentJson, String... candidateJsonEntries) {
+        JsonArray base = readJsonArrayOrEmpty(currentJson);
+        if (candidateJsonEntries == null) {
+            return new Gson().toJson(base);
+        }
+
+        for (String candidateJson : candidateJsonEntries) {
+            if (!JSONUtils.isValidFromString(candidateJson)) {
+                continue;
+            }
+            JsonElement element = JsonParser.parseString(candidateJson);
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            base.add(element.deepCopy());
+        }
+
+        return new Gson().toJson(base);
+    }
+
+    private static JsonArray readJsonArrayOrEmpty(String jsonContent) {
+        if (!JSONUtils.isValidFromString(jsonContent)) {
+            return new JsonArray();
+        }
+
+        JsonElement parsed = JsonParser.parseString(jsonContent);
+        if (!parsed.isJsonArray()) {
+            return new JsonArray();
+        }
+
+        return parsed.getAsJsonArray().deepCopy();
     }
 
     public static void startFixRomsDataJson() {
