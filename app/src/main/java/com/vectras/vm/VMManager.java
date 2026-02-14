@@ -1248,12 +1248,17 @@ public class VMManager {
         }
     }
 
-    public static void killallqemuprocesses(Context context) {
-        Terminal.requestStopStreaming();
+    private static synchronized void resetLifecycleStateAfterKillAll() {
         for (ProcessSupervisor supervisor : SUPERVISORS.values()) {
             supervisor.stopGracefully(true);
         }
         SUPERVISORS.clear();
+        VM_STATES.clear();
+    }
+
+    public static synchronized void killallqemuprocesses(Context context) {
+        Terminal.requestStopStreaming();
+        resetLifecycleStateAfterKillAll();
         Terminal vterm = new Terminal(context);
         if (Terminal.qemuProcess != null) {
             long pid = ProcessRuntimeOps.safePid(Terminal.qemuProcess);
