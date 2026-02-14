@@ -105,6 +105,22 @@ Please set the JAVA_HOME variable in your environment to match the
 location of your Java installation."
 fi
 
+# Gradle 8.x fails with newer JDK bytecode levels (e.g. Java 25 / major 69).
+# Auto-fallback to a local JDK 21/22 when available so ./gradlew works in CI and local dev.
+JAVA_MAJOR=`"$JAVACMD" -version 2>&1 | awk -F '[\".]' '/version/ {print $2; exit}'`
+if [ -n "$JAVA_MAJOR" ] && [ "$JAVA_MAJOR" -gt 22 ] 2>/dev/null ; then
+    for CANDIDATE in \
+        "$HOME/.local/share/mise/installs/java/22.0.2" \
+        "$HOME/.local/share/mise/installs/java/21.0.2"; do
+        if [ -x "$CANDIDATE/bin/java" ] ; then
+            JAVA_HOME="$CANDIDATE"
+            export JAVA_HOME
+            JAVACMD="$JAVA_HOME/bin/java"
+            break
+        fi
+    done
+fi
+
 # Increase the maximum file descriptors if we can.
 if [ "$cygwin" = "false" -a "$darwin" = "false" -a "$nonstop" = "false" ] ; then
     MAX_FD_LIMIT=`ulimit -H -n`
