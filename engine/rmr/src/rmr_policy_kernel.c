@@ -1,4 +1,5 @@
 #include "rmr_policy_kernel.h"
+#include "rmr_corelib.h"
 #include "rmr_hw_detect.h"
 #include "rmr_math_fabric.h"
 
@@ -110,7 +111,7 @@ uint32_t RmR_CRC32C(const uint8_t *buf, size_t len) {
   size_t i = 0;
   for (; i + 8 <= len; i += 8) {
     uint64_t x;
-    memcpy(&x, buf + i, sizeof(x));
+    rmr_mem_copy(&x, buf + i, sizeof(x));
     crc = __crc32cd(crc, x);
   }
   for (; i < len; ++i) crc = __crc32cb(crc, buf[i]);
@@ -120,7 +121,7 @@ uint32_t RmR_CRC32C(const uint8_t *buf, size_t len) {
   size_t i = 0;
   for (; i + 8 <= len; i += 8) {
     uint64_t x;
-    memcpy(&x, buf + i, sizeof(x));
+    rmr_mem_copy(&x, buf + i, sizeof(x));
     crc = (uint32_t)_mm_crc32_u64(crc, x);
   }
   for (; i < len; ++i) crc = _mm_crc32_u8(crc, buf[i]);
@@ -142,7 +143,7 @@ uint64_t RmR_Hash64_FNV1a(const uint8_t *buf, size_t len) {
 uint32_t RmR_EntropyEstimateMilli(const uint8_t *buf, size_t len) {
   if (len == 0) return 0;
   uint8_t seen[256];
-  memset(seen, 0, sizeof(seen));
+  rmr_mem_set(seen, 0, sizeof(seen));
   uint32_t unique = 0;
   uint32_t transitions = 0;
   for (size_t i = 0; i < len; ++i) {
@@ -196,7 +197,11 @@ static void apply_mutation(uint8_t *buf, size_t len, uint64_t base_off, uint8_t 
 }
 
 static int paths_refer_same_file(const char *a, const char *b) {
-  if (strcmp(a, b) == 0) return 1;
+  {
+    size_t al = rmr_len_u8((const uint8_t *)a);
+    size_t bl = rmr_len_u8((const uint8_t *)b);
+    if (al == bl && rmr_mem_eq(a, b, al)) return 1;
+  }
 
   struct stat sa;
   struct stat sb;
@@ -215,9 +220,9 @@ int RmR_RunPolicyPipeline(const char *input_path,
   RmR_AuditSummary local_summary;
   RmR_HW_Info hw;
   RmR_MathFabricPlan math_plan;
-  memset(&local_summary, 0, sizeof(local_summary));
-  memset(&hw, 0, sizeof(hw));
-  memset(&math_plan, 0, sizeof(math_plan));
+  rmr_mem_set(&local_summary, 0, sizeof(local_summary));
+  rmr_mem_set(&hw, 0, sizeof(hw));
+  rmr_mem_set(&math_plan, 0, sizeof(math_plan));
   RmR_HW_Detect(&hw);
   RmR_MathFabric_AutodetectPlan(&hw, &math_plan);
 
@@ -240,7 +245,7 @@ int RmR_RunPolicyPipeline(const char *input_path,
   size_t rd;
   while ((rd = fread(buf, 1, config->chunk_size, in)) > 0) {
     RmR_ChunkMeta m;
-    memset(&m, 0, sizeof(m));
+    rmr_mem_set(&m, 0, sizeof(m));
     m.offset = offset;
     m.size = (uint32_t)rd;
     m.crc32c = RmR_CRC32C(buf, rd);
@@ -308,7 +313,7 @@ int RmR_RunPolicyPipeline(const char *input_path,
 
   {
     RmR_ChunkMeta final_meta;
-    memset(&final_meta, 0, sizeof(final_meta));
+    rmr_mem_set(&final_meta, 0, sizeof(final_meta));
     final_meta.route_id = RMR_ROUTE_FALLBACK;
     final_meta.route_target = route_target_from_id(RMR_ROUTE_FALLBACK);
     final_meta.math_signature = math_plan.matrix_seed ^ hw.arch;
