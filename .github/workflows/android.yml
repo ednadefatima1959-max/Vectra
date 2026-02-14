@@ -3,42 +3,36 @@ name: Android CI
 on:
   push:
     paths:
-      - '.github/workflows/android.yml'
       - 'app/**'
-      - 'shell-loader/**'
       - 'terminal-emulator/**'
       - 'terminal-view/**'
-      - 'gradle/**'
+      - 'shell-loader/**'
       - 'build.gradle'
-      - 'build.gradle.kts'
       - 'settings.gradle'
-      - 'settings.gradle.kts'
       - 'gradle.properties'
-      - 'gradlew'
-      - 'gradlew.bat'
-      - 'docs/**'
+      - 'gradle/**'
+      - 'local.properties.example'
+      - 'docs/OPERATIONS.md'
+      - 'docs/BUILD_ENV_ALIGNMENT.md'
+      - 'docs/DOCUMENTATION_STANDARDS.md'
       - 'README.md'
-      - 'DOC_INDEX.md'
-      - 'CHANGELOG.md'
+      - '.github/workflows/android.yml'
   pull_request:
     paths:
-      - '.github/workflows/android.yml'
       - 'app/**'
-      - 'shell-loader/**'
       - 'terminal-emulator/**'
       - 'terminal-view/**'
-      - 'gradle/**'
+      - 'shell-loader/**'
       - 'build.gradle'
-      - 'build.gradle.kts'
       - 'settings.gradle'
-      - 'settings.gradle.kts'
       - 'gradle.properties'
-      - 'gradlew'
-      - 'gradlew.bat'
-      - 'docs/**'
+      - 'gradle/**'
+      - 'local.properties.example'
+      - 'docs/OPERATIONS.md'
+      - 'docs/BUILD_ENV_ALIGNMENT.md'
+      - 'docs/DOCUMENTATION_STANDARDS.md'
       - 'README.md'
-      - 'DOC_INDEX.md'
-      - 'CHANGELOG.md'
+      - '.github/workflows/android.yml'
   workflow_dispatch:
 
 jobs:
@@ -82,51 +76,42 @@ jobs:
       env:
         ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
         ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-      run: ./gradlew verifyRepoFileDependencies
+      run: ./gradlew verifyRepoFileDependencies -PCOMPILE_API=35 -PTOOLS_VERSION=35.0.0 -PJAVA_LANGUAGE_VERSION=17 -PCMAKE_VERSION=3.22.1 -PNDK_VERSION=27.2.12479018
 
-    - name: Validate local Markdown links (optional)
+    - name: Validate local markdown links (optional)
       continue-on-error: true
       run: |
         python3 - <<'PY'
-        import pathlib
+        from pathlib import Path
         import re
-        import sys
 
-        root = pathlib.Path('.')
-        md_files = sorted(root.glob('docs/**/*.md')) + [
-            p for p in [
-                root / 'README.md',
-                root / 'DOC_INDEX.md',
-                root / 'CHANGELOG.md',
-                root / 'docs/OPERATIONS.md',
-            ] if p.exists()
-        ]
+        md_files = [Path('README.md'), *Path('docs').rglob('*.md')]
+        link_pattern = re.compile(r'\[[^\]]+\]\(([^)]+)\)')
+        failures = []
 
-        pattern = re.compile(r'!?(?:\[[^\]]*\])\(([^)]+)\)')
-        missing = []
+        for md_file in md_files:
+          content = md_file.read_text(encoding='utf-8')
+          for raw_target in link_pattern.findall(content):
+            target = raw_target.strip()
+            if not target or target.startswith(('http://', 'https://', 'mailto:', '#')):
+              continue
+            target = target.split('#', 1)[0]
+            if not target:
+              continue
+            if target.startswith('/'):
+              resolved = Path(target.lstrip('/'))
+            else:
+              resolved = (md_file.parent / target).resolve().relative_to(Path.cwd().resolve())
+            if not Path(resolved).exists():
+              failures.append(f"{md_file}: missing -> {raw_target}")
 
-        for md in dict.fromkeys(md_files):
-            content = md.read_text(encoding='utf-8', errors='ignore')
-            for match in pattern.finditer(content):
-                target = match.group(1).strip()
-                if not target or target.startswith('#'):
-                    continue
-                if '://' in target or target.startswith('mailto:'):
-                    continue
-                target = target.split('#', 1)[0].split('?', 1)[0].strip()
-                if not target:
-                    continue
-                resolved = (md.parent / target).resolve()
-                if not resolved.exists():
-                    missing.append(f"{md}: {target}")
+        if failures:
+          print('Local markdown link validation failures:')
+          for failure in failures:
+            print(f' - {failure}')
+          raise SystemExit(1)
 
-        if missing:
-            print('Broken local markdown links found:')
-            for item in missing:
-                print(f' - {item}')
-            sys.exit(1)
-
-        print('All checked local markdown links exist.')
+        print(f'Validated local markdown links in {len(md_files)} files.')
         PY
 
     - name: Send notification to Telegram
