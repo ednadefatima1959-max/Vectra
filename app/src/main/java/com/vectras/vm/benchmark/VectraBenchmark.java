@@ -888,23 +888,20 @@ public class VectraBenchmark {
             boolean filled = NativeFastPath.fillArena(arenaCtx.dstArenaHandle, 0, M4_BYTES, v0 & 0xFF);
             long t1 = System.nanoTime();
             if (filled) {
-                memFillPath = PATH_ARENA;
                 return t1 - t0 + (NativeFastPath.xorChecksumArena(arenaCtx.dstArenaHandle, 0, M4_BYTES) & 0);
             }
         }
 
-        // Low-level manual fill fallback for Java matrix M4.
-        int n0 = M4.length;
-        int n1 = M4[0].length;
+        // Fallback path: Java byte[] destination provided by caller (no hot-path allocations).
+        if (b0 == null || b0.length < M4_BYTES) {
+            throw new IllegalArgumentException("Destination buffer too small for M4 fill");
+        }
         long t0 = System.nanoTime();
-        for (int i = 0; i < n0; i++) {
-            for (int j = 0; j < n1; j++) {
-                M4[i][j] = v0;
-            }
+        for (int i = 0; i < M4_BYTES; i++) {
+            b0[i] = v0;
         }
         long t1 = System.nanoTime();
-        memFillPath = PATH_JAVA;
-        return t1 - t0;
+        return t1 - t0 + (NativeFastPath.xorChecksum(b0, 0, M4_BYTES) & 0);
     }
     
     static long benchMemAllocSpeed(int n0, int n1) {
@@ -1529,7 +1526,7 @@ public class VectraBenchmark {
         rawVal = benchMemFillBandwidth(memBuffer, (byte) 0xAA, arenaCtx);
         results[MEM_FILL_BANDWIDTH] = new BenchmarkResult(MEM_FILL_BANDWIDTH, "Memory Fill Bandwidth",
             rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_MEMORY,
-            describeFillPath(memBytes));
+            String.format("Native arena fill when available, Java fallback otherwise (%d KB)", memBytes / 1024));
         
         // Memory latency tests at different cache levels
         rawVal = benchMemRandomRead(new byte[4096], randomIndices);
