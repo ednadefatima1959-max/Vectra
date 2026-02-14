@@ -31,6 +31,19 @@ static u32 RmR_ArchDetect(void){
 #endif
 }
 
+static u32 RmR_ArchHex(u32 arch){
+  if(arch == 1u) return 0x86u;
+  if(arch == 2u) return 0x8664u;
+  if(arch == 3u) return 0xA32u;
+  if(arch == 4u) return 0xA64u;
+  if(arch == 5u) return 0x52u;
+  if(arch == 6u) return 0x6D31u;
+  if(arch == 7u) return 0x7064u;
+  if(arch == 8u) return 0x7032u;
+  if(arch == 9u) return 0x390u;
+  return 0u;
+}
+
 static u32 RmR_CachelineHint(u32 arch){
   if(arch == 7u || arch == 9u) return 128u;
   if(arch == 2u || arch == 1u || arch == 4u || arch == 3u || arch == 5u || arch == 8u) return 64u;
@@ -48,10 +61,83 @@ static u32 RmR_MemBusHint(u32 arch){
   return 64u;
 }
 
+static void RmR_AsmProbe(u32 arch, RmR_HW_Info *out){
+  (void)arch;
+  out->has_asm_probe = 0u;
+  out->reg_signature_0 = 0u;
+  out->reg_signature_1 = 0u;
+  out->reg_signature_2 = 0u;
+  out->feature_bits_0 = 0u;
+  out->feature_bits_1 = 0u;
+
+#if defined(__x86_64__) || defined(__i386__)
+  {
+    u32 eax = 0u;
+    u32 ebx = 0u;
+    u32 ecx = 0u;
+    u32 edx = 0u;
+    __asm__ volatile (
+      "cpuid"
+      : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+      : "a"(0u), "c"(0u)
+    );
+    out->reg_signature_0 = ebx;
+    out->reg_signature_1 = edx;
+    out->reg_signature_2 = ecx;
+
+    __asm__ volatile (
+      "cpuid"
+      : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+      : "a"(1u), "c"(0u)
+    );
+    out->feature_bits_0 = ecx;
+    out->feature_bits_1 = edx;
+    out->has_asm_probe = 1u;
+  }
+#elif defined(__aarch64__)
+  {
+    u64 midr = 0u;
+    u64 ctr = 0u;
+    __asm__ volatile ("mrs %0, ctr_el0" : "=r"(ctr));
+    __asm__ volatile ("mrs %0, dczid_el0" : "=r"(midr));
+    out->reg_signature_0 = (u32)(ctr & 0xFFFFFFFFu);
+    out->reg_signature_1 = (u32)((ctr >> 32) & 0xFFFFFFFFu);
+    out->feature_bits_0 = (u32)(midr & 0xFFFFFFFFu);
+    out->feature_bits_1 = (u32)((midr >> 32) & 0xFFFFFFFFu);
+    out->has_asm_probe = 1u;
+  }
+#elif defined(__arm__)
+  {
+    out->reg_signature_0 = 0u;
+    out->feature_bits_0 = 0u;
+    out->has_asm_probe = 0u;
+  }
+#elif defined(__riscv)
+  {
+    u32 misa = 0u;
+    __asm__ volatile ("csrr %0, misa" : "=r"(misa));
+    out->reg_signature_0 = misa;
+    out->feature_bits_0 = misa;
+    out->has_asm_probe = 1u;
+  }
+#endif
+}
+
+static u32 RmR_GpioWordBits(u32 ptr_bits){
+  if(ptr_bits >= 64u) return 64u;
+  return 32u;
+}
+
+static u32 RmR_GpioPinStride(u32 arch){
+  if(arch == 4u || arch == 3u) return 4u;
+  return 1u;
+}
+
 void RmR_HW_Detect(RmR_HW_Info *out){
   if(!out) return;
   u32 arch = RmR_ArchDetect();
   out->arch = arch;
+  out->arch_hex = RmR_ArchHex(arch);
   out->word_bits = (u32)(sizeof(unsigned long) * 8u);
   out->ptr_bits = (u32)(sizeof(void*) * 8u);
   out->is_little_endian = RmR_IsLittleEndian();
@@ -62,5 +148,8 @@ void RmR_HW_Detect(RmR_HW_Info *out){
   out->cache_hint_l3 = 1024u * 1024u;
   out->page_bytes = RmR_PageHint(arch);
   out->mem_bus_bits = RmR_MemBusHint(arch);
+  out->gpio_word_bits = RmR_GpioWordBits(out->ptr_bits);
+  out->gpio_pin_stride = RmR_GpioPinStride(arch);
   out->align_bytes = out->cacheline_bytes;
+  RmR_AsmProbe(arch, out);
 }
