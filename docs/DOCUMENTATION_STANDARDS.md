@@ -44,6 +44,7 @@ Cada documento técnico deve conter, quando aplicável:
 
 - Atualizar a seção **Metadados** ao modificar o documento.
 - Manter um **Change Log** se o documento for crítico (ex.: arquitetura, compliance).
+- Registrar saneamentos de links internos em `CHANGELOG.md` e, quando aplicável, no documento de governança correspondente.
 - Alinhar versões com a versão do projeto quando possível.
 
 ## 7) Padrões para Arquivos de Navegação
@@ -77,6 +78,6 @@ Cada documento técnico deve conter, quando aplicável:
 
 ---
 
-**Última atualização / Last updated**: 2026-01
+**Última atualização / Last updated**: 2026-02
 
 © 2024-2026 Vectras VM Development Team — Licensed under GPL-2.0.
