@@ -353,6 +353,28 @@ public final class NativeFastPath {
         return nativeArenaFill(handle, offset, length, value) == 0;
     }
 
+    public static boolean writeArena(int handle, int offset, byte[] src, int srcOffset, int length) {
+        if (handle <= 0) {
+            throw new IllegalArgumentException("Arena handle must be > 0");
+        }
+        if (src == null) {
+            throw new IllegalArgumentException("Source buffer must not be null");
+        }
+        if (offset < 0 || srcOffset < 0 || length < 0) {
+            throw new IllegalArgumentException("Arena write offsets/length must be >= 0");
+        }
+        if (srcOffset + length > src.length) {
+            throw new IllegalArgumentException("Source range exceeds buffer length");
+        }
+        if (length == 0) {
+            return true;
+        }
+        if (!ARENA_AVAILABLE) {
+            return false;
+        }
+        return nativeArenaWrite(handle, offset, src, srcOffset, length) == 0;
+    }
+
 
     public static int byteSwap32(int x) {
         if (NATIVE_AVAILABLE) {
@@ -438,6 +460,8 @@ public final class NativeFastPath {
     private static native int nativeArenaXorChecksum(int handle, int offset, int length);
 
     private static native int nativeArenaFill(int handle, int offset, int length, int value);
+
+    private static native int nativeArenaWrite(int handle, int offset, byte[] src, int srcOffset, int length);
 
     private static native int nativePlatformSignature();
 

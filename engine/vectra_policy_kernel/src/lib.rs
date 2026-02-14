@@ -1,10 +1,171 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter};
 use std::fs::OpenOptions;
 use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
 
 pub const DEFAULT_CHUNK_SIZE: usize = 4096;
+
+mod ops;
+use ops::{ANCHOR_OP, FOCUS_OP, LEN_OP, REPLACE_CHAR_OP, TRIM_WS_OP};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum Op {
+    TrimWs,
+    Len,
+    ReplaceChar,
+    SetFocus,
+    AnchorMark,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Event {
+    pub id: u64,
+    pub op: Op,
+    pub args: Vec<String>,
+    pub anchor: Option<AnchorAddr>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct AnchorAddr {
+    pub dev: u16,
+    pub block: u64,
+    pub page: u16,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Key {
+    pub op: Op,
+    pub args: Vec<String>,
+    pub anchor: Option<AnchorAddr>,
+    pub canon: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Output {
+    Text(String),
+    Number(usize),
+    Focus(String),
+    Anchor(AnchorAddr),
+}
+
+pub trait DeterministicOp: Sync {
+    fn canonize(&self, args: &[String]) -> Vec<String>;
+    fn execute(&self, key_args: &[String]) -> Output;
+    fn op_code(&self) -> &'static str;
+}
+
+static OP_REGISTRY: [&dyn DeterministicOp; 5] = [
+    &ANCHOR_OP,
+    &FOCUS_OP,
+    &LEN_OP,
+    &REPLACE_CHAR_OP,
+    &TRIM_WS_OP,
+];
+
+fn op_code_for(op: Op) -> &'static str {
+    match op {
+        Op::TrimWs => "trim_ws",
+        Op::Len => "len",
+        Op::ReplaceChar => "replace_char",
+        Op::SetFocus => "focus",
+        Op::AnchorMark => "anchor",
+    }
+}
+
+pub fn resolve_op_by_code(op_code: &str) -> Option<&'static dyn DeterministicOp> {
+    OP_REGISTRY
+        .iter()
+        .copied()
+        .find(|plugin| plugin.op_code() == op_code)
+}
+
+fn resolve_op(op: Op) -> &'static dyn DeterministicOp {
+    let op_code = op_code_for(op);
+    resolve_op_by_code(op_code).unwrap_or_else(|| panic!("op_not_registered={op_code}"))
+}
+
+pub fn canonize(op: Op, args: &[String]) -> Key {
+    let plugin = resolve_op(op);
+    let canonical_args = plugin.canonize(args);
+    Key {
+        op,
+        args: canonical_args,
+        anchor,
+        canon,
+    }
+}
+
+pub fn commit_tick(tick: u64, events: &[Event]) -> Vec<(u64, Output)> {
+    let mut by_key: HashMap<Key, Vec<Event>> = HashMap::new();
+    for event in events {
+        let key = canonize(event.op, &event.args, event.anchor);
+        by_key.entry(key).or_default().push(event.clone());
+    }
+
+    let mut ordered: Vec<(Key, Vec<Event>)> = by_key.into_iter().collect();
+    for (_, bucket) in &mut ordered {
+        bucket.sort_by(|a, b| {
+            let a_hash = deterministic_args_hash(&a.args);
+            let b_hash = deterministic_args_hash(&b.args);
+            a.id.cmp(&b.id).then_with(|| a_hash.cmp(&b_hash))
+        });
+    }
+    ordered.sort_by(|(a_key, _), (b_key, _)| {
+        resolve_op(a_key.op)
+            .op_code()
+            .cmp(resolve_op(b_key.op).op_code())
+            .then_with(|| a_key.args.cmp(&b_key.args))
+            .then_with(|| a_key.op.cmp(&b_key.op))
+    });
+
+    let mut committed = Vec::new();
+    for (key, bucket) in ordered {
+        let mut out = exec_bucket(&key, &bucket);
+        committed.append(&mut out);
+    }
+
+    committed.sort_by_key(|(event_id, _)| *event_id);
+    if tick == u64::MAX {
+        committed.reverse();
+    }
+    committed
+}
+
+pub fn exec_bucket(key: &Key, bucket: &[Event]) -> Vec<(u64, Output)> {
+    if bucket.is_empty() {
+        return Vec::new();
+    }
+
+    let result = execute_key_once(key);
+    let mut out = Vec::with_capacity(bucket.len());
+    for event in bucket {
+        out.push((event.id, result.clone()));
+    }
+    out
+}
+
+fn execute_key_once(key: &Key) -> Output {
+    let plugin = resolve_op(key.op);
+    plugin.execute(&key.args)
+}
+
+fn deterministic_args_hash(args: &[String]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for arg in args {
+        hash ^= fnv1a64(arg.as_bytes());
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+pub(crate) fn arg_or_empty(args: &[String], idx: usize) -> &str {
+    args.get(idx).map_or("", String::as_str)
+}
+
+pub(crate) fn first_char_or_nul(src: &str) -> char {
+    src.chars().next().unwrap_or('\0')
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Stage {
@@ -47,8 +208,8 @@ pub struct ChunkRecord {
 pub struct StageEvent {
     pub stage: Stage,
     pub chunk: ChunkRecord,
+    pub anchor: Option<AnchorAddr>,
 }
-
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiffRecord {
@@ -96,7 +257,11 @@ impl Default for PipelineConfig {
 pub enum KernelError {
     Io(io::Error),
     PolicyViolation(&'static str),
-    VerifyMismatch { sequence: u64, expected: u32, got: u32 },
+    VerifyMismatch {
+        sequence: u64,
+        expected: u32,
+        got: u32,
+    },
 }
 
 impl Display for KernelError {
@@ -104,8 +269,15 @@ impl Display for KernelError {
         match self {
             KernelError::Io(err) => write!(f, "io_error={err}"),
             KernelError::PolicyViolation(msg) => write!(f, "policy_violation={msg}"),
-            KernelError::VerifyMismatch { sequence, expected, got } => {
-                write!(f, "verify_mismatch seq={sequence} expected={expected:#010x} got={got:#010x}")
+            KernelError::VerifyMismatch {
+                sequence,
+                expected,
+                got,
+            } => {
+                write!(
+                    f,
+                    "verify_mismatch seq={sequence} expected={expected:#010x} got={got:#010x}"
+                )
             }
         }
     }
@@ -135,7 +307,10 @@ impl RouteTable {
     }
 
     pub fn resolve(&self, route_id: u16) -> RouteTarget {
-        self.routes.get(&route_id).copied().unwrap_or(RouteTarget::Fallback)
+        self.routes
+            .get(&route_id)
+            .copied()
+            .unwrap_or(RouteTarget::Fallback)
     }
 
     pub fn pick_route(&self, status: TriadStatus, sequence: u64) -> (u16, RouteTarget, ChunkFlags) {
@@ -166,14 +341,116 @@ impl RouteTable {
 pub struct PolicyKernel {
     route_table: RouteTable,
     allowed_stages: [Stage; 5],
+    focused: Option<String>,
+    anchors: Vec<String>,
+    log: Vec<LogEntry>,
+    seq: u64,
+    checkpoints: Vec<usize>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LogEntry {
+    pub seq: u64,
+    pub op: Op,
+    pub args: Vec<String>,
+    pub output: Output,
 }
 
 impl PolicyKernel {
     pub fn new() -> Self {
         Self {
             route_table: RouteTable::new_default(),
-            allowed_stages: [Stage::Plan, Stage::Diff, Stage::Apply, Stage::Verify, Stage::Audit],
+            allowed_stages: [
+                Stage::Plan,
+                Stage::Diff,
+                Stage::Apply,
+                Stage::Verify,
+                Stage::Audit,
+            ],
+            focused: None,
+            anchors: Vec::new(),
+            log: Vec::new(),
+            seq: 0,
+            checkpoints: Vec::new(),
         }
+    }
+
+    pub fn checkpoint(&mut self) -> usize {
+        let marker = self.log.len();
+        self.checkpoints.push(marker);
+        marker
+    }
+
+    pub fn rollback(&mut self) -> bool {
+        let Some(checkpoint) = self.checkpoints.pop() else {
+            return false;
+        };
+        self.log.truncate(checkpoint);
+        self.rebuild_from_log();
+        true
+    }
+
+    pub fn apply_log_entry(&mut self, entry: LogEntry) -> Result<(), KernelError> {
+        self.apply_log_entry_internal(entry, true, true)
+    }
+
+    pub fn focused(&self) -> Option<&str> {
+        self.focused.as_deref()
+    }
+
+    pub fn anchors(&self) -> &[String] {
+        &self.anchors
+    }
+
+    pub fn log(&self) -> &[LogEntry] {
+        &self.log
+    }
+
+    pub fn seq(&self) -> u64 {
+        self.seq
+    }
+
+    fn rebuild_from_log(&mut self) {
+        self.focused = None;
+        self.anchors.clear();
+        self.seq = 0;
+
+        let retained_log = self.log.clone();
+        for entry in retained_log {
+            let _ = self.apply_log_entry_internal(entry, false, false);
+        }
+    }
+
+    fn apply_log_entry_internal(
+        &mut self,
+        entry: LogEntry,
+        persist: bool,
+        strict_seq: bool,
+    ) -> Result<(), KernelError> {
+        if strict_seq && entry.seq != self.seq {
+            return Err(KernelError::PolicyViolation("log sequence mismatch"));
+        }
+
+        let expected_output = execute_key_once(&canonize(entry.op, &entry.args));
+        if entry.output != expected_output {
+            return Err(KernelError::PolicyViolation("log replay mismatch"));
+        }
+
+        match &entry.output {
+            Output::Focus(target) => {
+                self.focused = Some(target.clone());
+            }
+            Output::Anchor(anchor) => {
+                self.anchors.push(anchor.clone());
+            }
+            Output::Text(_) | Output::Number(_) => {}
+        }
+
+        self.seq = entry.seq.saturating_add(1);
+        if persist {
+            self.log.push(entry);
+        }
+        Ok(())
     }
 
     fn ensure_stage_allowed(&self, stage: Stage) -> Result<(), KernelError> {
@@ -191,11 +468,21 @@ impl PolicyKernel {
         triad_status: TriadStatus,
     ) -> Result<Vec<ChunkRecord>, KernelError> {
         self.ensure_stage_allowed(Stage::Plan)?;
-        stream_chunks(reader, config.chunk_size, triad_status, &self.route_table, true, config)
+        stream_chunks(
+            reader,
+            config.chunk_size,
+            triad_status,
+            &self.route_table,
+            true,
+            config,
+        )
     }
 
-
-    pub fn diff(&self, before: &[ChunkRecord], after: &[ChunkRecord]) -> Result<Vec<DiffRecord>, KernelError> {
+    pub fn diff(
+        &self,
+        before: &[ChunkRecord],
+        after: &[ChunkRecord],
+    ) -> Result<Vec<DiffRecord>, KernelError> {
         self.ensure_stage_allowed(Stage::Diff)?;
         if before.len() != after.len() {
             return Err(KernelError::PolicyViolation("diff chunk length mismatch"));
@@ -235,7 +522,8 @@ impl PolicyKernel {
             deterministic_mutate(&mut chunk, config.mutation_xor, config.mutation_stride);
             writer.write_all(&chunk)?;
 
-            let (route_id, route_target, route_flags) = self.route_table.pick_route(triad_status, sequence);
+            let (route_id, route_target, route_flags) =
+                self.route_table.pick_route(triad_status, sequence);
             let flags = ChunkFlags {
                 bad_event: route_flags.bad_event,
                 miss: route_flags.miss,
@@ -269,7 +557,14 @@ impl PolicyKernel {
         triad_status: TriadStatus,
     ) -> Result<Vec<ChunkRecord>, KernelError> {
         self.ensure_stage_allowed(Stage::Verify)?;
-        let observed = stream_chunks(reader, config.chunk_size, triad_status, &self.route_table, true, config)?;
+        let observed = stream_chunks(
+            reader,
+            config.chunk_size,
+            triad_status,
+            &self.route_table,
+            true,
+            config,
+        )?;
         for (exp, got) in expected.iter().zip(observed.iter()) {
             if exp.crc32c != got.crc32c {
                 return Err(KernelError::VerifyMismatch {
@@ -285,7 +580,11 @@ impl PolicyKernel {
         Ok(observed)
     }
 
-    pub fn write_audit_log<P: AsRef<Path>>(&self, path: P, events: &[StageEvent]) -> Result<(), KernelError> {
+    pub fn write_audit_log<P: AsRef<Path>>(
+        &self,
+        path: P,
+        events: &[StageEvent],
+    ) -> Result<(), KernelError> {
         self.ensure_stage_allowed(Stage::Audit)?;
         let file = OpenOptions::new().create(true).append(true).open(path)?;
         let mut writer = BufWriter::new(file);
@@ -358,8 +657,8 @@ pub fn deterministic_mutate(data: &mut [u8], mask: u8, stride: usize) {
 }
 
 pub fn serialize_event(event: &StageEvent) -> String {
-    format!(
-        "{{\"stage\":\"{}\",\"seq\":{},\"off\":{},\"len\":{},\"crc32c\":\"{:08x}\",\"hash64\":\"{:016x}\",\"entropy_milli\":{},\"flags\":{{\"bad_event\":{},\"miss\":{},\"temp_hint\":{}}},\"route_id\":{},\"route_target\":\"{}\"}}",
+    let mut out = format!(
+        "{{\"stage\":\"{}\",\"seq\":{},\"off\":{},\"len\":{},\"crc32c\":\"{:08x}\",\"hash64\":\"{:016x}\",\"entropy_milli\":{},\"flags\":{{\"bad_event\":{},\"miss\":{},\"temp_hint\":{}}}",
         stage_label(event.stage),
         event.chunk.sequence,
         event.chunk.offset,
@@ -370,9 +669,19 @@ pub fn serialize_event(event: &StageEvent) -> String {
         event.chunk.flags.bad_event,
         event.chunk.flags.miss,
         event.chunk.flags.temp_hint,
+    );
+    if let Some(anchor) = event.anchor {
+        out.push_str(&format!(
+            ",\"anchor\":{{\"dev\":{},\"block\":{},\"page\":{}}}",
+            anchor.dev, anchor.block, anchor.page
+        ));
+    }
+    out.push_str(&format!(
+        ",\"route_id\":{},\"route_target\":\"{}\"}}",
         event.chunk.route_id,
         route_label(event.chunk.route_target)
-    )
+    ));
+    out
 }
 
 fn stage_label(stage: Stage) -> &'static str {
@@ -415,27 +724,55 @@ pub fn fnv1a64(data: &[u8]) -> u64 {
     hash
 }
 
+const LOG2_FRAC_Q12_LUT: [u16; 33] = [
+    0, 182, 358, 530, 696, 858, 1016, 1169, 1319, 1465, 1607, 1746, 1882, 2015, 2145, 2272,
+    2396, 2518, 2637, 2754, 2869, 2982, 3092, 3200, 3307, 3412, 3514, 3615, 3715, 3812, 3908,
+    4003, 4096,
+];
+
+const LOG2_Q12_SHIFT: u32 = 12;
+
+#[inline]
+fn log2_q12(value: usize) -> u32 {
+    if value <= 1 {
+        return 0;
+    }
+
+    let v = value as u32;
+    let exp = 31 - v.leading_zeros();
+    let base = 1u32 << exp;
+    let frac = ((v - base) << 5) / base;
+    let idx = frac as usize;
+    (exp << LOG2_Q12_SHIFT) + LOG2_FRAC_Q12_LUT[idx] as u32
+}
+
 pub fn entropy_milli(data: &[u8]) -> u16 {
     if data.is_empty() {
         return 0;
     }
-    let mut freq = [0usize; 256];
+
+    let mut freq = [0u16; 256];
     for &b in data {
-        freq[b as usize] += 1;
+        freq[b as usize] = freq[b as usize].saturating_add(1);
     }
-    let len = data.len() as f64;
-    let mut entropy = 0.0f64;
+
+    let len = data.len();
+    let len_q12 = log2_q12(len);
+    let mut weighted_log_sum = 0u64;
     for count in freq {
         if count == 0 {
             continue;
         }
-        let p = count as f64 / len;
-        entropy -= p * p.log2();
+        let c = count as usize;
+        weighted_log_sum = weighted_log_sum.saturating_add((c as u64) * (log2_q12(c) as u64));
     }
-    let milli = (entropy * 1000.0).round();
-    milli.clamp(0.0, 16000.0) as u16
+
+    let correction_q12 = (weighted_log_sum / len as u64) as u32;
+    let entropy_q12 = len_q12.saturating_sub(correction_q12);
+    let milli = ((entropy_q12 as u64) * 1000) >> LOG2_Q12_SHIFT;
+    milli.min(16000) as u16
 }
 
 pub fn entropy_hint(data: &[u8]) -> bool {
-    entropy_milli(data) > 7800
+    entropy_milli(data) >= 7750
 }
