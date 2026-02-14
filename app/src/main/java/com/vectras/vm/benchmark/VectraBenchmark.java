@@ -80,8 +80,13 @@ public class VectraBenchmark {
     private static final int M4_ROWS = 1024;
     private static final int M4_COLS = 4096;
     private static final int M4_BYTES = M4_ROWS * M4_COLS;
+    private static final int PATH_UNKNOWN = 0;
+    private static final int PATH_ARENA = 1;
+    private static final int PATH_JAVA = 2;
     private static volatile int copyStripeBytes = BareMetalProfile.recommendedWorkBlockBytes();
     private static volatile long SINK = 0L;
+    private static volatile int memCopyPath = PATH_UNKNOWN;
+    private static volatile int memFillPath = PATH_UNKNOWN;
 
     
 
@@ -786,6 +791,7 @@ public class VectraBenchmark {
                     arenaCtx.dstArenaHandle, 0, M4_BYTES);
             long t1 = System.nanoTime();
             if (copied) {
+                memCopyPath = PATH_ARENA;
                 return t1 - t0 + (NativeFastPath.xorChecksumArena(arenaCtx.dstArenaHandle, 0, M4_BYTES) & 0);
             }
         }
@@ -810,6 +816,7 @@ public class VectraBenchmark {
             dstOffset += M4_COLS;
         }
         long t1 = System.nanoTime();
+        memCopyPath = PATH_JAVA;
         return t1 - t0 + (NativeFastPath.xorChecksum(d0, 0, M4_BYTES) & 0);
     }
 
@@ -875,8 +882,18 @@ public class VectraBenchmark {
         }
     }
     
-    static long benchMemFillBandwidth(byte[] b0, byte v0) {
-        // Low-level manual fill (no Arrays.fill)
+    static long benchMemFillBandwidth(byte[] b0, byte v0, ArenaBenchmarkContext arenaCtx) {
+        if (arenaCtx != null && arenaCtx.available) {
+            long t0 = System.nanoTime();
+            boolean filled = NativeFastPath.fillArena(arenaCtx.dstArenaHandle, 0, M4_BYTES, v0 & 0xFF);
+            long t1 = System.nanoTime();
+            if (filled) {
+                memFillPath = PATH_ARENA;
+                return t1 - t0 + (NativeFastPath.xorChecksumArena(arenaCtx.dstArenaHandle, 0, M4_BYTES) & 0);
+            }
+        }
+
+        // Low-level manual fill fallback for Java matrix M4.
         int n0 = M4.length;
         int n1 = M4[0].length;
         long t0 = System.nanoTime();
@@ -886,6 +903,7 @@ public class VectraBenchmark {
             }
         }
         long t1 = System.nanoTime();
+        memFillPath = PATH_JAVA;
         return t1 - t0;
     }
     
@@ -1259,6 +1277,26 @@ public class VectraBenchmark {
     /**
      * Format latency per operation.
      */
+    private static String describeCopyPath(int bytes) {
+        if (memCopyPath == PATH_ARENA) {
+            return String.format("JNI arena copy %d KB", bytes / 1024);
+        }
+        if (memCopyPath == PATH_JAVA) {
+            return String.format("Java byte[] fallback copy %d KB", bytes / 1024);
+        }
+        return String.format("Copy path unknown %d KB", bytes / 1024);
+    }
+
+    private static String describeFillPath(int bytes) {
+        if (memFillPath == PATH_ARENA) {
+            return String.format("JNI arena fill %d KB", bytes / 1024);
+        }
+        if (memFillPath == PATH_JAVA) {
+            return String.format("Java byte[] fallback fill %d KB", bytes / 1024);
+        }
+        return String.format("Fill path unknown %d KB", bytes / 1024);
+    }
+
     public static String formatLatency(long nanoseconds, long opsCount) {
         if (opsCount <= 0) return "N/A";
         double nsPerOp = (double) nanoseconds / opsCount;
@@ -1486,12 +1524,12 @@ public class VectraBenchmark {
         rawVal = benchMemCopyBandwidth(memBuffer, memCopyBuffer, arenaCtx);
         results[MEM_COPY_BANDWIDTH] = new BenchmarkResult(MEM_COPY_BANDWIDTH, "Memory Copy Bandwidth",
             rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_MEMORY,
-            String.format("System.arraycopy %d KB", memBytes / 1024));
+            describeCopyPath(memBytes));
         
-        rawVal = benchMemFillBandwidth(memBuffer, (byte) 0xAA);
+        rawVal = benchMemFillBandwidth(memBuffer, (byte) 0xAA, arenaCtx);
         results[MEM_FILL_BANDWIDTH] = new BenchmarkResult(MEM_FILL_BANDWIDTH, "Memory Fill Bandwidth",
             rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_MEMORY,
-            String.format("Arrays.fill %d KB", memBytes / 1024));
+            describeFillPath(memBytes));
         
         // Memory latency tests at different cache levels
         rawVal = benchMemRandomRead(new byte[4096], randomIndices);
@@ -1685,7 +1723,7 @@ public class VectraBenchmark {
         rawVal = benchMemCopyBandwidth(memBuffer, memCopyBuffer, arenaCtx);
         results[EMU_BUFFER_COPY] = new BenchmarkResult(EMU_BUFFER_COPY, "Emu Buffer Copy",
             rawVal, formatBandwidth(memBytes, rawVal), "MB/s", CAT_EMULATION,
-            "Host-to-guest buffer copy simulation");
+            describeCopyPath(memBytes));
         
         rawVal = benchCpuMtCas(2, 100000);
         results[EMU_EVENT_DISPATCH] = new BenchmarkResult(EMU_EVENT_DISPATCH, "Emu Event Dispatch",
