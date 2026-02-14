@@ -461,14 +461,16 @@ public class BenchmarkActivity extends AppCompatActivity {
             return "";
         }
 
-        StringBuilder graph = new StringBuilder(values.length * 2);
-        for (int i = 0; i < values.length; i++) {
-            int clamped = Math.max(0, Math.min(100, values[i]));
-            int index = Math.round((clamped / 100f) * (bars.length - 1));
+        int max = 1;
+        for (int value : values) {
+            max = Math.max(max, value);
+        }
+
+        StringBuilder graph = new StringBuilder(values.length);
+        for (int value : values) {
+            int index = (int) Math.round((value * 1.0 / max) * (bars.length - 1));
+            index = Math.max(0, Math.min(bars.length - 1, index));
             graph.append(bars[index]);
-            if (i < values.length - 1) {
-                graph.append(' ');
-            }
         }
         return graph.toString();
     }
