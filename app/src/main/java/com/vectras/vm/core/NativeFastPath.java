@@ -21,6 +21,16 @@ public final class NativeFastPath {
     private static final int HW_CONTRACT_FEATURES = 4;
     private static final int HW_CONTRACT_SIZE = 5;
 
+    private static final int KERNEL_CONTRACT_SIGNATURE = 0;
+    private static final int KERNEL_CONTRACT_POINTER_BITS = 1;
+    private static final int KERNEL_CONTRACT_CACHE_LINE = 2;
+    private static final int KERNEL_CONTRACT_PAGE_SIZE = 3;
+    private static final int KERNEL_CONTRACT_FEATURES = 4;
+    private static final int KERNEL_CONTRACT_CPU_CORES = 5;
+    private static final int KERNEL_CONTRACT_ARENA_BYTES = 6;
+    private static final int KERNEL_CONTRACT_IO_QUANTUM = 7;
+    private static final int KERNEL_CONTRACT_SIZE = 8;
+
     public static final int ARCH_UNKNOWN = 0x0000;
     public static final int ARCH_ARM64 = 0x0100;
     public static final int ARCH_ARM32 = 0x0200;
@@ -90,6 +100,33 @@ public final class NativeFastPath {
 
     public static int getFeatureMask() {
         return BOOT_PROFILE.featureMask;
+    }
+
+    public static KernelUnitProfile readKernelUnitProfile() {
+        if (NATIVE_AVAILABLE) {
+            int[] contract = nativeReadKernelUnitContract();
+            if (contract != null && contract.length == KERNEL_CONTRACT_SIZE) {
+                int signature = contract[KERNEL_CONTRACT_SIGNATURE];
+                int pointerBits = normalizePointerBits(contract[KERNEL_CONTRACT_POINTER_BITS], signature);
+                int cacheLine = normalizeCacheLine(contract[KERNEL_CONTRACT_CACHE_LINE]);
+                int pageBytes = normalizePageSize(contract[KERNEL_CONTRACT_PAGE_SIZE]);
+                int featureMask = normalizeFeatureMask(contract[KERNEL_CONTRACT_FEATURES]);
+                int cpuCores = contract[KERNEL_CONTRACT_CPU_CORES] <= 0 ? 1 : contract[KERNEL_CONTRACT_CPU_CORES];
+                int arenaBytes = contract[KERNEL_CONTRACT_ARENA_BYTES] <= 0 ? 0 : contract[KERNEL_CONTRACT_ARENA_BYTES];
+                int ioQuantum = contract[KERNEL_CONTRACT_IO_QUANTUM];
+                if (ioQuantum <= 0) {
+                    ioQuantum = cacheLine * 64;
+                }
+                return new KernelUnitProfile(signature, pointerBits, cacheLine, pageBytes, featureMask, cpuCores, arenaBytes, ioQuantum);
+            }
+        }
+
+        int signature = BOOT_PROFILE.signature;
+        int cacheLine = BOOT_PROFILE.cacheLineBytes;
+        int pageBytes = BOOT_PROFILE.pageBytes;
+        int ioQuantum = cacheLine * 64;
+        int cores = Math.max(1, Runtime.getRuntime().availableProcessors());
+        return new KernelUnitProfile(signature, BOOT_PROFILE.pointerBits, cacheLine, pageBytes, BOOT_PROFILE.featureMask, cores, 0, ioQuantum);
     }
 
     private static HardwareProfile detectHardwareProfile() {
@@ -419,6 +456,89 @@ public final class NativeFastPath {
         return v & 0x3F;
     }
 
+    public static int vec2Pack(int x, int y) {
+        if (NATIVE_AVAILABLE) {
+            return nativeVec2Pack(x, y);
+        }
+        return ((y & 0xFFFF) << 16) | (x & 0xFFFF);
+    }
+
+    public static int vec2X(int vec) {
+        if (NATIVE_AVAILABLE) {
+            return nativeVec2X(vec);
+        }
+        return (short) (vec & 0xFFFF);
+    }
+
+    public static int vec2Y(int vec) {
+        if (NATIVE_AVAILABLE) {
+            return nativeVec2Y(vec);
+        }
+        return (short) (vec >>> 16);
+    }
+
+    public static int vec2AddSat(int a, int b) {
+        if (NATIVE_AVAILABLE) {
+            return nativeVec2AddSat(a, b);
+        }
+        int ax = vec2X(a);
+        int ay = vec2Y(a);
+        int bx = vec2X(b);
+        int by = vec2Y(b);
+        return vec2Pack(clamp16(ax + bx), clamp16(ay + by));
+    }
+
+    public static int vec2Dot(int a, int b) {
+        if (NATIVE_AVAILABLE) {
+            return nativeVec2Dot(a, b);
+        }
+        int ax = vec2X(a);
+        int ay = vec2Y(a);
+        int bx = vec2X(b);
+        int by = vec2Y(b);
+        return ax * bx + ay * by;
+    }
+
+    public static int vec2Mag2(int vec) {
+        if (NATIVE_AVAILABLE) {
+            return nativeVec2Mag2(vec);
+        }
+        return vec2Dot(vec, vec);
+    }
+
+    private static int clamp16(int value) {
+        if (value < Short.MIN_VALUE) {
+            return Short.MIN_VALUE;
+        }
+        if (value > Short.MAX_VALUE) {
+            return Short.MAX_VALUE;
+        }
+        return value;
+    }
+
+    public static final class KernelUnitProfile {
+        public final int signature;
+        public final int pointerBits;
+        public final int cacheLineBytes;
+        public final int pageBytes;
+        public final int featureMask;
+        public final int cpuCores;
+        public final int arenaBytes;
+        public final int ioQuantumBytes;
+
+        KernelUnitProfile(int signature, int pointerBits, int cacheLineBytes, int pageBytes,
+                          int featureMask, int cpuCores, int arenaBytes, int ioQuantumBytes) {
+            this.signature = signature;
+            this.pointerBits = pointerBits;
+            this.cacheLineBytes = cacheLineBytes;
+            this.pageBytes = pageBytes;
+            this.featureMask = featureMask;
+            this.cpuCores = cpuCores;
+            this.arenaBytes = arenaBytes;
+            this.ioQuantumBytes = ioQuantumBytes;
+        }
+    }
+
     static final class HardwareProfile {
         final int signature;
         final int pointerBits;
@@ -439,6 +559,8 @@ public final class NativeFastPath {
 
     private static native int[] nativeReadHardwareContract();
 
+    private static native int[] nativeReadKernelUnitContract();
+
     private static native int nativeCopyBytes(byte[] src, int srcOffset, byte[] dst, int dstOffset, int length);
 
     private static native int nativeXorChecksum(byte[] data, int offset, int length);
@@ -450,6 +572,18 @@ public final class NativeFastPath {
     private static native int nativeRotateLeft32(int value, int distance);
 
     private static native int nativeRotateRight32(int value, int distance);
+
+    private static native int nativeVec2Pack(int x, int y);
+
+    private static native int nativeVec2X(int vec);
+
+    private static native int nativeVec2Y(int vec);
+
+    private static native int nativeVec2AddSat(int a, int b);
+
+    private static native int nativeVec2Dot(int a, int b);
+
+    private static native int nativeVec2Mag2(int vec);
 
     private static native int nativeAllocArena(int bytes);
 

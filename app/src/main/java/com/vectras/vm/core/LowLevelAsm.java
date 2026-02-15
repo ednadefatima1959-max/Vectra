@@ -65,35 +65,27 @@ public final class LowLevelAsm {
     // ========== Vec2 packed ops ==========
 
     public static int asmVec2Pack(int x, int y) {
-        return ((y & 0xFFFF) << 16) | (x & 0xFFFF);
+        return NativeFastPath.vec2Pack(x, y);
     }
 
     public static int asmVec2X(int vec) {
-        return (short) (vec & 0xFFFF);
+        return NativeFastPath.vec2X(vec);
     }
 
     public static int asmVec2Y(int vec) {
-        return (short) (vec >>> 16);
+        return NativeFastPath.vec2Y(vec);
     }
 
     public static int asmVec2AddSat(int a, int b) {
-        int ax = asmVec2X(a);
-        int ay = asmVec2Y(a);
-        int bx = asmVec2X(b);
-        int by = asmVec2Y(b);
-        return asmVec2Pack(asmClampShort(ax + bx), asmClampShort(ay + by));
+        return NativeFastPath.vec2AddSat(a, b);
     }
 
     public static int asmVec2Dot(int a, int b) {
-        int ax = asmVec2X(a);
-        int ay = asmVec2Y(a);
-        int bx = asmVec2X(b);
-        int by = asmVec2Y(b);
-        return ax * bx + ay * by;
+        return NativeFastPath.vec2Dot(a, b);
     }
 
     public static int asmVec2Mag2(int vec) {
-        return asmVec2Dot(vec, vec);
+        return NativeFastPath.vec2Mag2(vec);
     }
 
     // ========== Matrix ops with offsets ==========
