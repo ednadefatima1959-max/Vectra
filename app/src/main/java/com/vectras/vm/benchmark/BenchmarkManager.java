@@ -7,6 +7,7 @@ import android.os.Debug;
 import android.os.Process;
 
 import com.vectras.vm.core.BareMetalProfile;
+import com.vectras.vm.core.ExecutionPolicyCenter;
 import com.vectras.vm.core.NativeFastPath;
 
 import java.io.BufferedReader;
@@ -133,6 +134,7 @@ public class BenchmarkManager {
         public final ValidationReport validation;
         public final EnvironmentSnapshot environment;
         private final DiagnosticMetrics diagnostics;
+        public final ExecutionGovernance governance;
         public final long durationMs;
         public final boolean isValid;
         
@@ -140,18 +142,58 @@ public class BenchmarkManager {
                              ValidationReport validation,
                              EnvironmentSnapshot environment,
                              DiagnosticMetrics diagnostics,
+                             ExecutionGovernance governance,
                              long durationMs,
                              boolean isValid) {
             this.metrics = metrics;
             this.validation = validation;
             this.environment = environment;
             this.diagnostics = diagnostics;
+            this.governance = governance;
             this.durationMs = durationMs;
             this.isValid = isValid;
         }
 
         public DiagnosticMetricsView getDiagnosticsView() {
             return diagnostics == null ? null : diagnostics.view();
+        }
+    }
+
+    public static class ExecutionGovernance {
+        public final String profile;
+        public final int effectiveSmp;
+        public final int coreThreads;
+        public final int maxThreads;
+        public final int queueCapacity;
+        public final int maxObservedQueueDepth;
+        public final long rejectedCount;
+        public final long callerRunsCount;
+        public final boolean callerRunsEnabled;
+        public final int processLimit;
+        public final int runningProcessesObserved;
+
+        public ExecutionGovernance(String profile,
+                                   int effectiveSmp,
+                                   int coreThreads,
+                                   int maxThreads,
+                                   int queueCapacity,
+                                   int maxObservedQueueDepth,
+                                   long rejectedCount,
+                                   long callerRunsCount,
+                                   boolean callerRunsEnabled,
+                                   int processLimit,
+                                   int runningProcessesObserved) {
+            this.profile = profile;
+            this.effectiveSmp = effectiveSmp;
+            this.coreThreads = coreThreads;
+            this.maxThreads = maxThreads;
+            this.queueCapacity = queueCapacity;
+            this.maxObservedQueueDepth = maxObservedQueueDepth;
+            this.rejectedCount = rejectedCount;
+            this.callerRunsCount = callerRunsCount;
+            this.callerRunsEnabled = callerRunsEnabled;
+            this.processLimit = processLimit;
+            this.runningProcessesObserved = runningProcessesObserved;
         }
     }
 
@@ -372,10 +414,16 @@ public class BenchmarkManager {
      * This is the main entry point for professional benchmarking.
      */
     public BenchmarkResult runBenchmark(ProgressCallback callback) {
-        return runBenchmark(callback, ExecutionProfile.AUTO_ADAPTIVE);
+        return runBenchmark(callback, ExecutionProfile.AUTO_ADAPTIVE, ExecutionPolicyCenter.Channel.BENCHMARK);
     }
 
     public BenchmarkResult runBenchmark(ProgressCallback callback, ExecutionProfile mode) {
+        return runBenchmark(callback, mode, ExecutionPolicyCenter.Channel.BENCHMARK);
+    }
+
+    public BenchmarkResult runBenchmark(ProgressCallback callback,
+                                        ExecutionProfile mode,
+                                        ExecutionPolicyCenter.Channel policyChannel) {
         this.callback.set(callback);
         long startTime = System.currentTimeMillis();
 
@@ -415,8 +463,9 @@ public class BenchmarkManager {
                             validation.confidenceScore >= MIN_CONFIDENCE_THRESHOLD;
 
             DiagnosticMetrics diagnostics = buildDiagnostics(envBefore, preflight);
+            ExecutionGovernance governance = buildExecutionGovernance(policyChannel, envAfter);
             BenchmarkResult result = new BenchmarkResult(
-                results, validation, envAfter, diagnostics, duration, isValid);
+                results, validation, envAfter, diagnostics, governance, duration, isValid);
             notifyProgress(PROGRESS_SCALE, PROGRESS_SCALE, "Benchmark complete");
             
             notifyComplete(result);
@@ -426,6 +475,24 @@ public class BenchmarkManager {
             notifyError("Benchmark failed: " + e.getMessage());
             throw new RuntimeException("Benchmark execution failed", e);
         }
+    }
+
+    private ExecutionGovernance buildExecutionGovernance(ExecutionPolicyCenter.Channel channel,
+                                                         EnvironmentSnapshot environmentSnapshot) {
+        ExecutionPolicyCenter.GovernanceSnapshot snapshot = ExecutionPolicyCenter.snapshot(channel);
+        return new ExecutionGovernance(
+            snapshot.profile,
+            snapshot.effectiveSmp,
+            snapshot.coreThreads,
+            snapshot.maxThreads,
+            snapshot.queueCapacity,
+            snapshot.maxObservedQueueDepth,
+            snapshot.rejectedCount,
+            snapshot.callerRunsCount,
+            snapshot.callerRunsEnabled,
+            snapshot.processLimit,
+            environmentSnapshot == null ? -1 : environmentSnapshot.runningProcesses
+        );
     }
     
     /**
