@@ -724,7 +724,50 @@ JNIEXPORT jint JNICALL
 Java_com_vectras_vm_core_NativeFastPath_nativeVec2Mag2(JNIEnv* env, jclass clazz, jint vec) {
     (void)env;
     (void)clazz;
-    return Java_com_vectras_vm_core_NativeFastPath_nativeVec2Dot(env, clazz, vec, vec);
+
+    int32_t x = (int16_t)((uint32_t)vec & 0xFFFFu);
+    int32_t y = (int16_t)(((uint32_t)vec >> 16) & 0xFFFFu);
+#if defined(__aarch64__)
+    int32_t result;
+    __asm__ volatile(
+            "smull x8, %w1, %w1\n\t"
+            "smaddl x8, %w2, %w2, x8\n\t"
+            "mov %w0, w8\n\t"
+            : "=r"(result)
+            : "r"(x), "r"(y)
+            : "x8");
+    return (jint)result;
+#else
+    return (jint)(x * x + y * y);
+#endif
+}
+
+JNIEXPORT jintArray JNICALL
+Java_com_vectras_vm_core_NativeFastPath_nativeReadKernelUnitContract(JNIEnv* env, jclass clazz) {
+    (void)clazz;
+    const vectra_hw_contract_t* hw = vectra_hw_contract_get();
+
+    long cpu = sysconf(_SC_NPROCESSORS_ONLN);
+    if (cpu <= 0) {
+        cpu = 1;
+    }
+
+    jint values[8];
+    values[0] = (jint)hw->signature;
+    values[1] = (jint)hw->pointer_bits;
+    values[2] = (jint)hw->cache_line_bytes;
+    values[3] = (jint)hw->page_bytes;
+    values[4] = (jint)hw->feature_mask;
+    values[5] = (jint)cpu;
+    values[6] = (jint)VECTRA_ARENA_CAPACITY_BYTES;
+    values[7] = (jint)(hw->cache_line_bytes * 64u);
+
+    jintArray out = (*env)->NewIntArray(env, 8);
+    if (!out) {
+        return NULL;
+    }
+    (*env)->SetIntArrayRegion(env, out, 0, 8, values);
+    return out;
 }
 
 JNIEXPORT jintArray JNICALL

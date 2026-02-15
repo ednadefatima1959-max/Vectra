@@ -20,11 +20,16 @@ public final class DeterministicRuntimeMatrix {
         public final int ioQuantumBytes;
         public final int irqPeriodMicros;
         public final int workerParallelism;
+        public final int storageQueueDepth;
+        public final int memoryArenaBytes;
+        public final int bufferSlots;
+        public final int cacheSets;
         public final long deterministicProduct;
 
         private Snapshot(int arch, int cores, int pointerBits, int pageBytes, int cacheLineBytes,
                          int features, int ioQuantumBytes, int irqPeriodMicros,
-                         int workerParallelism, long deterministicProduct) {
+                         int workerParallelism, int storageQueueDepth, int memoryArenaBytes,
+                         int bufferSlots, int cacheSets, long deterministicProduct) {
             this.arch = arch;
             this.cores = cores;
             this.pointerBits = pointerBits;
@@ -34,6 +39,10 @@ public final class DeterministicRuntimeMatrix {
             this.ioQuantumBytes = ioQuantumBytes;
             this.irqPeriodMicros = irqPeriodMicros;
             this.workerParallelism = workerParallelism;
+            this.storageQueueDepth = storageQueueDepth;
+            this.memoryArenaBytes = memoryArenaBytes;
+            this.bufferSlots = bufferSlots;
+            this.cacheSets = cacheSets;
             this.deterministicProduct = deterministicProduct;
         }
     }
@@ -48,21 +57,27 @@ public final class DeterministicRuntimeMatrix {
             return snapshot;
         }
 
-        int signature = NativeFastPath.getPlatformSignature();
-        int arch = signature & 0xFF00;
-        int bits = NativeFastPath.getPointerBits();
-        int page = NativeFastPath.getNativePageBytes();
-        int line = NativeFastPath.getNativeCacheLineBytes();
-        int features = NativeFastPath.getFeatureMask();
-        int cores = Math.max(1, Runtime.getRuntime().availableProcessors());
+        NativeFastPath.KernelUnitProfile kernel = NativeFastPath.readKernelUnitProfile();
+
+        int arch = kernel.signature & 0xFF00;
+        int bits = kernel.pointerBits;
+        int page = kernel.pageBytes;
+        int line = kernel.cacheLineBytes;
+        int features = kernel.featureMask;
+        int cores = Math.max(1, kernel.cpuCores);
 
         long product = deterministicProduct(arch, bits, page, line, cores, features);
 
-        int ioQuantum = deriveIoQuantum(page, line, cores, features);
+        int ioQuantum = deriveIoQuantum(page, line, cores, features, kernel.ioQuantumBytes);
         int irqPeriod = deriveIrqPeriodMicros(line, cores, features);
         int workers = deriveParallelism(cores, features);
+        int queueDepth = deriveStorageQueueDepth(cores, features);
+        int arenaBytes = deriveMemoryArenaBytes(kernel.arenaBytes, page, workers);
+        int bufferSlots = deriveBufferSlots(ioQuantum, line, page);
+        int cacheSets = deriveCacheSets(line, cores, features);
 
-        Snapshot computed = new Snapshot(arch, cores, bits, page, line, features, ioQuantum, irqPeriod, workers, product);
+        Snapshot computed = new Snapshot(arch, cores, bits, page, line, features, ioQuantum, irqPeriod,
+                workers, queueDepth, arenaBytes, bufferSlots, cacheSets, product);
         cachedSnapshot = computed;
         return computed;
     }
@@ -105,8 +120,8 @@ public final class DeterministicRuntimeMatrix {
         return product;
     }
 
-    private static int deriveIoQuantum(int page, int line, int cores, int features) {
-        int base = page * Math.max(1, cores >= 8 ? 8 : (cores >= 4 ? 4 : 2));
+    private static int deriveIoQuantum(int page, int line, int cores, int features, int kernelQuantum) {
+        int base = kernelQuantum > 0 ? kernelQuantum : page * Math.max(1, cores >= 8 ? 8 : (cores >= 4 ? 4 : 2));
         if ((features & NativeFastPath.FEATURE_AVX2) != 0 || (features & NativeFastPath.FEATURE_NEON) != 0) {
             base <<= 1;
         }
@@ -136,6 +151,35 @@ public final class DeterministicRuntimeMatrix {
             return Math.max(1, base - 1);
         }
         return base;
+    }
+
+    private static int deriveStorageQueueDepth(int cores, int features) {
+        int depth = cores >= 8 ? 128 : (cores >= 4 ? 64 : 32);
+        if ((features & NativeFastPath.FEATURE_SIMD) != 0) {
+            depth += 16;
+        }
+        return clamp(depth, 16, 192);
+    }
+
+    private static int deriveMemoryArenaBytes(int nativeArenaBytes, int page, int workers) {
+        int base = nativeArenaBytes > 0 ? nativeArenaBytes : page * workers * 128;
+        return clamp(base, page * 64, 128 * 1024 * 1024);
+    }
+
+    private static int deriveBufferSlots(int ioQuantum, int line, int page) {
+        int slotBytes = Math.max(line, 32) * 4;
+        int slots = ioQuantum / slotBytes;
+        if (slots <= 0) {
+            slots = page / Math.max(1, slotBytes);
+        }
+        return clamp(slots, 8, 2048);
+    }
+
+    private static int deriveCacheSets(int line, int cores, int features) {
+        int ways = (features & NativeFastPath.FEATURE_SIMD) != 0 ? 8 : 4;
+        int sets = (cores * 1024) / Math.max(32, line);
+        sets *= ways;
+        return clamp(sets, 64, 8192);
     }
 
     private static int normalizeFactor(int value) {
