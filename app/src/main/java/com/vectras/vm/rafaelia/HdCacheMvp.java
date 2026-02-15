@@ -430,6 +430,23 @@ public final class HdCacheMvp {
             }
         }
 
+
+        /**
+         * Removes an item from cache if present.
+         */
+        public byte[] remove(EventKey k) {
+            lock.lock();
+            try {
+                byte[] v = items.remove(k);
+                if (v != null) {
+                    used -= v.length;
+                }
+                return v;
+            } finally {
+                lock.unlock();
+            }
+        }
+
         /**
          * Removes and returns the oldest item.
          */
@@ -843,16 +860,23 @@ public final class HdCacheMvp {
                 throw new PermanentProcessingException("Payload hash mismatch");
             }
 
-            long fold = 0x9E3779B97F4A7C15L;
+            long receiptA = computeProcessingReceipt(payload);
+            long receiptB = computeProcessingReceipt(payload);
+            if (receiptA != receiptB) {
+                throw new PermanentProcessingException("Non-deterministic processing receipt");
+            }
+            return true;
+        }
+
+        private long computeProcessingReceipt(byte[] payload) {
+            long acc = 0xCBF29CE484222325L;
             for (int i = 0; i < payload.length; i++) {
                 long v = payload[i] & 0xFFL;
-                fold ^= (v + 0x9E3779B9L + (fold << 6) + (fold >>> 2));
-                fold += (i + 1L) * (v + 1L);
+                acc ^= (v + ((long) i << 8));
+                acc *= 0x100000001B3L;
+                acc ^= (acc >>> 33);
             }
-
-            String receipt = String.format("%016x:%s", fold, payloadHash.substring(0, 16));
-            String expected = String.format("%016x:%s", fold, m.getPayloadHash().substring(0, 16));
-            return receipt.equals(expected);
+            return acc;
         }
 
         /**

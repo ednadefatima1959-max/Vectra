@@ -10,7 +10,6 @@ import static org.junit.Assert.assertTrue;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.lang.reflect.Field;
 import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.util.HashMap;
@@ -336,14 +335,26 @@ public class HdCacheMvpTest {
 
             byte[] payload = "tamper-hash".getBytes(StandardCharsets.UTF_8);
             HdCacheMvp.EventKey key = engine.ingest("test_layer", payload);
-            HdCacheMvp.EventMeta meta = engine.getMeta().get(key);
+            HdCacheMvp.EventMeta current = engine.getMeta().get(key);
 
-            forcePayloadHash(meta, "0000000000000000000000000000000000000000000000000000000000000000");
+            HdCacheMvp.EventMeta replaced = new HdCacheMvp.EventMeta(
+                current.getLayer(),
+                current.getEid(),
+                current.getCreatedNs(),
+                current.getTtlSec(),
+                current.getRetriesLeft(),
+                current.getPayloadLen(),
+                "0000000000000000000000000000000000000000000000000000000000000000",
+                current.getDiskOff(),
+                current.getDiskLen(),
+                current.getStatus()
+            );
+            engine.getMeta().put(key, replaced);
 
             engine.processOne(key);
 
-            assertEquals(HdCacheMvp.EventStatus.DROPPED, meta.getStatus());
-            assertNotEquals(HdCacheMvp.EventStatus.DONE, meta.getStatus());
+            assertEquals(HdCacheMvp.EventStatus.DROPPED, replaced.getStatus());
+            assertNotEquals(HdCacheMvp.EventStatus.DONE, replaced.getStatus());
         }
     }
     @Test
@@ -430,26 +441,10 @@ public class HdCacheMvpTest {
         assertTrue(json.contains("\"status\":\"NEW\""));
     }
 
-    private void clearAllCacheTiers(HdCacheMvp.Engine engine, HdCacheMvp.EventKey key) throws Exception {
-        removeFromTier(engine.getCache().getL1(), key);
-        removeFromTier(engine.getCache().getL2(), key);
-        removeFromTier(engine.getCache().getL3(), key);
-    }
-
-    @SuppressWarnings("unchecked")
-    private void removeFromTier(HdCacheMvp.TierCache tier, HdCacheMvp.EventKey key) throws Exception {
-        Field mapField = HdCacheMvp.TierCache.class.getDeclaredField("map");
-        mapField.setAccessible(true);
-        Map<HdCacheMvp.EventKey, byte[]> map = (Map<HdCacheMvp.EventKey, byte[]>) mapField.get(tier);
-        map.remove(key);
-
-        Field usedField = HdCacheMvp.TierCache.class.getDeclaredField("used");
-        usedField.setAccessible(true);
-        long used = 0;
-        for (byte[] value : map.values()) {
-            used += value.length;
-        }
-        usedField.setLong(tier, used);
+    private void clearAllCacheTiers(HdCacheMvp.Engine engine, HdCacheMvp.EventKey key) {
+        engine.getCache().getL1().remove(key);
+        engine.getCache().getL2().remove(key);
+        engine.getCache().getL3().remove(key);
     }
 
     private void corruptMagic(long offset) throws IOException {
@@ -458,11 +453,4 @@ public class HdCacheMvpTest {
             raf.write(new byte[]{0x00, 0x00, 0x00, 0x00});
         }
     }
-
-    private void forcePayloadHash(HdCacheMvp.EventMeta meta, String hash) throws Exception {
-        Field hashField = HdCacheMvp.EventMeta.class.getDeclaredField("payloadHash");
-        hashField.setAccessible(true);
-        hashField.set(meta, hash);
-    }
-
 }
