@@ -20,7 +20,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.vectras.vm.AppConfig;
 import com.vectras.vm.R;
-import com.vectras.vm.core.ExecutionGovernance;
+import com.vectras.vm.core.ExecutionPolicyCenter;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -90,9 +90,8 @@ public class BenchmarkActivity extends AppCompatActivity {
     
     // Data
     private VectraBenchmark.BenchmarkResult[] lastResults;
-    private final ExecutionGovernance.GovernedExecutor governedExecutor =
-        ExecutionGovernance.newSerialExecutor("benchmark-activity", "benchmark-ui-serial");
-    private final ExecutorService executor = governedExecutor.executor();
+    private final ExecutorService executor =
+        ExecutionPolicyCenter.executor(ExecutionPolicyCenter.Channel.BENCHMARK);
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     
     @Override
@@ -272,7 +271,7 @@ public class BenchmarkActivity extends AppCompatActivity {
                                     "Error: " + errorMsg, Toast.LENGTH_LONG).show();
                             });
                         }
-                    }, selectedProfile);
+                    }, selectedProfile, ExecutionPolicyCenter.Channel.BENCHMARK);
                 
             } catch (Exception e) {
                 mainHandler.post(() -> {
@@ -515,9 +514,7 @@ public class BenchmarkActivity extends AppCompatActivity {
             fullReport.append("\n\n");
         }
         
-        if (lastBenchmarkResult != null) {
-            appendGovernanceSection(fullReport, lastBenchmarkResult.governanceTelemetry, true);
-        }
+        appendGovernanceSection(fullReport, lastBenchmarkResult);
 
         // Add benchmark results
         fullReport.append(VectraBenchmark.formatReport(lastResults));
@@ -617,9 +614,7 @@ public class BenchmarkActivity extends AppCompatActivity {
                     fullReport.append("\n\n");
                 }
 
-                if (lastBenchmarkResult != null) {
-                    appendGovernanceSection(fullReport, lastBenchmarkResult.governanceTelemetry, true);
-                }
+                appendGovernanceSection(fullReport, lastBenchmarkResult);
 
                 // Add detailed benchmark results
                 fullReport.append(VectraBenchmark.formatDetailedReport(lastResults));
@@ -691,10 +686,8 @@ public class BenchmarkActivity extends AppCompatActivity {
             }
             shareText.append("\n");
         }
-
-        if (lastBenchmarkResult != null) {
-            appendGovernanceSection(shareText, lastBenchmarkResult.governanceTelemetry, false);
-        }
+        
+        appendGovernanceSection(shareText, lastBenchmarkResult);
 
         // Add device info
         VectraBenchmark.DeviceSpecification spec = VectraBenchmark.getDeviceSpecification();
@@ -758,8 +751,27 @@ public class BenchmarkActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        governedExecutor.shutdown();
     }
+
+    private static void appendGovernanceSection(StringBuilder sb, BenchmarkManager.BenchmarkResult result) {
+        if (sb == null || result == null || result.governance == null) {
+            return;
+        }
+        BenchmarkManager.ExecutionGovernance gov = result.governance;
+        sb.append("EXECUTION GOVERNANCE / POLICY TELEMETRY\n");
+        sb.append(SECTION_DIVIDER).append("\n");
+        sb.append("Policy Profile: ").append(safeValue(gov.profile)).append("\n");
+        sb.append("Effective SMP: ").append(gov.effectiveSmp).append("\n");
+        sb.append("Thread Limits (core/max): ").append(gov.coreThreads).append('/').append(gov.maxThreads).append("\n");
+        sb.append("Process Limit (pid_max): ").append(gov.processLimit).append("\n");
+        sb.append("Observed Running Processes: ").append(gov.runningProcessesObserved).append("\n");
+        sb.append("Queue Capacity: ").append(gov.queueCapacity).append("\n");
+        sb.append("Max Queue Depth Observed: ").append(gov.maxObservedQueueDepth).append("\n");
+        sb.append("Rejected Tasks: ").append(gov.rejectedCount).append("\n");
+        sb.append("CallerRuns Enabled: ").append(gov.callerRunsEnabled ? "yes" : "no").append("\n");
+        sb.append("CallerRuns Activations: ").append(gov.callerRunsCount).append("\n\n");
+    }
+
 
     private static void writeLine(BufferedWriter writer, String line) throws IOException {
         writer.write(line);
