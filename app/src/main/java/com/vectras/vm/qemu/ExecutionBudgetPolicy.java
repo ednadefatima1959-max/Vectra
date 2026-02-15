@@ -2,28 +2,51 @@ package com.vectras.vm.qemu;
 
 public final class ExecutionBudgetPolicy {
 
-    private static final int MIN_BASE_CPUS = 2;
-    private static final int THROUGHPUT_MIN_CPUS = 10;
-    private static final int THROUGHPUT_MAX_CPUS = 23;
+    static final int THROUGHPUT_MIN_CPUS = 10;
+    static final int THROUGHPUT_MAX_CPUS = 23;
+    static final int RESERVED_HOST_CPUS = 1;
 
     private ExecutionBudgetPolicy() {
         throw new AssertionError("ExecutionBudgetPolicy is a utility class and cannot be instantiated");
     }
 
-    public static int cpusFor(VmProfile profile) {
-        int baseCpus = Math.max(MIN_BASE_CPUS, Runtime.getRuntime().availableProcessors() - 1);
-        if (profile == VmProfile.THROUGHPUT) {
-            return clamp(baseCpus, THROUGHPUT_MIN_CPUS, THROUGHPUT_MAX_CPUS);
+    public static CpuConcurrencyBudget resolve(VmProfile profile, String arch) {
+        return resolve(profile, arch, Runtime.getRuntime().availableProcessors());
+    }
+
+    static CpuConcurrencyBudget resolve(VmProfile profile, String arch, int availableProcessors) {
+        VmProfile resolvedProfile = profile != null ? profile : VmProfile.BALANCED;
+        String cpuModel = shouldUseMaxCpu(arch) ? "max" : null;
+        Integer smpCpus = null;
+
+        if (resolvedProfile == VmProfile.THROUGHPUT) {
+            smpCpus = clampThroughputCpus(availableProcessors - RESERVED_HOST_CPUS);
         }
-        return baseCpus;
+
+        return new CpuConcurrencyBudget(cpuModel, smpCpus);
     }
 
-    public static boolean requiresSmp(VmProfile profile) {
-        return profile == VmProfile.THROUGHPUT;
+    private static boolean shouldUseMaxCpu(String arch) {
+        return "X86_64".equals(arch) || "I386".equals(arch);
     }
 
-    private static int clamp(int value, int min, int max) {
-        if (value < min) return min;
-        return Math.min(value, max);
+    private static int clampThroughputCpus(int requestedCpus) {
+        if (requestedCpus < THROUGHPUT_MIN_CPUS) {
+            return THROUGHPUT_MIN_CPUS;
+        }
+        if (requestedCpus > THROUGHPUT_MAX_CPUS) {
+            return THROUGHPUT_MAX_CPUS;
+        }
+        return requestedCpus;
+    }
+
+    public static final class CpuConcurrencyBudget {
+        public final String cpuModel;
+        public final Integer smpCpus;
+
+        CpuConcurrencyBudget(String cpuModel, Integer smpCpus) {
+            this.cpuModel = cpuModel;
+            this.smpCpus = smpCpus;
+        }
     }
 }
