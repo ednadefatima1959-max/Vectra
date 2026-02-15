@@ -53,7 +53,7 @@ public final class QemuArgsBuilder {
     public static void applyProfile(ArrayList<String> params, Activity activity, String extras) {
         VmProfile profile = resolveProfile(activity, extras);
         String arch = MainSettingsManager.getArch(activity);
-        ExecutionBudgetPolicy.CpuConcurrencyBudget budget = ExecutionBudgetPolicy.resolve(profile, arch);
+        ExecutionBudgetPolicy.CpuBudget cpuBudget = ExecutionBudgetPolicy.forProfile(profile);
 
         if (budget.cpuModel != null) {
             params.add("-cpu");
@@ -71,9 +71,9 @@ public final class QemuArgsBuilder {
                 params.add("cpu-pm=on");
                 break;
             case THROUGHPUT:
-                if (budget.smpCpus != null) {
+                if (cpuBudget.hasCpuTopology()) {
                     params.add("-smp");
-                    params.add("cpus=" + budget.smpCpus);
+                    params.add("cpus=" + cpuBudget.cpus());
                 }
                 break;
             default:

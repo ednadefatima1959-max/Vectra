@@ -2,51 +2,60 @@ package com.vectras.vm.qemu;
 
 public final class ExecutionBudgetPolicy {
 
-    static final int THROUGHPUT_MIN_CPUS = 10;
-    static final int THROUGHPUT_MAX_CPUS = 23;
-    static final int RESERVED_HOST_CPUS = 1;
+    private static final int THROUGHPUT_MIN_CPUS = 10;
+    private static final int THROUGHPUT_MAX_CPUS = 23;
 
     private ExecutionBudgetPolicy() {
         throw new AssertionError("ExecutionBudgetPolicy is a utility class and cannot be instantiated");
     }
 
-    public static CpuConcurrencyBudget resolve(VmProfile profile, String arch) {
-        return resolve(profile, arch, Runtime.getRuntime().availableProcessors());
+    public static CpuBudget forProfile(VmProfile profile) {
+        return forProfile(profile, Runtime.getRuntime().availableProcessors());
     }
 
-    static CpuConcurrencyBudget resolve(VmProfile profile, String arch, int availableProcessors) {
-        VmProfile resolvedProfile = profile != null ? profile : VmProfile.BALANCED;
-        String cpuModel = shouldUseMaxCpu(arch) ? "max" : null;
-        Integer smpCpus = null;
+    static CpuBudget forProfile(VmProfile profile, int availableProcessors) {
+        int safeAvailableProcessors = Math.max(1, availableProcessors);
+        if (profile == VmProfile.THROUGHPUT) {
+            int requestedCpus = safeAvailableProcessors - 1;
+            int clampedCpus = clamp(requestedCpus, THROUGHPUT_MIN_CPUS, THROUGHPUT_MAX_CPUS);
+            return CpuBudget.withCpuTopology(clampedCpus);
+        }
+        return CpuBudget.withoutCpuTopology();
+    }
 
-        if (resolvedProfile == VmProfile.THROUGHPUT) {
-            smpCpus = clampThroughputCpus(availableProcessors - RESERVED_HOST_CPUS);
+    private static int clamp(int value, int min, int max) {
+        if (value < min) {
+            return min;
+        }
+        if (value > max) {
+            return max;
+        }
+        return value;
+    }
+
+    public static final class CpuBudget {
+        private final boolean hasCpuTopology;
+        private final int cpus;
+
+        private CpuBudget(boolean hasCpuTopology, int cpus) {
+            this.hasCpuTopology = hasCpuTopology;
+            this.cpus = cpus;
         }
 
-        return new CpuConcurrencyBudget(cpuModel, smpCpus);
-    }
-
-    private static boolean shouldUseMaxCpu(String arch) {
-        return "X86_64".equals(arch) || "I386".equals(arch);
-    }
-
-    private static int clampThroughputCpus(int requestedCpus) {
-        if (requestedCpus < THROUGHPUT_MIN_CPUS) {
-            return THROUGHPUT_MIN_CPUS;
+        static CpuBudget withCpuTopology(int cpus) {
+            return new CpuBudget(true, cpus);
         }
-        if (requestedCpus > THROUGHPUT_MAX_CPUS) {
-            return THROUGHPUT_MAX_CPUS;
+
+        static CpuBudget withoutCpuTopology() {
+            return new CpuBudget(false, 0);
         }
-        return requestedCpus;
-    }
 
-    public static final class CpuConcurrencyBudget {
-        public final String cpuModel;
-        public final Integer smpCpus;
+        public boolean hasCpuTopology() {
+            return hasCpuTopology;
+        }
 
-        CpuConcurrencyBudget(String cpuModel, Integer smpCpus) {
-            this.cpuModel = cpuModel;
-            this.smpCpus = smpCpus;
+        public int cpus() {
+            return cpus;
         }
     }
 }
