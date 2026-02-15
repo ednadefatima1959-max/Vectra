@@ -193,6 +193,9 @@ public class MainActivity extends AppCompatActivity implements RomStoreFragment.
 
         bindingContent.searchbar.setEnabled(false);
 
+        adapterRomStoreSearch = new RomStoreHomeAdapterSearch(this, dataRomStoreSearch);
+        adapterSoftwareStoreSearch = new SoftwareStoreHomeAdapterSearch(this, dataSoftwareStoreSearch);
+
         bindingContent.bottomNavigation.setOnItemSelectedListener(item -> {
             Fragment selectedFragment;
 
@@ -216,16 +219,16 @@ public class MainActivity extends AppCompatActivity implements RomStoreFragment.
                 bindingContent.searchbar.setEnabled(true);
                 bindingContent.searchbar.setHint(getText(R.string.search));
                 currentSearchMode = SEARCH_ROM_STORE;
-                adapterRomStoreSearch = new RomStoreHomeAdapterSearch(this, dataRomStoreSearch);
                 binding.rvRomstoresearch.setAdapter(adapterRomStoreSearch);
+                adapterRomStoreSearch.submitList(dataRomStoreSearch);
             } else if (id == R.id.item_softwarestore) {
                 selectedFragment = new SoftwareStoreFragment();
                 bindingContent.efabCreate.setVisibility(View.GONE);
                 bindingContent.searchbar.setEnabled(true);
                 bindingContent.searchbar.setHint(getText(R.string.search));
                 currentSearchMode = SEARCH_SOFTWARE_STORE;
-                adapterSoftwareStoreSearch = new SoftwareStoreHomeAdapterSearch(this, dataRomStoreSearch);
                 binding.rvRomstoresearch.setAdapter(adapterSoftwareStoreSearch);
+                adapterSoftwareStoreSearch.submitList(dataSoftwareStoreSearch);
             } else if (id == R.id.item_monitor) {
                 selectedFragment = new SystemMonitorFragment();
                 bindingContent.efabCreate.setVisibility(View.GONE);
@@ -371,42 +374,58 @@ public class MainActivity extends AppCompatActivity implements RomStoreFragment.
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode == RESULT_OK) {
-            Uri content_describer = data.getData();
-            File selectedFilePath;
-            try {
-                selectedFilePath = new File(Objects.requireNonNull(FileUtils.getPath(this, content_describer)));
-            } catch (Exception e) {
-                DialogUtils.oneDialog(this,
-                        getString(R.string.oops),
-                        getString(R.string.invalid_file_path_content),
-                        getString(R.string.ok),
-                        true,
-                        R.drawable.error_96px,
-                        true,
-                        null,
-                        null
-                );
-                return;
-            }
+        if (resultCode != RESULT_OK) {
+            return;
+        }
 
-            switch (requestCode) {
-                case 120:
-                    VMManager.changeCDROM(selectedFilePath.getAbsolutePath(), this);
-                    break;
-                case 889:
-                    VMManager.changeFloppyDriveA(selectedFilePath.getAbsolutePath(), this);
-                    break;
-                case 13335:
-                    VMManager.changeFloppyDriveB(selectedFilePath.getAbsolutePath(), this);
-                    break;
-                case 32:
-                    VMManager.changeSDCard(selectedFilePath.getAbsolutePath(), this);
-                    break;
-                case 1996:
-                    VMManager.changeRemovableDevice(VMManager.pendingDeviceID, selectedFilePath.getAbsolutePath(), this);
-                    break;
-            }
+        if (data == null || data.getData() == null) {
+            DialogUtils.oneDialog(this,
+                    getString(R.string.oops),
+                    getString(R.string.invalid_file_path_content),
+                    getString(R.string.ok),
+                    true,
+                    R.drawable.error_96px,
+                    true,
+                    null,
+                    null
+            );
+            return;
+        }
+
+        Uri contentUri = data.getData();
+        File selectedFilePath;
+        try {
+            selectedFilePath = new File(Objects.requireNonNull(FileUtils.getPath(this, contentUri)));
+        } catch (Exception e) {
+            DialogUtils.oneDialog(this,
+                    getString(R.string.oops),
+                    getString(R.string.invalid_file_path_content),
+                    getString(R.string.ok),
+                    true,
+                    R.drawable.error_96px,
+                    true,
+                    null,
+                    null
+            );
+            return;
+        }
+
+        switch (requestCode) {
+            case 120:
+                VMManager.changeCDROM(selectedFilePath.getAbsolutePath(), this);
+                break;
+            case 889:
+                VMManager.changeFloppyDriveA(selectedFilePath.getAbsolutePath(), this);
+                break;
+            case 13335:
+                VMManager.changeFloppyDriveB(selectedFilePath.getAbsolutePath(), this);
+                break;
+            case 32:
+                VMManager.changeSDCard(selectedFilePath.getAbsolutePath(), this);
+                break;
+            case 1996:
+                VMManager.changeRemovableDevice(VMManager.pendingDeviceID, selectedFilePath.getAbsolutePath(), this);
+                break;
         }
     }
 
@@ -600,21 +619,23 @@ public class MainActivity extends AppCompatActivity implements RomStoreFragment.
                 }
             }
 
-            dataRomStoreSearch.clear();
-            dataRomStoreSearch.addAll(filteredData);
+            List<DataRoms> targetData = currentSearchMode == SEARCH_ROM_STORE ? dataRomStoreSearch : dataSoftwareStoreSearch;
+            targetData.clear();
+            targetData.addAll(filteredData);
         } catch (Exception e) {
             Log.e("RomManagerActivity", "Json parsing error: " + e.getMessage());
         }
 
-        if (dataRomStoreSearch.isEmpty())
+        List<DataRoms> currentDataset = currentSearchMode == SEARCH_ROM_STORE ? dataRomStoreSearch : dataSoftwareStoreSearch;
+        if (currentDataset.isEmpty())
             binding.rvRomstoresearch.setVisibility(View.GONE);
         else
             binding.rvRomstoresearch.setVisibility(View.VISIBLE);
 
         if (currentSearchMode == SEARCH_ROM_STORE ) {
-            if (adapterRomStoreSearch != null) adapterRomStoreSearch.notifyDataSetChanged();
+            if (adapterRomStoreSearch != null) adapterRomStoreSearch.submitList(dataRomStoreSearch);
         } else {
-            if (adapterSoftwareStoreSearch != null) adapterSoftwareStoreSearch.notifyDataSetChanged();
+            if (adapterSoftwareStoreSearch != null) adapterSoftwareStoreSearch.submitList(dataSoftwareStoreSearch);
         }
     }
 

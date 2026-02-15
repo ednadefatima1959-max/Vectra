@@ -26,7 +26,9 @@ import com.vectras.vm.main.core.SharedData;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class RomStoreFragment extends Fragment {
 
@@ -141,10 +143,13 @@ public class RomStoreFragment extends Fragment {
             binding.linearnothinghere.setVisibility(View.VISIBLE);
         }
 
+        dataRoms = deduplicateByVecid(dataRoms);
+
         homeRomStoreViewModel.setRomsList(dataRoms);
         data.clear();
         data.addAll(dataRoms);
         mAdapter.notifyDataSetChanged();
+        SharedData.dataRomStore.clear();
         SharedData.dataRomStore.addAll(dataRoms);
         if (mainUiStateViewModel != null) {
             mainUiStateViewModel.setSearchReady(true);
