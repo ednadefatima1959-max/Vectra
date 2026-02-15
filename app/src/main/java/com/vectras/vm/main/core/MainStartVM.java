@@ -31,6 +31,7 @@ import com.vectras.vm.VMManager;
 import com.vectras.vm.logger.VectrasStatus;
 import com.vectras.vm.qemu.VmLaunchLedger;
 import com.vectras.vm.settings.ExternalVNCSettingsActivity;
+import com.vectras.vm.setupwizard.SetupFeatureCore;
 import com.vectras.vm.utils.DeviceUtils;
 import com.vectras.vm.utils.DialogUtils;
 import com.vectras.vm.utils.FileUtils;
@@ -141,6 +142,37 @@ public class MainStartVM {
         boolean headless = AppConfig.engineHeadlessMode || env.contains("-display none") || env.contains("headless=true");
         if (headless) {
             Log.i(TAG, "engine-only mode enabled (headless=true)");
+        }
+
+        SetupFeatureCore.PreflightResult preflightResult = SetupFeatureCore.runVmStartPreflight(
+                context,
+                StartVM.requiredQemuBinary(context)
+        );
+        if (!preflightResult.ok) {
+            VectrasStatus.logError("VM preflight failed: " + preflightResult.shortSummary());
+            VmLaunchLedger.append(
+                    context,
+                    finalvmID,
+                    StartVM.lastResolvedProfile,
+                    headless,
+                    false,
+                    preflightResult.ledgerReason(),
+                    "PRECHECK_ABORT"
+            );
+            DialogUtils.twoDialog(
+                    context,
+                    context.getString(R.string.problem_has_been_detected),
+                    preflightResult.uiSummary(),
+                    context.getString(R.string.reinstall_system),
+                    context.getString(R.string.cancel),
+                    true,
+                    R.drawable.warning_48px,
+                    true,
+                    () -> SetupFeatureCore.launchReinstallSetup(context),
+                    null,
+                    null
+            );
+            return;
         }
 
         File romDir = new File(Config.getCacheDir() + "/" + finalvmID);

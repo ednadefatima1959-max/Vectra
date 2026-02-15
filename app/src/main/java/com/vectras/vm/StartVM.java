@@ -1,6 +1,7 @@
 package com.vectras.vm;
 
 import android.app.Activity;
+import android.content.Context;
 import android.os.Build;
 import android.util.Log;
 
@@ -27,6 +28,10 @@ public class StartVM {
     public static volatile String lastResolvedProfile = "BALANCED";
     public static volatile boolean lastKvmEnabled = false;
     public static volatile String lastKvmReason = "unknown";
+
+    public static String requiredQemuBinary(Context context) {
+        return QemuArgsBuilder.binaryForArch(MainSettingsManager.getArch(context));
+    }
 
     public static String env(Activity activity, String extras, String img, boolean isQuickRun) {
 
