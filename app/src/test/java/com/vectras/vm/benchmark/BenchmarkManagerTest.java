@@ -118,7 +118,7 @@ public class BenchmarkManagerTest {
         );
         
         BenchmarkManager.BenchmarkResult result = new BenchmarkManager.BenchmarkResult(
-            metrics, validation, env, null, 5000, true
+            metrics, validation, env, null, null, 5000, true
         );
         
         assertNotNull(result);
@@ -269,7 +269,7 @@ public class BenchmarkManagerTest {
         );
         
         BenchmarkManager.BenchmarkResult result = new BenchmarkManager.BenchmarkResult(
-            metrics, validation, env, null, 5000, false
+            metrics, validation, env, null, null, 5000, false
         );
         
         assertFalse(result.isValid);

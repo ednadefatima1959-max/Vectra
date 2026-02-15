@@ -9,6 +9,8 @@ import android.system.Os;
 import android.system.OsConstants;
 import android.util.Log;
 
+import com.vectras.vm.core.ExecutionExecutors;
+
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -19,6 +21,8 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * A terminal session, consisting of a process coupled to a terminal interface.
@@ -144,6 +148,13 @@ public final class TerminalSession extends TerminalOutput {
     private final String mCwd;
     private final String[] mArgs;
     private final String[] mEnv;
+    private volatile Future<?> mInputReaderTask;
+    private volatile Future<?> mOutputWriterTask;
+    private volatile Future<?> mWaiterTask;
+
+    private volatile Future<?> mInputReaderFuture;
+    private volatile Future<?> mOutputWriterFuture;
+    private volatile Future<?> mWaiterFuture;
 
     public TerminalSession(String shellPath, String cwd, String[] args, String[] env, SessionChangedCallback changeCallback) {
         mChangeCallback = changeCallback;
@@ -190,9 +201,9 @@ public final class TerminalSession extends TerminalOutput {
 
         final FileDescriptor terminalFileDescriptorWrapped = wrapFileDescriptor(mTerminalFileDescriptor);
 
-        new Thread("TermSessionInputReader[pid=" + mShellPid + "]") {
-            @Override
-            public void run() {
+        ExecutionExecutors executors = ExecutionExecutors.get();
+        try {
+            mInputReaderTask = executors.submitTerminalIo(() -> {
                 try (InputStream termIn = new FileInputStream(terminalFileDescriptorWrapped)) {
                     final byte[] buffer = new byte[4096];
                     while (true) {
@@ -204,12 +215,9 @@ public final class TerminalSession extends TerminalOutput {
                 } catch (Exception e) {
                     // Ignore, just shutting down.
                 }
-            }
-        }.start();
+            });
 
-        new Thread("TermSessionOutputWriter[pid=" + mShellPid + "]") {
-            @Override
-            public void run() {
+            mOutputWriterTask = executors.submitTerminalIo(() -> {
                 final byte[] buffer = new byte[4096];
                 try (FileOutputStream termOut = new FileOutputStream(terminalFileDescriptorWrapped)) {
                     while (true) {
@@ -220,16 +228,16 @@ public final class TerminalSession extends TerminalOutput {
                 } catch (IOException e) {
                     // Ignore.
                 }
-            }
-        }.start();
+            });
 
-        new Thread("TermSessionWaiter[pid=" + mShellPid + "]") {
-            @Override
-            public void run() {
+            mWaiterTask = executors.submitTerminalWait(() -> {
                 int processExitCode = JNI.waitFor(mShellPid);
                 mMainThreadHandler.sendMessage(mMainThreadHandler.obtainMessage(MSG_PROCESS_EXITED, processExitCode));
-            }
-        }.start();
+            });
+        } catch (RejectedExecutionException e) {
+            cleanupResources(-1);
+            throw new IllegalStateException("TerminalSession executor saturated", e);
+        }
 
     }
 
@@ -309,10 +317,23 @@ public final class TerminalSession extends TerminalOutput {
             mShellExitStatus = exitStatus;
         }
 
+        cancelTask(mInputReaderTask);
+        cancelTask(mOutputWriterTask);
+        cancelTask(mWaiterTask);
+        mInputReaderTask = null;
+        mOutputWriterTask = null;
+        mWaiterTask = null;
+
         // Stop the reader and writer threads, and close the I/O streams
         mTerminalToProcessIOQueue.close();
         mProcessToTerminalIOQueue.close();
         JNI.close(mTerminalFileDescriptor);
+    }
+
+    private static void cancelTask(Future<?> task) {
+        if (task != null) {
+            task.cancel(true);
+        }
     }
 
     @Override

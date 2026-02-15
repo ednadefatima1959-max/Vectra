@@ -20,6 +20,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.vectras.vm.AppConfig;
 import com.vectras.vm.R;
+import com.vectras.vm.core.ExecutionPolicyCenter;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -32,7 +33,6 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * BenchmarkActivity - UI for running and viewing benchmark tests.
@@ -52,6 +52,7 @@ public class BenchmarkActivity extends AppCompatActivity {
     private static final String SECTION_DIVIDER =
         "─────────────────────────────────────────────────────────";
     private static final String DIAGNOSTICS_HEADER = "BENCHMARK DIAGNOSTICS";
+    private static final String GOVERNANCE_HEADER = "EXECUTION GOVERNANCE / TELEMETRY";
     private static final String SHARE_HEADER = "VECTRAS VM BENCHMARK RESULTS";
     private static final String SHARE_HEADER_DIVIDER = "════════════════════════════";
     
@@ -89,7 +90,8 @@ public class BenchmarkActivity extends AppCompatActivity {
     
     // Data
     private VectraBenchmark.BenchmarkResult[] lastResults;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService executor =
+        ExecutionPolicyCenter.executor(ExecutionPolicyCenter.Channel.BENCHMARK);
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     
     @Override
@@ -216,15 +218,17 @@ public class BenchmarkActivity extends AppCompatActivity {
                         @Override
                         public void onComplete(BenchmarkManager.BenchmarkResult benchResult) {
                             mainHandler.post(() -> {
-                                lastBenchmarkResult = benchResult;
-                                lastResults = benchResult.metrics;
+                                BenchmarkManager.BenchmarkResult governedResult =
+                                    benchResult.withGovernanceTelemetry(governedExecutor.snapshot());
+                                lastBenchmarkResult = governedResult;
+                                lastResults = governedResult.metrics;
                                 
                                 // Get device specifications
                                 VectraBenchmark.DeviceSpecification deviceSpec = 
                                     VectraBenchmark.getDeviceSpecification();
                                 
                                 // Update display
-                                updateScoreDisplay(benchResult.metrics, deviceSpec);
+                                updateScoreDisplay(governedResult.metrics, deviceSpec);
                                 layoutProgress.setVisibility(View.GONE);
                                 btnRunBenchmark.setEnabled(true);
                                 btnTuningProfile.setEnabled(true);
@@ -234,8 +238,8 @@ public class BenchmarkActivity extends AppCompatActivity {
                                 String status = benchResult.isValid ? 
                                     getString(R.string.benchmark_complete) + " ✓" : 
                                     getString(R.string.benchmark_complete) + " ⚠";
-                                tvScoreStatus.setText(status);
-                                updateReliabilityViews(benchResult.validation);
+                                tvScoreStatus.setText(buildStatusWithGovernance(status, governedResult.governanceTelemetry));
+                                updateReliabilityViews(governedResult.validation);
                                 
                                 // Show result buttons
                                 btnViewDetails.setVisibility(View.VISIBLE);
@@ -245,9 +249,9 @@ public class BenchmarkActivity extends AppCompatActivity {
                                 cardFusion.setVisibility(View.VISIBLE);
                                 
                                 // Show validation dialog if there are warnings
-                                if (!benchResult.validation.warnings.isEmpty() || 
-                                    !benchResult.validation.errors.isEmpty()) {
-                                    showValidationDialog(benchResult.validation);
+                                if (!governedResult.validation.warnings.isEmpty() || 
+                                    !governedResult.validation.errors.isEmpty()) {
+                                    showValidationDialog(governedResult.validation);
                                 }
                             });
                         }
@@ -267,7 +271,7 @@ public class BenchmarkActivity extends AppCompatActivity {
                                     "Error: " + errorMsg, Toast.LENGTH_LONG).show();
                             });
                         }
-                    }, selectedProfile);
+                    }, selectedProfile, ExecutionPolicyCenter.Channel.BENCHMARK);
                 
             } catch (Exception e) {
                 mainHandler.post(() -> {
@@ -510,6 +514,8 @@ public class BenchmarkActivity extends AppCompatActivity {
             fullReport.append("\n\n");
         }
         
+        appendGovernanceSection(fullReport, lastBenchmarkResult);
+
         // Add benchmark results
         fullReport.append(VectraBenchmark.formatReport(lastResults));
         
@@ -608,6 +614,8 @@ public class BenchmarkActivity extends AppCompatActivity {
                     fullReport.append("\n\n");
                 }
 
+                appendGovernanceSection(fullReport, lastBenchmarkResult);
+
                 // Add detailed benchmark results
                 fullReport.append(VectraBenchmark.formatDetailedReport(lastResults));
 
@@ -679,6 +687,8 @@ public class BenchmarkActivity extends AppCompatActivity {
             shareText.append("\n");
         }
         
+        appendGovernanceSection(shareText, lastBenchmarkResult);
+
         // Add device info
         VectraBenchmark.DeviceSpecification spec = VectraBenchmark.getDeviceSpecification();
         shareText.append("Device: ").append(spec.cpuModel).append("\n");
@@ -698,11 +708,70 @@ public class BenchmarkActivity extends AppCompatActivity {
         startActivity(Intent.createChooser(shareIntent, getString(R.string.share_results)));
     }
     
+    private String buildStatusWithGovernance(String baseStatus,
+                                           ExecutionGovernance.PolicyTelemetry telemetry) {
+        if (telemetry == null) {
+            return baseStatus;
+        }
+        return baseStatus + " • " + telemetry.compactEvidence();
+    }
+
+    private void appendGovernanceSection(StringBuilder output,
+                                         ExecutionGovernance.PolicyTelemetry telemetry,
+                                         boolean includeDescription) {
+        if (telemetry == null) {
+            return;
+        }
+        output.append(GOVERNANCE_HEADER).append("\n");
+        output.append(SECTION_DIVIDER).append("\n");
+        output.append("Profile: ").append(safeValue(telemetry.profileLabel)).append("\n");
+        output.append("Effective SMP: ").append(telemetry.effectiveSmp).append("\n");
+        output.append("Thread Limit: ").append(telemetry.maxThreads).append("\n");
+        output.append("Process Limit: ").append(telemetry.maxProcesses).append("\n");
+        output.append("Queue Depth: ")
+            .append(telemetry.maxObservedQueueDepth)
+            .append("/")
+            .append(telemetry.maxQueueDepth)
+            .append("\n");
+        output.append("Rejection Policy: ").append(safeValue(telemetry.rejectionPolicy)).append("\n");
+        output.append("Rejections: ").append(telemetry.rejectionCount).append("\n");
+        output.append("CallerRuns Activations: ").append(telemetry.callerRunsCount).append("\n");
+        output.append("Tasks Submitted/Completed: ")
+            .append(telemetry.submittedTasks)
+            .append("/")
+            .append(telemetry.completedTasks)
+            .append("\n");
+        output.append("Aggregate Task Runtime: ").append(telemetry.totalTaskRuntimeNs).append(" ns\n");
+        if (includeDescription) {
+            output.append("Evidence: runtime counters captured from the governed executor during live execution.\n");
+        }
+        output.append("\n");
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        executor.shutdown();
     }
+
+    private static void appendGovernanceSection(StringBuilder sb, BenchmarkManager.BenchmarkResult result) {
+        if (sb == null || result == null || result.governance == null) {
+            return;
+        }
+        BenchmarkManager.ExecutionGovernance gov = result.governance;
+        sb.append("EXECUTION GOVERNANCE / POLICY TELEMETRY\n");
+        sb.append(SECTION_DIVIDER).append("\n");
+        sb.append("Policy Profile: ").append(safeValue(gov.profile)).append("\n");
+        sb.append("Effective SMP: ").append(gov.effectiveSmp).append("\n");
+        sb.append("Thread Limits (core/max): ").append(gov.coreThreads).append('/').append(gov.maxThreads).append("\n");
+        sb.append("Process Limit (pid_max): ").append(gov.processLimit).append("\n");
+        sb.append("Observed Running Processes: ").append(gov.runningProcessesObserved).append("\n");
+        sb.append("Queue Capacity: ").append(gov.queueCapacity).append("\n");
+        sb.append("Max Queue Depth Observed: ").append(gov.maxObservedQueueDepth).append("\n");
+        sb.append("Rejected Tasks: ").append(gov.rejectedCount).append("\n");
+        sb.append("CallerRuns Enabled: ").append(gov.callerRunsEnabled ? "yes" : "no").append("\n");
+        sb.append("CallerRuns Activations: ").append(gov.callerRunsCount).append("\n\n");
+    }
+
 
     private static void writeLine(BufferedWriter writer, String line) throws IOException {
         writer.write(line);
