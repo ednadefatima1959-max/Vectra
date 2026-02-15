@@ -172,6 +172,15 @@ public class RafaeliaMvp {
     }
   }
 
+
+  static int nextU16(DeterministicRng rng) {
+    return rng.nextInt(0x10000);
+  }
+
+  static int nextBitIndex(DeterministicRng rng) {
+    return rng.nextInt(16);
+  }
+
   // ========== 4x4 Matrix packing ==========
   // We pack 16 bits in the low 16 bits of a long.
   // Coordinate (x,y) in [0..3]. idx = (y<<2)|x.
@@ -222,6 +231,15 @@ public class RafaeliaMvp {
     if (cpu == disk && cpu != ram) return 1; // ram out
     if (ram == disk && ram != cpu) return 0; // cpu out
     return 3;
+  }
+
+  static int generatePayloadWithOptionalDrop(int payload, double bitDropProbability, DeterministicRng rng) {
+    int bits16 = payload & 0xFFFF;
+    if (rng.nextDouble() < bitDropProbability) {
+      int drop = rng.nextInt(BLOCK_BITS);
+      bits16 &= ~(1 << drop);
+    }
+    return bits16;
   }
 
   // ========== MVP loop ==========
