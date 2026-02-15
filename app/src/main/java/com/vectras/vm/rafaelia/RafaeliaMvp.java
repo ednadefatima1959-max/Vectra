@@ -7,6 +7,8 @@ import java.io.RandomAccessFile;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.Locale;
+import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -44,7 +46,12 @@ public class RafaeliaMvp {
   static final long RHO_SLEEP_MS = 2L;
   static final int IRQ_QUEUE_CAPACITY = 1024;
   static final long IRQ_POLL_TIMEOUT_MS = 1_000L;
+  static final String MODE_BENCHMARK = "benchmark";
+  static final String MODE_FUZZ = "fuzz";
+  static final long BENCHMARK_DEFAULT_SEED = 0x52414641454C4941L; // "RAFAELIA" stable baseline seed.
   private static final ThreadLocal<CRC32C> CRC32C_POOL = ThreadLocal.withInitial(CRC32C::new);
+
+  record RuntimeConfig(File path, String mode, Long providedSeed, long resolvedSeed) {}
 
   // meta layout (u32):
   // [  0.. 7] parity (8 bits)
@@ -207,19 +214,31 @@ public class RafaeliaMvp {
 
   // ========== MVP loop ==========
   public static void main(String[] args) throws Exception {
-    File path = new File(args.length > 0 ? args[0] : "./bitstack.bin");
+    RuntimeConfig config = parseMainConfig(args);
+    File path = config.path();
+
+    final Random radioRandom = new Random(config.resolvedSeed() ^ 0x9E3779B97F4A7C15L);
+    final Random timerRandom = new Random(config.resolvedSeed() ^ 0xBF58476D1CE4E5B9L);
+    final Random dropRandom = new Random(config.resolvedSeed() ^ 0x94D049BB133111EBL);
+
+    System.out.printf(
+        "RafaeliaMvp mode=%s seed=%d providedSeed=%s path=%s%n",
+        config.mode(),
+        config.resolvedSeed(),
+        config.providedSeed() == null ? "<auto>" : config.providedSeed().toString(),
+        path.getAbsolutePath());
 
     IrqBus irq = new IrqBus();
 
     // Simulate “4G IRQ” bursts + timers
     ScheduledExecutorService sch = Executors.newScheduledThreadPool(2);
     sch.scheduleAtFixedRate(
-        () -> irq.fire(EventType.RADIO_4G, RADIO_PRIORITY, (int) (Math.random() * 0xFFFF)),
+        () -> irq.fire(EventType.RADIO_4G, RADIO_PRIORITY, radioRandom.nextInt(0x1_0000)),
         RADIO_INITIAL_DELAY_MS,
         RADIO_PERIOD_MS,
         TimeUnit.MILLISECONDS);
     sch.scheduleAtFixedRate(
-        () -> irq.fire(EventType.TIMER, TIMER_PRIORITY, (int) (System.nanoTime() & 0xFFFF)),
+        () -> irq.fire(EventType.TIMER, TIMER_PRIORITY, timerRandom.nextInt(0x1_0000)),
         TIMER_INITIAL_DELAY_MS,
         TIMER_PERIOD_MS,
         TimeUnit.MILLISECONDS);
@@ -244,8 +263,8 @@ public class RafaeliaMvp {
         int bits16 = ev.payload() & 0xFFFF;
 
         // simulate leak/bit-missing: 2% chance drop one bit
-        if (Math.random() < BIT_DROP_PROBABILITY) {
-          int drop = (int)(Math.random() * 16);
+        if (dropRandom.nextDouble() < BIT_DROP_PROBABILITY) {
+          int drop = dropRandom.nextInt(16);
           bits16 &= ~(1 << drop);
         }
 
@@ -335,6 +354,77 @@ public class RafaeliaMvp {
         sch.shutdownNow();
       }
     }
+  }
+
+  static RuntimeConfig parseMainConfig(String[] args) {
+    String pathRaw = null;
+    String modeRaw = null;
+    Long providedSeed = null;
+
+    for (String rawArg : args) {
+      if (rawArg == null || rawArg.isBlank()) {
+        continue;
+      }
+      String arg = rawArg.trim();
+      if (arg.startsWith("--")) {
+        arg = arg.substring(2);
+      }
+      int eq = arg.indexOf('=');
+      if (eq <= 0) {
+        if (pathRaw == null) {
+          pathRaw = arg;
+        }
+        continue;
+      }
+
+      String key = arg.substring(0, eq).trim().toLowerCase(Locale.ROOT);
+      String value = arg.substring(eq + 1).trim();
+      switch (key) {
+        case "mode" -> modeRaw = value;
+        case "seed" -> providedSeed = parseSeed(value);
+        case "path", "file" -> pathRaw = value;
+        default -> {
+          // unknown args are ignored to keep CLI backward compatible
+        }
+      }
+    }
+
+    String mode = normalizeMode(modeRaw);
+    long resolvedSeed = resolveSeed(mode, providedSeed);
+    File path = new File(pathRaw == null || pathRaw.isBlank() ? "./bitstack.bin" : pathRaw);
+    return new RuntimeConfig(path, mode, providedSeed, resolvedSeed);
+  }
+
+  static String normalizeMode(String modeRaw) {
+    if (modeRaw == null || modeRaw.isBlank()) {
+      return MODE_FUZZ;
+    }
+    String mode = modeRaw.trim().toLowerCase(Locale.ROOT);
+    if (mode.equals("demo")) {
+      return MODE_FUZZ;
+    }
+    if (mode.equals(MODE_BENCHMARK) || mode.equals(MODE_FUZZ)) {
+      return mode;
+    }
+    throw new IllegalArgumentException("Unsupported mode='" + modeRaw + "'. Expected benchmark|fuzz|demo.");
+  }
+
+  static long parseSeed(String value) {
+    String trimmed = value.trim();
+    if (trimmed.startsWith("0x") || trimmed.startsWith("0X")) {
+      return Long.parseUnsignedLong(trimmed.substring(2), 16);
+    }
+    return Long.parseLong(trimmed);
+  }
+
+  static long resolveSeed(String mode, Long providedSeed) {
+    if (providedSeed != null) {
+      return providedSeed;
+    }
+    if (MODE_BENCHMARK.equals(mode)) {
+      return BENCHMARK_DEFAULT_SEED;
+    }
+    return System.nanoTime();
   }
 
   // Simple 64-bit mixer (bitwise heavy) — engine-like core
