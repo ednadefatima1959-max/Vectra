@@ -25,10 +25,7 @@ add_library(vectra_core_accel SHARED
     vectra_core_accel.c)
 
 find_library(log-lib log)
-if(NOT log-lib)
-    message(WARNING "Android log library not found in host configure; proceeding without it")
-    set(log-lib "")
-endif()
+find_package(JNI REQUIRED)
 
 target_compile_options(rmr_core_static PRIVATE -O3 -ffast-math -fvisibility=hidden)
 if (RMR_ENABLE_POLICY_MODULE)
@@ -37,25 +34,13 @@ endif()
 target_compile_options(bitraf_static PRIVATE -O3 -ffast-math -fvisibility=hidden)
 target_compile_options(vectra_core_accel PRIVATE -O3 -ffast-math -fvisibility=hidden)
 
-target_include_directories(rmr_core_static PRIVATE ../../../../ ../../../../engine/rmr/include)
-if (RMR_ENABLE_POLICY_MODULE)
-    target_include_directories(rmr_policy_static PRIVATE ../../../../ ../../../../engine/rmr/include)
-endif()
-target_include_directories(bitraf_static PRIVATE ../../../../ ../../../../engine/rmr/include)
-target_include_directories(vectra_core_accel PRIVATE ../../../../ ../../../../engine/rmr/include)
+target_link_libraries(vectra_core_accel ${log-lib})
 
-target_link_libraries(vectra_core_accel PRIVATE rmr_core_static)
+target_include_directories(vectra_core_accel PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../engine/rmr/include
+    ${JNI_INCLUDE_DIRS})
 
-if (RMR_ENABLE_BITRAF_MODULE)
-    target_link_libraries(vectra_core_accel PRIVATE bitraf_static)
-else()
-    message(FATAL_ERROR "RMR_ENABLE_BITRAF_MODULE=OFF breaks legacy unified symbols (bitraf_hash/bitraf_verify) used by JNI bridge")
-endif()
-
-if (RMR_ENABLE_POLICY_MODULE)
-    target_link_libraries(vectra_core_accel PRIVATE rmr_policy_static)
-endif()
-
-if (log-lib)
-    target_link_libraries(vectra_core_accel PRIVATE ${log-lib})
+if(ANDROID AND DEFINED CMAKE_ANDROID_NDK)
+    target_include_directories(vectra_core_accel PRIVATE
+        ${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/${CMAKE_HOST_SYSTEM_NAME}-x86_64/sysroot/usr/include)
 endif()
