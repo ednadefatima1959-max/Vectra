@@ -5,18 +5,37 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import com.vectras.vm.BuildConfig
+import com.vectras.vm.core.NativeFastPath
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.ArrayDeque
-import java.util.PriorityQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 private const val TAG = "VectraCore"
+private val EMPTY_PAYLOAD = ByteArray(0)
+
+private object VectraLogClock {
+    private val logTick = AtomicLong(0)
+
+    fun nextTick(): Long = logTick.incrementAndGet()
+}
+
+private fun logDebug(message: String, deterministicTick: Long = VectraLogClock.nextTick(), wallClockMs: Long = System.currentTimeMillis()) {
+    Log.d(TAG, "deterministic_tick=$deterministicTick wall_clock_ms=$wallClockMs $message")
+}
+
+private fun logWarn(message: String, deterministicTick: Long = VectraLogClock.nextTick(), wallClockMs: Long = System.currentTimeMillis()) {
+    Log.w(TAG, "deterministic_tick=$deterministicTick wall_clock_ms=$wallClockMs $message")
+}
+
+private fun logError(message: String, throwable: Throwable? = null, deterministicTick: Long = VectraLogClock.nextTick(), wallClockMs: Long = System.currentTimeMillis()) {
+    Log.e(TAG, "deterministic_tick=$deterministicTick wall_clock_ms=$wallClockMs $message", throwable)
+}
 
 /**
  * VectraState: Holds 1024-bit flags (state depth/stack flags).
@@ -259,6 +278,12 @@ data class VectraEvent(
     val wallClockMs: Long = 0L,
     val payload: ByteArray? = null
 ) : Comparable<VectraEvent> {
+    companion object {
+        private val deterministicCounter = AtomicLong(0)
+
+        fun nextDeterministicTick(): Long = deterministicCounter.incrementAndGet()
+    }
+
     enum class EventType {
         TIMER_TICK,
         NETWORK_CHANGE,
@@ -482,11 +507,72 @@ class VectraDataOrchestrator(private val state: VectraState) {
  * Thread-safe event bus with priority handling.
  */
 class VectraEventBus {
-    private val queue = PriorityQueue<VectraEvent>()
+    companion object {
+        private const val EVENT_RING_CAPACITY = 256
+        private const val EVENT_SLOT_COUNT = 256
+        private const val EVENT_PAYLOAD_CAPACITY = 512
+        private const val NATIVE_ARENA_BYTES = EVENT_SLOT_COUNT * EVENT_PAYLOAD_CAPACITY
+        private const val NATIVE_TIMER_STAGING_OFFSET = NATIVE_ARENA_BYTES
+    }
+
+    private val queueRing = IntArray(EVENT_RING_CAPACITY)
+    private val freeSlots = IntArray(EVENT_SLOT_COUNT) { idx -> EVENT_SLOT_COUNT - 1 - idx }
+    private val payloadArena = Array(EVENT_SLOT_COUNT) { ByteArray(EVENT_PAYLOAD_CAPACITY) }
+    private val eventPool = Array(EVENT_SLOT_COUNT) { idx ->
+        VectraEvent(
+            type = VectraEvent.EventType.SYSTEM_EVENT,
+            priority = 0,
+            timestamp = 0L,
+            payload = payloadArena[idx],
+            payloadLength = 0,
+            slotIndex = idx
+        )
+    }
+    private val nativeArenaHandle = NativeFastPath.allocArena(NATIVE_ARENA_BYTES + EVENT_PAYLOAD_CAPACITY)
     private val lock = ReentrantLock()
     private val deterministicTickCounter = AtomicLong(0L)
 
     fun post(event: VectraEvent) {
+        val payload = event.payload
+        postInternal(
+            type = event.type,
+            priority = event.priority,
+            timestamp = event.timestamp,
+            payload = payload,
+            payloadLength = event.payloadLength.takeIf { it > 0 } ?: (payload?.size ?: 0)
+        )
+    }
+
+    fun postTimerTick(nowMs: Long) {
+        val payload = timerPayloadBuffer.get()
+        writeLongLe(payload, 0, nowMs)
+        postInternal(
+            type = VectraEvent.EventType.TIMER_TICK,
+            priority = 1,
+            timestamp = System.nanoTime(),
+            payload = payload,
+            payloadLength = TIMER_PAYLOAD_BYTES
+        )
+    }
+
+    private fun postInternal(type: VectraEvent.EventType, priority: Int, timestamp: Long, payload: ByteArray?, payloadLength: Int) {
+        lock.withLock {
+            if (queueSize >= EVENT_RING_CAPACITY) return
+            val slot = acquireSlotLocked()
+            if (slot < 0) return
+            val pooledEvent = eventPool[slot]
+            pooledEvent.type = event.type
+            pooledEvent.priority = event.priority
+            pooledEvent.timestamp = event.timestamp
+            writePayloadToSlot(slot, event.payload, event.payloadLength)
+
+            queueRing[queueTail] = slot
+            queueTail = (queueTail + 1) and (EVENT_RING_CAPACITY - 1)
+            queueSize++
+        }
+    }
+
+    fun postTimerTick(timestampMillis: Long) {
         lock.withLock {
             val tick = if (event.deterministicTick >= 0L) {
                 while (true) {
@@ -510,21 +596,89 @@ class VectraEventBus {
 
     fun poll(): VectraEvent? {
         lock.withLock {
-            return queue.poll()
+            if (queueSize == 0) return null
+            var bestPos = queueHead
+            var bestSlot = queueRing[queueHead]
+            var cursor = queueHead
+            repeat(queueSize) {
+                val slot = queueRing[cursor]
+                if (eventPool[slot].compareTo(eventPool[bestSlot]) < 0) {
+                    bestSlot = slot
+                    bestPos = cursor
+                }
+                cursor = (cursor + 1) and (EVENT_RING_CAPACITY - 1)
+            }
+
+            var pos = bestPos
+            while (pos != queueTail) {
+                val next = (pos + 1) and (EVENT_RING_CAPACITY - 1)
+                if (next == queueTail) break
+                queueRing[pos] = queueRing[next]
+                pos = next
+            }
+            queueTail = (queueTail - 1) and (EVENT_RING_CAPACITY - 1)
+            queueSize--
+            return eventPool[bestSlot]
+        }
+    }
+
+    fun recycle(event: VectraEvent?) {
+        if (event == null) return
+        lock.withLock {
+            val slot = event.slotIndex
+            if (slot !in 0 until EVENT_SLOT_COUNT) return
+            event.payloadLength = 0
+            releaseSlotLocked(slot)
+        }
+    }
+
+    fun close() {
+        if (nativeArenaHandle > 0) {
+            NativeFastPath.freeArena(nativeArenaHandle)
         }
     }
 
     fun size(): Int {
         lock.withLock {
-            return queue.size
+            return queueSize
         }
     }
 
     fun clear() {
         lock.withLock {
-            queue.clear()
+            queueHead = 0
+            queueTail = 0
+            queueSize = 0
+            freeTop = 0
+            for (idx in 0 until EVENT_SLOT_COUNT) {
+                freeSlots[freeTop++] = EVENT_SLOT_COUNT - 1 - idx
+                eventPool[idx].payloadLength = 0
+            }
         }
     }
+
+    fun close() {
+        clear()
+        if (nativeArenaHandle > 0) {
+            NativeFastPath.freeArena(nativeArenaHandle)
+        }
+        if (mirrorArenaHandle > 0) {
+            NativeFastPath.freeArena(mirrorArenaHandle)
+        }
+    }
+
+    private fun writeLongLe(dst: ByteArray, offset: Int, value: Long) {
+        dst[offset] = value.toByte()
+        dst[offset + 1] = (value ushr 8).toByte()
+        dst[offset + 2] = (value ushr 16).toByte()
+        dst[offset + 3] = (value ushr 24).toByte()
+        dst[offset + 4] = (value ushr 32).toByte()
+        dst[offset + 5] = (value ushr 40).toByte()
+        dst[offset + 6] = (value ushr 48).toByte()
+        dst[offset + 7] = (value ushr 56).toByte()
+    }
+
+    private val timerPayloadBuffer = ThreadLocal.withInitial { ByteArray(TIMER_PAYLOAD_BYTES) }
 }
 
 /**
@@ -543,7 +697,7 @@ class VectraCycle(
     fun start() {
         if (running.getAndSet(true)) return
         cycleThread = Thread {
-            Log.d(TAG, "VectraCycle started")
+            logDebug("VectraCycle started")
             while (running.get()) {
                 try {
                     executeCycle()
@@ -551,10 +705,10 @@ class VectraCycle(
                 } catch (e: InterruptedException) {
                     break
                 } catch (e: Exception) {
-                    Log.e(TAG, "Cycle error", e)
+                    logError("Cycle error", e)
                 }
             }
-            Log.d(TAG, "VectraCycle stopped")
+            logDebug("VectraCycle stopped")
         }.apply {
             name = "VectraCycle"
             isDaemon = true
@@ -578,7 +732,7 @@ class VectraCycle(
     private fun executeCycle() {
         // Phase 1: Input
         val event = eventBus.poll()
-        val inputBytes = event?.payload?.size?.toLong() ?: 0L
+        val inputBytes = event?.payloadLength?.toLong() ?: 0L
         state.stageCounters[0] += inputBytes
         updatePolicy(event)
 
@@ -593,15 +747,16 @@ class VectraCycle(
 
         // Phase 3: Output
         logger?.let {
-            val payload = event?.payload ?: ByteArray(0)
+            val payload = event?.payload ?: EMPTY_PAYLOAD
             val meta = (event?.type?.ordinal ?: 0) or ((event?.priority ?: 0) shl 8)
-            it.append(payload, meta)
-            state.stageCounters[3] += payload.size.toLong()
+            it.append(payload, event?.payloadLength ?: 0, meta)
+            state.stageCounters[3] += (event?.payloadLength ?: 0).toLong()
         }
 
         // Phase 4: Next
         cycleCount++
         state.stageCounters[5] = cycleCount // Track total cycles
+        eventBus.recycle(event)
     }
 
     private fun updatePolicy(event: VectraEvent?) {
@@ -634,8 +789,8 @@ class VectraCycle(
             baseWeight
         }
         
-        if (event.payload != null) {
-            val entropy = CRC32C.update(state.entropyHint, event.payload)
+        if (event.payload != null && event.payloadLength > 0) {
+            val entropy = CRC32C.update(state.entropyHint, event.payload!!, 0, event.payloadLength)
             state.entropyHint = entropy + weight
             state.seed = state.seed xor entropy
             state.stageCounters[1] += weight.toLong()
@@ -697,7 +852,7 @@ class VectraBitStackLog(logFile: File) {
     companion object {
         private const val MAGIC = 0x56454354L // "VECT"
         private const val VERSION = 1
-        private const val RECORD_HEADER_SIZE = 16 // magic(4) + len(4) + meta(4) + crc(4)
+        private const val RECORD_HEADER_SIZE = 32 // magic(4) + len(4) + meta(4) + tick(8) + wall(8) + crc(4) + reserved(4)
         private const val MAX_LOG_SIZE = 10 * 1024 * 1024 // 10 MB
         private const val FLUSH_INTERVAL_MS = 1000L
         private const val FLUSH_RECORDS = 32
@@ -705,6 +860,7 @@ class VectraBitStackLog(logFile: File) {
 
     private val file: RandomAccessFile = RandomAccessFile(logFile, "rw")
     private val lock = ReentrantLock()
+    private val appendHeaderBuffer = ThreadLocal.withInitial { ByteArray(RECORD_HEADER_SIZE) }
     private var recordCount = 0L
     private var recordsSinceFlush = 0
     private var lastFlushAtMs = System.currentTimeMillis()
@@ -717,41 +873,61 @@ class VectraBitStackLog(logFile: File) {
 
     private fun writeHeader() {
         lock.withLock {
-            val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
-            header.putInt(MAGIC.toInt())
-            header.putInt(VERSION)
-            header.putLong(System.currentTimeMillis())
-            file.write(header.array())
+            val header = ByteArray(16)
+            writeIntLE(header, 0, MAGIC.toInt())
+            writeIntLE(header, 4, VERSION)
+            writeLongLE(header, 8, System.currentTimeMillis())
+            file.write(header)
             file.channel.force(true)
         }
     }
 
     /**
-     * Appends a record: [u32 magic, u32 len, u32 meta, u32 crc, payload]
+     * Appends a record: [u32 magic, u32 len, u32 meta, i64 deterministic_tick, i64 wall_clock_ms, u32 crc, u32 reserved, payload]
      */
-    fun append(payload: ByteArray, meta: Int = 0) {
+    fun append(payload: ByteArray, payloadLength: Int = payload.size, meta: Int = 0) {
         lock.withLock {
             if (file.length() >= MAX_LOG_SIZE) {
-                Log.w(TAG, "Log size exceeded, skipping append")
+                logWarn("Log size exceeded, skipping append")
                 return
             }
 
-            val recordHeader = ByteBuffer.allocate(RECORD_HEADER_SIZE).order(ByteOrder.LITTLE_ENDIAN)
-            recordHeader.putInt(MAGIC.toInt())
-            recordHeader.putInt(payload.size)
-            recordHeader.putInt(meta)
-            
-            // Compute CRC incrementally without concatenation
-            var crc = CRC32C.update(0, recordHeader.array(), 0, 12)
-            crc = CRC32C.update(crc, payload)
-            recordHeader.putInt(crc)
+            val len = payloadLength.coerceIn(0, payload.size)
 
-            file.write(recordHeader.array())
-            file.write(payload)
+            val recordHeader = appendHeaderBuffer.get()
+            writeIntLE(recordHeader, 0, MAGIC.toInt())
+            writeIntLE(recordHeader, 4, len)
+            writeIntLE(recordHeader, 8, meta)
+
+            // Compute CRC incrementally without concatenation
+            var crc = CRC32C.update(0, recordHeader, 0, 12)
+            crc = CRC32C.update(crc, payload, 0, len)
+            writeIntLE(recordHeader, 12, crc)
+
+            file.write(recordHeader, 0, RECORD_HEADER_SIZE)
+            file.write(payload, 0, len)
             recordsSinceFlush++
             maybeFlush()
             recordCount++
         }
+    }
+
+    private fun writeIntLE(buffer: ByteArray, offset: Int, value: Int) {
+        buffer[offset] = (value and 0xFF).toByte()
+        buffer[offset + 1] = ((value ushr 8) and 0xFF).toByte()
+        buffer[offset + 2] = ((value ushr 16) and 0xFF).toByte()
+        buffer[offset + 3] = ((value ushr 24) and 0xFF).toByte()
+    }
+
+    private fun writeLongLE(buffer: ByteArray, offset: Int, value: Long) {
+        buffer[offset] = (value and 0xFF).toByte()
+        buffer[offset + 1] = ((value ushr 8) and 0xFF).toByte()
+        buffer[offset + 2] = ((value ushr 16) and 0xFF).toByte()
+        buffer[offset + 3] = ((value ushr 24) and 0xFF).toByte()
+        buffer[offset + 4] = ((value ushr 32) and 0xFF).toByte()
+        buffer[offset + 5] = ((value ushr 40) and 0xFF).toByte()
+        buffer[offset + 6] = ((value ushr 48) and 0xFF).toByte()
+        buffer[offset + 7] = ((value ushr 56) and 0xFF).toByte()
     }
 
     private fun maybeFlush() {
@@ -773,6 +949,15 @@ class VectraBitStackLog(logFile: File) {
         }
     }
 
+    private fun putIntLe(dst: ByteArray, offset: Int, value: Int) {
+        dst[offset] = value.toByte()
+        dst[offset + 1] = (value ushr 8).toByte()
+        dst[offset + 2] = (value ushr 16).toByte()
+        dst[offset + 3] = (value ushr 24).toByte()
+    }
+
+    private val recordHeaderBuffer = ThreadLocal.withInitial { ByteArray(RECORD_HEADER_SIZE) }
+
     fun getRecordCount(): Long = recordCount
     fun getFileSize(): Long = file.length()
 }
@@ -784,6 +969,7 @@ class VectraBitStackLog(logFile: File) {
 object VectraCore {
     private const val DEFAULT_CHUNK_BYTES = 64 * 1024
     private const val DEFAULT_POOL_SIZE = 4
+    private const val VECTRA_DEFAULT_SEED = 0x13579BDF
     private val state = VectraState()
     private val triad = VectraTriad()
     private val mempool = VectraMemPool(DEFAULT_CHUNK_BYTES, DEFAULT_POOL_SIZE)
@@ -793,19 +979,20 @@ object VectraCore {
     private var cycle: VectraCycle? = null
     private var logger: VectraBitStackLog? = null
     private val initialized = AtomicBoolean(false)
+    private val timerTickCounter = java.util.concurrent.atomic.AtomicLong(0L)
 
     private const val PREFS_NAME = "vectra_core"
     private const val PREF_SEED_KEY = "seed"
 
     @JvmStatic
-    fun init(context: Context) {
+    fun init(context: Context, configuredSeed: Int? = null) {
         if (!BuildConfig.VECTRA_CORE_ENABLED) {
-            Log.d(TAG, "VectraCore disabled by BuildConfig")
+            logDebug("VectraCore disabled by BuildConfig")
             return
         }
 
         if (initialized.getAndSet(true)) {
-            Log.d(TAG, "VectraCore already initialized")
+            logDebug("VectraCore already initialized")
             return
         }
 
@@ -867,7 +1054,7 @@ object VectraCore {
      * Validates CRC and parity detection (1-bit-safe ethos).
      */
     private fun selfTest(header: ByteArray) {
-        Log.d(TAG, "Running self-test...")
+        logDebug("Running self-test...")
         
         // Test 1: Header CRC verification
         val scratch = mempool.borrow(header.size)
@@ -911,17 +1098,15 @@ object VectraCore {
         result.putInt(crcMutated)
         result.putInt(syndrome)
         result.putInt(packed)
-        logger?.append(result.array(), 0xFFFF) // meta=0xFFFF for self-test
+        logger?.append(result.array(), meta = 0xFFFF) // meta=0xFFFF for self-test
         
-        Log.d(TAG, "selftest_ok=$allOk headerOk=$headerOk detectsChange=$detectsChange parityOk=$parityOk detectsBitFlip=$detectsBitFlip syndromeOk=$syndromeOk syndrome=$syndrome")
+        logDebug("selftest_ok=$allOk headerOk=$headerOk detectsChange=$detectsChange parityOk=$parityOk detectsBitFlip=$detectsBitFlip syndromeOk=$syndromeOk syndrome=$syndrome")
     }
 
     /**
      * Starts a background thread that posts timer tick events.
      */
     private fun startTimerTicks() {
-        // Pre-allocate buffer to avoid GC pressure (runs every second)
-        val timestampBuffer = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
         Thread {
             while (initialized.get()) {
                 try {
@@ -942,7 +1127,7 @@ object VectraCore {
                 } catch (e: InterruptedException) {
                     break
                 } catch (e: Exception) {
-                    Log.e(TAG, "Timer tick error", e)
+                    logError("Timer tick error", e)
                 }
             }
         }.apply {
@@ -950,6 +1135,27 @@ object VectraCore {
             isDaemon = true
             start()
         }
+    }
+
+
+    private fun resolveSeed(context: Context, configuredSeed: Int?): Int {
+        if (configuredSeed != null) {
+            return configuredSeed and 0x7FFFFFFF
+        }
+
+        val stableFingerprint = buildString {
+            append(context.packageName)
+            append('|').append(BuildConfig.VERSION_NAME)
+            append('|').append(BuildConfig.VERSION_CODE)
+            append('|').append(Build.BOARD)
+            append('|').append(Build.BRAND)
+            append('|').append(Build.DEVICE)
+            append('|').append(Build.HARDWARE)
+            append('|').append(Build.PRODUCT)
+            append('|').append(Build.FINGERPRINT)
+            append('|').append(Build.SUPPORTED_ABIS.joinToString(","))
+        }
+        return CRC32C.update(0, stableFingerprint.toByteArray(Charsets.UTF_8)) and 0x7FFFFFFF
     }
 
     /**
@@ -961,6 +1167,7 @@ object VectraCore {
         cycle?.stop()
         logger?.close()
         eventBus?.clear()
+        eventBus?.close()
         Log.d(TAG, "VectraCore shutdown complete")
     }
 
@@ -969,7 +1176,11 @@ object VectraCore {
      * Noise is data (ρ = information not decoded yet).
      */
     fun psi(payload: ByteArray): Int {
-        val crc = CRC32C.update(state.crc32c, payload)
+        val crc = if (NativeFastPath.isNativeAvailable()) {
+            NativeFastPath.ingest(payload)
+        } else {
+            CRC32C.update(state.crc32c, payload)
+        }
         state.crc32c = crc
         state.stageCounters[0]++
         return crc
@@ -980,36 +1191,51 @@ object VectraCore {
      * Do not treat noise as simple bug - it's information not decoded yet.
      */
     fun rho(noise: ByteArray, eventWeight: Int = 1): Int {
-        val entropy = CRC32C.update(state.entropyHint, noise)
-        state.entropyHint = entropy + eventWeight
-        state.stageCounters[1]++
-        return entropy
+        val entropy = NativeFastPath.coreIngest(noise)
+        if (entropy != Int.MIN_VALUE) {
+            state.entropyHint = entropy + eventWeight
+            state.stageCounters[1]++
+            return entropy
+        }
+        return state.entropyHint
     }
 
     /**
      * DELTA stage: branchless select between two ints using a mask.
      */
     fun deltaBranchless(a: Int, b: Int, mask: Int): Int {
-        val res = (a and mask.inv()) or (b and mask)
-        state.stageCounters[2]++
-        return res
+        val res = NativeFastPath.coreProcess(a, b, mask)
+        if (res != Int.MIN_VALUE) {
+            state.stageCounters[2]++
+            return res
+        }
+        return 0
     }
 
     /**
      * SIGMA stage: combine two ints with xor and rotate mix (linear pass).
      */
     fun sigmaCombine(a: Int, b: Int): Int {
-        val mix = a xor ((b shl 1) or (b ushr 31))
-        state.stageCounters[3]++
-        return mix
+        val mix = NativeFastPath.coreProcess(a, b, 1)
+        if (mix != Int.MIN_VALUE) {
+            state.stageCounters[3]++
+            return mix
+        }
+        return 0
     }
 
     /**
      * OMEGA stage: finalize digest from crc and entropy hints.
      */
     fun omegaFinalize(): Int {
-        state.stageCounters[4]++
-        return state.crc32c xor state.entropyHint
+        val audit = NativeFastPath.coreAudit()
+        if (audit != null && audit.size >= 2) {
+            state.stageCounters[4]++
+            state.crc32c = audit[0].toInt()
+            state.entropyHint = audit[1].toInt()
+            return state.crc32c xor state.entropyHint
+        }
+        return 0
     }
 
     /**
@@ -1043,7 +1269,21 @@ object VectraCore {
         m10: Long,
         m11: Long
     ): VectraFlowSnapshot {
-        return flowOrchestrator.orchestrate(
+        if (!NativeFastPath.isNativeAvailable()) {
+            return flowOrchestrator.orchestrate(
+                cpuCycles,
+                storageReadBytes,
+                storageWriteBytes,
+                inputBytes,
+                outputBytes,
+                m00,
+                m01,
+                m10,
+                m11
+            )
+        }
+
+        val native = NativeFastPath.processRoute(
             cpuCycles,
             storageReadBytes,
             storageWriteBytes,
@@ -1053,6 +1293,19 @@ object VectraCore {
             m01,
             m10,
             m11
+        )
+        val route = when {
+            native[0] >= native[1] && native[0] >= native[2] -> VectraFlowRoute.CPU_HEAVY
+            native[1] >= native[2] -> VectraFlowRoute.STORAGE_HEAVY
+            else -> VectraFlowRoute.IO_HEAVY
+        }
+        return VectraFlowSnapshot(
+            orchestrationTag = native[4],
+            route = route,
+            cpuPressure = native[0].toInt(),
+            storagePressure = native[1].toInt(),
+            ioPressure = native[2].toInt(),
+            matrixDeterminant = native[3]
         )
     }
 
