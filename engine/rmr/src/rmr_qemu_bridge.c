@@ -97,14 +97,10 @@ int RmR_QemuPlan_BuildArgs(const RmR_QemuPlan *plan, char *out, size_t out_len) 
   const char *cache_mode = plan->use_direct_io ? "none" : "writeback";
   const char *aio_mode = plan->use_direct_io ? "io_uring" : "threads";
   const char *drive_if = plan->use_virtio ? "virtio" : "ide";
-  const char *net_device = plan->use_virtio ? "virtio-net-pci" : "e1000";
-
-  if (!plan->use_virtio && plan->arch == RMR_GUEST_ARCH_ARM64) {
-    net_device = "virtio-net-device";
-  }
+  const char *nic_device = plan->use_virtio ? "virtio-net-pci" : "e1000";
 
   if (!plan->use_virtio && plan->arch == RMR_GUEST_ARCH_PPC) {
-    net_device = "rtl8139";
+    nic_device = "rtl8139";
   }
 
   int n = snprintf(out, out_len,
@@ -117,11 +113,11 @@ int RmR_QemuPlan_BuildArgs(const RmR_QemuPlan *plan, char *out, size_t out_len) 
                    drive_if,
                    cache_mode,
                    aio_mode,
-                   net_device);
+                   nic_device);
   if (n < 0 || (size_t)n >= out_len) return -2;
 
   size_t used = (size_t)n;
-  if (plan->use_iothread && plan->use_virtio) {
+  if (plan->use_virtio && plan->use_iothread) {
     n = snprintf(out + used, out_len - used, " -object iothread,id=ioth0 -device virtio-scsi-pci,id=scsi0,iothread=ioth0");
     if (n < 0 || (size_t)n >= (out_len - used)) return -2;
     used += (size_t)n;

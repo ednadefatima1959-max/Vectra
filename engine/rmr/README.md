@@ -60,14 +60,20 @@ Recursos:
 - coerência de plano/preset: autotune para `RMR_GUEST_ARCH_PPC` força preset de compatibilidade e desativa caminhos `virtio/iothread` no comando final.
 - parser low-level de telemetria QMP (`status`, `query-cpus-fast`) sem dependências externas.
 
+### Lógica condicional de dispositivos (`use_virtio`)
 
-## Interop C/ASM (diretório dedicado)
-- Header: `include/rmr_casm_bridge.h`
-- Fonte C: `src/rmr_casm_bridge.c`
-- ASM x86_64: `interop/rmr_casm_x86_64.S`
-- Selftest: `build/demo/rmr_casm_bridge_selftest`
+- `use_virtio=1`:
+  - disco: `-drive if=virtio,cache=...,aio=...`
+  - NIC: `-device virtio-net-pci,netdev=n0`
+  - `iothread` + `virtio-scsi-pci` só é anexado quando `use_iothread=1`
+- `use_virtio=0` (fallback explícito):
+  - disco: `-drive if=ide,cache=...,aio=...`
+  - NIC padrão: `-device e1000,netdev=n0`
+  - para preset/autotune de `RMR_GUEST_ARCH_PPC`: NIC compatível `-device rtl8139,netdev=n0`
 
-Recursos:
-- união determinística C/ASM com fallback automático para compatibilidade de arquitetura.
-- checksum `xor-fold32` para trilha de interoperabilidade e validação cruzada C↔ASM.
-- relatório de execução (`used_asm`, bytes processados e checksum final).
+### Coerência do autotune com a linha QEMU
+
+- `RmR_QemuPlan_Autotune(..., RMR_GUEST_ARCH_PPC, ...)` força:
+  - `preset=RMR_QEMU_PRESET_COMPATIBILITY`
+  - `use_virtio=0`
+- com isso, o builder produz linha de comando alinhada ao plano para PPC (sem `virtio` e com fallback de disco/NIC compatíveis).
