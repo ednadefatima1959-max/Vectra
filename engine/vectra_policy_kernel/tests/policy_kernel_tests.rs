@@ -159,7 +159,7 @@ fn canonize_produces_stable_forms_per_operation() {
             op: Op::TrimWs,
             args: vec!["abc".to_string()],
             anchor: None,
-            canon: "trim_ws|3:abc|anchor=none".to_string(),
+            canon: "trim_ws|abc|-".to_string(),
         }
     );
 
@@ -170,7 +170,7 @@ fn canonize_produces_stable_forms_per_operation() {
             op: Op::Len,
             args: vec!["  abc  ".to_string()],
             anchor: None,
-            canon: "len|7:  abc  |anchor=none".to_string(),
+            canon: "len|  abc  |-".to_string(),
         }
     );
 
@@ -190,7 +190,7 @@ fn canonize_produces_stable_forms_per_operation() {
             op: Op::ReplaceChar,
             args: vec!["aba".to_string(), "a".to_string(), "x".to_string()],
             anchor: Some(anchor),
-            canon: "replace_char|3:aba|1:a|1:x|anchor=2:15:3".to_string(),
+            canon: "replace_char|aba\u{1f}a\u{1f}x|2:15:3".to_string(),
         }
     );
 }
@@ -236,7 +236,7 @@ fn exec_bucket_executes_once_and_reuses_output() {
         op: Op::AnchorMark,
         args: vec!["anchor-1".to_string()],
         anchor: Some(anchor),
-        canon: "anchor|8:anchor-1|anchor=7:99:1".to_string(),
+        canon: "anchor|anchor-1|7:99:1".to_string(),
     };
     let bucket = vec![
         Event {
