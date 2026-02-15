@@ -430,6 +430,23 @@ public final class HdCacheMvp {
             }
         }
 
+
+        /**
+         * Removes an item from cache if present.
+         */
+        public byte[] remove(EventKey k) {
+            lock.lock();
+            try {
+                byte[] v = items.remove(k);
+                if (v != null) {
+                    used -= v.length;
+                }
+                return v;
+            } finally {
+                lock.unlock();
+            }
+        }
+
         /**
          * Removes and returns the oldest item.
          */
@@ -619,6 +636,12 @@ public final class HdCacheMvp {
      * Main engine: event ingest -> store -> caches -> process -> TTL/retry/drop.
      */
     public static final class Engine implements Closeable {
+        private static final class PermanentProcessingException extends Exception {
+            PermanentProcessingException(String message) {
+                super(message);
+            }
+        }
+
         private final BlockStore store;
         private final L123Cache cache;
         private final HarmonicScheduler scheduler;
@@ -781,21 +804,18 @@ public final class HdCacheMvp {
 
             try {
                 byte[] payload = fetchPayload(k);
-
-                // Lightweight placeholder: simple XOR fold (actual processing TBD)
-                int checksum = 0;
-                for (byte b : payload) {
-                    checksum ^= (b & 0xFF);
+                boolean processed = processRafaeliaPayload(m, payload);
+                if (!processed) {
+                    throw new IOException("Rafaelia payload processing did not confirm success");
                 }
-                // Use checksum to prevent optimization
-                if (checksum < 0) {
-                    throw new IllegalStateException("Unexpected negative checksum");
-                }
-
                 m.setStatus(EventStatus.DONE);
                 store.writeIndex(m);
 
-            } catch (Exception e) {
+            } catch (PermanentProcessingException e) {
+                m.setStatus(EventStatus.DROPPED);
+                store.writeIndex(m);
+                Log.w(TAG, "Permanent processing error for " + k + ": " + e.getMessage());
+            } catch (IOException e) {
                 // Retry path
                 if (m.getRetriesLeft() > 0) {
                     m.setRetriesLeft(m.getRetriesLeft() - 1);
@@ -820,6 +840,43 @@ public final class HdCacheMvp {
                     store.writeIndex(m);
                 }
             }
+        }
+
+        /**
+         * Deterministic/idempotent Rafaelia payload processing + validation.
+         */
+        private boolean processRafaeliaPayload(EventMeta m, byte[] payload)
+                throws PermanentProcessingException {
+            if (payload == null) {
+                throw new PermanentProcessingException("Null payload");
+            }
+            if (payload.length != m.getPayloadLen()) {
+                throw new PermanentProcessingException(
+                    "Payload length mismatch: " + payload.length + " != " + m.getPayloadLen());
+            }
+
+            String payloadHash = bytesToHex(sha256(payload));
+            if (!payloadHash.equals(m.getPayloadHash())) {
+                throw new PermanentProcessingException("Payload hash mismatch");
+            }
+
+            long receiptA = computeProcessingReceipt(payload);
+            long receiptB = computeProcessingReceipt(payload);
+            if (receiptA != receiptB) {
+                throw new PermanentProcessingException("Non-deterministic processing receipt");
+            }
+            return true;
+        }
+
+        private long computeProcessingReceipt(byte[] payload) {
+            long acc = 0xCBF29CE484222325L;
+            for (int i = 0; i < payload.length; i++) {
+                long v = payload[i] & 0xFFL;
+                acc ^= (v + ((long) i << 8));
+                acc *= 0x100000001B3L;
+                acc ^= (acc >>> 33);
+            }
+            return acc;
         }
 
         /**
