@@ -56,3 +56,21 @@ Recursos:
 - autotuning determinístico de preset (balanced/performance/compatibility) com base em `RmR_HW_Detect`.
 - builder de argumentos QEMU para CPU/Memória/IO (`-smp`, `-drive cache/aio`, `iothread`, `virtio`).
 - parser low-level de telemetria QMP (`status`, `query-cpus-fast`) sem dependências externas.
+
+### Lógica condicional de dispositivos (`use_virtio`)
+
+- `use_virtio=1`:
+  - disco: `-drive if=virtio,cache=...,aio=...`
+  - NIC: `-device virtio-net-pci,netdev=n0`
+  - `iothread` + `virtio-scsi-pci` só é anexado quando `use_iothread=1`
+- `use_virtio=0` (fallback explícito):
+  - disco: `-drive if=ide,cache=...,aio=...`
+  - NIC padrão: `-device e1000,netdev=n0`
+  - para preset/autotune de `RMR_GUEST_ARCH_PPC`: NIC compatível `-device rtl8139,netdev=n0`
+
+### Coerência do autotune com a linha QEMU
+
+- `RmR_QemuPlan_Autotune(..., RMR_GUEST_ARCH_PPC, ...)` força:
+  - `preset=RMR_QEMU_PRESET_COMPATIBILITY`
+  - `use_virtio=0`
+- com isso, o builder produz linha de comando alinhada ao plano para PPC (sem `virtio` e com fallback de disco/NIC compatíveis).
