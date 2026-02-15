@@ -1,6 +1,7 @@
 package com.vectras.vm.main.romstore;
 
 import android.os.Bundle;
+import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -19,6 +20,7 @@ import com.vectras.vm.AppConfig;
 import com.vectras.vm.network.RequestNetwork;
 import com.vectras.vm.network.RequestNetworkController;
 import com.vectras.vm.databinding.FragmentHomeRomStoreBinding;
+import com.vectras.vm.main.MainUiStateViewModel;
 import com.vectras.vm.main.core.SharedData;
 
 import java.lang.reflect.Type;
@@ -33,10 +35,11 @@ public class RomStoreFragment extends Fragment {
     private RequestNetwork.RequestListener _net_request_listener;
     private String contentJSON = "[]";
     HomeRomStoreViewModel homeRomStoreViewModel;
+    MainUiStateViewModel mainUiStateViewModel;
     RomStoreHomeAdpater mAdapter;
     List<DataRoms> data = new ArrayList<>();
 
-    public static RomStoreCallToHomeListener romStoreCallToHomeListener;
+    private RomStoreCallToHomeListener romStoreCallToHomeListener;
     public interface RomStoreCallToHomeListener {
         void updateSearchStatus(boolean isReady);
     }
@@ -48,6 +51,20 @@ public class RomStoreFragment extends Fragment {
         setReturnTransition(new MaterialFadeThrough());
         setExitTransition(new MaterialFadeThrough());
         setReenterTransition(new MaterialFadeThrough());
+    }
+
+    @Override
+    public void onAttach(@NonNull Context context) {
+        super.onAttach(context);
+        if (context instanceof RomStoreCallToHomeListener) {
+            romStoreCallToHomeListener = (RomStoreCallToHomeListener) context;
+        }
+    }
+
+    @Override
+    public void onDetach() {
+        super.onDetach();
+        romStoreCallToHomeListener = null;
     }
 
     @Override
@@ -66,6 +83,7 @@ public class RomStoreFragment extends Fragment {
         binding.rvRomlist.setLayoutManager(new LinearLayoutManager(getContext(), LinearLayoutManager.VERTICAL, false));
 
         homeRomStoreViewModel = new ViewModelProvider(requireActivity()).get(HomeRomStoreViewModel.class);
+        mainUiStateViewModel = new ViewModelProvider(requireActivity()).get(MainUiStateViewModel.class);
         homeRomStoreViewModel.getRomsList().observe(getViewLifecycleOwner(), roms -> {
             if (roms == null || roms.isEmpty()) {
                 loadFromServer();
@@ -79,7 +97,12 @@ public class RomStoreFragment extends Fragment {
     }
 
     private void loadFromServer() {
-        romStoreCallToHomeListener.updateSearchStatus(false);
+        if (mainUiStateViewModel != null) {
+            mainUiStateViewModel.setSearchReady(false);
+        }
+        if (romStoreCallToHomeListener != null) {
+            romStoreCallToHomeListener.updateSearchStatus(false);
+        }
 
         net = new RequestNetwork(requireActivity());
         _net_request_listener = new RequestNetwork.RequestListener() {
@@ -123,6 +146,11 @@ public class RomStoreFragment extends Fragment {
         data.addAll(dataRoms);
         mAdapter.notifyDataSetChanged();
         SharedData.dataRomStore.addAll(dataRoms);
-        romStoreCallToHomeListener.updateSearchStatus(true);
+        if (mainUiStateViewModel != null) {
+            mainUiStateViewModel.setSearchReady(true);
+        }
+        if (romStoreCallToHomeListener != null) {
+            romStoreCallToHomeListener.updateSearchStatus(true);
+        }
     }
 }

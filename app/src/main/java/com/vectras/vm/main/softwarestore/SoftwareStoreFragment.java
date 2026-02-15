@@ -1,6 +1,7 @@
 package com.vectras.vm.main.softwarestore;
 
 import android.os.Bundle;
+import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -19,7 +20,7 @@ import com.vectras.vm.AppConfig;
 import com.vectras.vm.main.romstore.DataRoms;
 import com.vectras.vm.databinding.FragmentHomeSoftwareStoreBinding;
 import com.vectras.vm.main.core.SharedData;
-import com.vectras.vm.main.romstore.RomStoreFragment;
+import com.vectras.vm.main.MainUiStateViewModel;
 import com.vectras.vm.network.RequestNetwork;
 import com.vectras.vm.network.RequestNetworkController;
 
@@ -35,10 +36,11 @@ public class SoftwareStoreFragment extends Fragment {
     private RequestNetwork.RequestListener _net_request_listener;
     private String contentJSON = "[]";
     SoftwareStoreViewModel homeSoftwareStoreViewModel;
+    MainUiStateViewModel mainUiStateViewModel;
     SoftwareStoreHomeAdapter mAdapter;
     List<DataRoms> data = new ArrayList<>();
 
-    public static RomStoreFragment.RomStoreCallToHomeListener softwareStoreCallToHomeListener;
+    private SoftwareStoreCallToHomeListener softwareStoreCallToHomeListener;
     public interface SoftwareStoreCallToHomeListener {
         void updateSearchStatus(boolean isReady);
     }
@@ -50,6 +52,21 @@ public class SoftwareStoreFragment extends Fragment {
         setReturnTransition(new MaterialFadeThrough());
         setExitTransition(new MaterialFadeThrough());
         setReenterTransition(new MaterialFadeThrough());
+    }
+
+
+    @Override
+    public void onAttach(@NonNull Context context) {
+        super.onAttach(context);
+        if (context instanceof SoftwareStoreCallToHomeListener) {
+            softwareStoreCallToHomeListener = (SoftwareStoreCallToHomeListener) context;
+        }
+    }
+
+    @Override
+    public void onDetach() {
+        super.onDetach();
+        softwareStoreCallToHomeListener = null;
     }
 
     @Override
@@ -68,6 +85,7 @@ public class SoftwareStoreFragment extends Fragment {
         binding.rvSoftwarelist.setLayoutManager(new LinearLayoutManager(getContext(), LinearLayoutManager.VERTICAL, false));
 
         homeSoftwareStoreViewModel = new ViewModelProvider(requireActivity()).get(SoftwareStoreViewModel.class);
+        mainUiStateViewModel = new ViewModelProvider(requireActivity()).get(MainUiStateViewModel.class);
         homeSoftwareStoreViewModel.getSoftwareList().observe(getViewLifecycleOwner(), roms -> {
             if (roms == null || roms.isEmpty()) {
                 loadFromServer();
@@ -81,7 +99,12 @@ public class SoftwareStoreFragment extends Fragment {
     }
 
     private void loadFromServer() {
-        softwareStoreCallToHomeListener.updateSearchStatus(false);
+        if (mainUiStateViewModel != null) {
+            mainUiStateViewModel.setSearchReady(false);
+        }
+        if (softwareStoreCallToHomeListener != null) {
+            softwareStoreCallToHomeListener.updateSearchStatus(false);
+        }
 
         net = new RequestNetwork(requireActivity());
         _net_request_listener = new RequestNetwork.RequestListener() {
@@ -125,6 +148,11 @@ public class SoftwareStoreFragment extends Fragment {
         data.addAll(dataSoftware);
         mAdapter.notifyDataSetChanged();
         SharedData.dataSoftwareStore.addAll(dataSoftware);
-        softwareStoreCallToHomeListener.updateSearchStatus(true);
+        if (mainUiStateViewModel != null) {
+            mainUiStateViewModel.setSearchReady(true);
+        }
+        if (softwareStoreCallToHomeListener != null) {
+            softwareStoreCallToHomeListener.updateSearchStatus(true);
+        }
     }
 }

@@ -28,6 +28,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.core.view.GravityCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.google.android.material.behavior.HideViewOnScrollBehavior;
@@ -101,6 +102,7 @@ public class MainActivity extends AppCompatActivity implements RomStoreFragment.
     private RomStoreHomeAdapterSearch adapterRomStoreSearch;
     private SoftwareStoreHomeAdapterSearch adapterSoftwareStoreSearch;
     private final List<DataRoms> dataRomStoreSearch = new ArrayList<>();
+    private MainUiStateViewModel mainUiStateViewModel;
 
     public static CallbackInterface.HomeCallToVmsListener homeCallToVmsListener;
 
@@ -110,6 +112,9 @@ public class MainActivity extends AppCompatActivity implements RomStoreFragment.
 
     @Override
     public void updateSearchStatus(boolean isReady) {
+        if (mainUiStateViewModel != null) {
+            mainUiStateViewModel.setSearchReady(isReady);
+        }
         bindingContent.searchbar.setEnabled(isReady);
     }
 
@@ -126,14 +131,19 @@ public class MainActivity extends AppCompatActivity implements RomStoreFragment.
         StrictMode.setThreadPolicy(policy);
 
         VmsFragment.vmsCallToHomeListener = this;
-        RomStoreFragment.romStoreCallToHomeListener = this;
-        SoftwareStoreFragment.softwareStoreCallToHomeListener = this;
 
 //        EdgeToEdge.enable(this);
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         bindingContent = binding.maincontent;
         setContentView(binding.getRoot());
         isActivate = true;
+
+        mainUiStateViewModel = new ViewModelProvider(this).get(MainUiStateViewModel.class);
+        mainUiStateViewModel.getSearchReady().observe(this, isReady -> {
+            if (isReady != null) {
+                bindingContent.searchbar.setEnabled(isReady);
+            }
+        });
 
 //        UIUtils.setOnApplyWindowInsetsListenerTop(bindingContent.main);
 //        UIUtils.setOnApplyWindowInsetsListenerLeftOnly(binding.navView);
