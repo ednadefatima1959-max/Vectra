@@ -54,6 +54,21 @@ Cada documento técnico deve conter, quando aplicável:
 
 ---
 
+## 8) Metadados Mínimos para Novos Diagramas ASCII
+
+Todo novo diagrama ASCII adicionado em `docs/assets/` deve ter metadados mínimos no manifesto único (`docs/assets/MANIFEST.md`) antes de ser referenciado em índices ou documentação:
+
+- `file_name` (nome exato do arquivo versionado)
+- `source_url` (URL de origem rastreável)
+- `capture_date` (data de captura/importação no formato `YYYY-MM-DD`)
+- `sha256` (checksum SHA-256 do arquivo)
+
+Regras adicionais:
+- Entradas marcadas como “Provided via chat prompt” **não** são consideradas concluídas sem vínculo rastreável (issue, PR ou artefato versionado com link estável).
+- `docs/IMAGES_INDEX.md` deve referenciar apenas itens com metadados completos no manifesto.
+
+---
+
 ## Template Rápido / Quick Template
 
 ```markdown
@@ -78,6 +93,6 @@ Cada documento técnico deve conter, quando aplicável:
 
 ---
 
-**Última atualização / Last updated**: 2026-02
+**Última atualização / Last updated**: 2026-02-15
 
 © 2024-2026 Vectras VM Development Team — Licensed under GPL-2.0.
