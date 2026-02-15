@@ -41,7 +41,7 @@ Cada diretório tem:
 - Nomenclatura alinhada ao padrão (`README.md` + `FILES_MAP.md`) usado em `engine/`, `tools/` e `docs/`.
 
 ## Documentos técnicos especializados
-- Arquitetura: `docs/ARCHITECTURE.md`
+- Arquitetura: `docs/ARCHITECTURE.md`, `docs/RAFAELIA_COHESION_ENTERPRISE_STACK.md`
 - Operação: `docs/OPERATIONS.md`
 - Performance: `docs/PERFORMANCE_INTEGRITY.md`, `docs/BENCHMARKS.md`
 - Conformidade: `docs/LEGAL_AND_LICENSES.md`, `docs/IP_MAP.md`, `THIRD_PARTY_NOTICES.md`

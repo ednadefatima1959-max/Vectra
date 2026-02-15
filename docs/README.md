@@ -13,7 +13,7 @@ Camada técnica central de documentação do Vectras VM Android.
 - [`../DOC_INDEX.md`](../DOC_INDEX.md)
 
 ## Eixos técnicos especializados
-- Arquitetura: `ARCHITECTURE.md`, `API.md`
+- Arquitetura: `ARCHITECTURE.md`, `API.md`, `RAFAELIA_COHESION_ENTERPRISE_STACK.md`
 - Operação e benchmark: `OPERATIONS.md`, `BENCHMARKS.md`, `BENCHMARK_MANAGER.md`
 - Build e ambiente: `BUILD_ENV_ALIGNMENT.md`
 - Qualidade e conformidade: `SECURITY.md`, `LEGAL_AND_LICENSES.md`, `SOURCE_TRACEABILITY_MATRIX.md`, `IP_MAP.md`

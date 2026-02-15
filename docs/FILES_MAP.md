@@ -112,6 +112,11 @@ Mapa arquivo-a-arquivo em três linhas por item: papel, ligação e comando de i
 - **Liga com**: ver [`docs/README.md`](README.md) e [`docs/THREE_LAYER_ANALYSIS.md`](../docs/THREE_LAYER_ANALYSIS.md) para contexto de camadas.
 - **Inspeção**: `file "docs/README.md"` e, quando texto, `sed -n "1,80p" "docs/README.md"`.
 
+## `docs/RAFAELIA_COHESION_ENTERPRISE_STACK.md`
+- **Papel**: documentação textual e/ou especificação técnica.
+- **Liga com**: ver [`docs/README.md`](README.md) e [`docs/THREE_LAYER_ANALYSIS.md`](../docs/THREE_LAYER_ANALYSIS.md) para contexto de camadas.
+- **Inspeção**: `file "docs/RAFAELIA_COHESION_ENTERPRISE_STACK.md"` e, quando texto, `sed -n "1,80p" "docs/RAFAELIA_COHESION_ENTERPRISE_STACK.md"`.
+
 ## `docs/REPO_XRAY.md`
 - **Papel**: documentação textual e/ou especificação técnica.
 - **Liga com**: ver [`docs/README.md`](README.md) e [`docs/THREE_LAYER_ANALYSIS.md`](../docs/THREE_LAYER_ANALYSIS.md) para contexto de camadas.
