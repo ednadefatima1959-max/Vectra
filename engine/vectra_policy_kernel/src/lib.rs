@@ -111,6 +111,7 @@ fn build_canon(op_code: &str, canonical_args: &[String], anchor: Option<AnchorAd
 
 pub fn canonize(op: Op, args: &[String], anchor: Option<AnchorAddr>) -> Key {
     let plugin = resolve_op(op);
+    let op_code = plugin.op_code();
     let canonical_args = plugin.canonize(args);
     let canon = build_canon(plugin.op_code(), &canonical_args, anchor);
     Key {
@@ -137,9 +138,10 @@ pub fn commit_tick(tick: u64, events: &[Event]) -> Vec<(u64, Output)> {
         });
     }
     ordered.sort_by(|(a_key, _), (b_key, _)| {
-        resolve_op(a_key.op)
-            .op_code()
-            .cmp(resolve_op(b_key.op).op_code())
+        a_key
+            .canon
+            .cmp(&b_key.canon)
+            .then_with(|| a_key.anchor.cmp(&b_key.anchor))
             .then_with(|| a_key.args.cmp(&b_key.args))
             .then_with(|| a_key.op.cmp(&b_key.op))
             .then_with(|| a_key.anchor.cmp(&b_key.anchor))
@@ -173,6 +175,14 @@ pub fn exec_bucket(key: &Key, bucket: &[Event]) -> Vec<(u64, Output)> {
 }
 
 fn execute_key_once(key: &Key) -> Output {
+    if key.op == Op::AnchorMark {
+        return Output::Anchor(key.anchor.unwrap_or(AnchorAddr {
+            dev: 0,
+            block: 0,
+            page: 0,
+        }));
+    }
+
     let plugin = resolve_op(key.op);
     plugin.execute(&key.args)
 }
@@ -468,7 +478,7 @@ impl PolicyKernel {
                 self.focused = Some(target.clone());
             }
             Output::Anchor(anchor) => {
-                self.anchors.push(anchor.clone());
+                self.anchors.push(*anchor);
             }
             Output::Text(_) | Output::Number(_) => {}
         }
