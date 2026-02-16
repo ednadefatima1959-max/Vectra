@@ -19,6 +19,7 @@ import com.vectras.vm.core.TermuxX11;
 import com.vectras.vm.utils.DeviceUtils;
 import com.vectras.vm.utils.DialogUtils;
 import com.vectras.vm.utils.FileUtils;
+import com.vectras.vm.utils.LibraryChecker;
 import com.vectras.vm.utils.PackageUtils;
 import com.vectras.vm.x11.X11Activity;
 import com.vectras.vterm.Terminal;
@@ -48,18 +49,6 @@ public class DisplaySystem {
                 !activity.isFinishing() &&
                 MainVNCActivity.started)
             activity.startActivity(new Intent(activity, MainVNCActivity.class));
-    }
-
-    private static String resolveInstallCommand(String packageName, Context context) {
-        String probe = Terminal.executeShellCommandWithResult("command -v apk >/dev/null 2>&1 && echo apk || (command -v pkg >/dev/null 2>&1 && echo pkg || (command -v apt-get >/dev/null 2>&1 && echo apt))", context);
-        String normalized = probe == null ? "" : probe.trim().toLowerCase();
-        if (normalized.contains("pkg")) {
-            return "pkg install -y " + packageName;
-        }
-        if (normalized.contains("apt")) {
-            return "apt-get install -y " + packageName;
-        }
-        return "apk add " + packageName;
     }
 
     public static void launchX11(Context context, boolean isKill) {
@@ -97,7 +86,7 @@ public class DisplaySystem {
                         R.drawable.desktop_24px,
                         true,
                         () -> {
-                            String installCommand = resolveInstallCommand(necessaryPackage, context);
+                            String installCommand = LibraryChecker.buildInstallCommand(context, necessaryPackage);
                             new Terminal(context).executeShellCommand(installCommand, true, true, context.getString(R.string.just_a_moment), context);
                         },
                         null,

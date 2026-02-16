@@ -44,6 +44,7 @@ import com.vectras.vm.utils.DeviceUtils;
 import com.vectras.vm.utils.DialogUtils;
 import com.vectras.vm.utils.FileUtils;
 import com.vectras.vm.utils.JSONUtils;
+import com.vectras.vm.utils.LibraryChecker;
 import com.vectras.vm.utils.ListUtils;
 import com.vectras.vm.utils.PermissionUtils;
 import com.vectras.vm.utils.TarUtils;
@@ -473,14 +474,17 @@ public class SetupWizard2Activity extends AppCompatActivity {
                     MainSettingsManager.setVncExternalPassword(this, vncPassword);
                 }
                 String escapedVncPassword = vncPassword.replace("'", "'\\''");
+                LibraryChecker.PackageManagerType managerType = LibraryChecker.detectPackageManagerType(this);
+                String requiredPackages = resolveRequiredPackages(managerType);
+                String updateCommand = resolveUpdateCommand(managerType);
+                String installCommand = LibraryChecker.buildInstallCommand(managerType, requiredPackages);
 
                 String cmd = selectedMirrorCommand + ";" +
                         " set -e;" +
                         " echo \"Starting setup...\";" +
-                        " apk update;" +
+                        " " + updateCommand + ";" +
                         " echo \"Installing packages...\";" +
-                        " apk add " + (DeviceUtils.is64bit() ? AppConfig.neededPkgs()
-                        : AppConfig.neededPkgs32bit()) + ";" +
+                        " " + installCommand + ";" +
                         " echo \"Downloading Qemu...\";";
 
                 if (isCustomSetupMode) {
@@ -508,6 +512,33 @@ public class SetupWizard2Activity extends AppCompatActivity {
                 executeShellCommand(cmd);
             });
         }).start();
+    }
+
+    private String resolveRequiredPackages(LibraryChecker.PackageManagerType managerType) {
+        switch (managerType) {
+            case APK:
+                return DeviceUtils.is64bit() ? AppConfig.neededPkgsAlpine() : AppConfig.neededPkgs32bitAlpine();
+            case APT:
+                return DeviceUtils.is64bit() ? AppConfig.neededPkgsDebianUbuntu() : AppConfig.neededPkgs32bitDebianUbuntu();
+            case PKG:
+                return DeviceUtils.is64bit() ? AppConfig.neededPkgsTermux() : AppConfig.neededPkgs32bitTermux();
+            case UNKNOWN:
+            default:
+                return DeviceUtils.is64bit() ? AppConfig.neededPkgsAlpine() : AppConfig.neededPkgs32bitAlpine();
+        }
+    }
+
+    private String resolveUpdateCommand(LibraryChecker.PackageManagerType managerType) {
+        switch (managerType) {
+            case PKG:
+                return "pkg update -y";
+            case APT:
+                return "apt-get update";
+            case APK:
+            case UNKNOWN:
+            default:
+                return "apk update";
+        }
     }
 
     private final ActivityResultLauncher<String> bootstrapFilePicker =

@@ -15,7 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class LibraryChecker {
-    private enum PackageManagerType { APK, PKG, APT, UNKNOWN }
+    public enum PackageManagerType { APK, PKG, APT, UNKNOWN }
 
     private final Context context;
 
@@ -33,7 +33,7 @@ public class LibraryChecker {
             // Split the installed packages output into an array and convert to a set for fast lookup
             Set<String> installedPackages = new HashSet<>();
             for (String installedPackage : output.split("\n")) {
-                String normalizedName = normalizeInstalledPackageName(installedPackage);
+                String normalizedName = normalizeInstalledPackageName(installedPackage, managerType);
                 if (!normalizedName.isEmpty()) {
                     installedPackages.add(normalizedName);
                 }
@@ -44,7 +44,8 @@ public class LibraryChecker {
 
             // Loop over required libraries and check if they're installed
             for (String lib : requiredLibraries) {
-                if (!installedPackages.contains(lib.trim())) {
+                String normalizedRequired = normalizeComparablePackageName(lib, managerType);
+                if (!normalizedRequired.isEmpty() && !installedPackages.contains(normalizedRequired)) {
                     missingLibraries.append(lib).append("\n");
                 }
             }
@@ -83,7 +84,7 @@ public class LibraryChecker {
                 .show();
     }
 
-    private PackageManagerType detectPackageManagerType() {
+    public static PackageManagerType detectPackageManagerType(Context context) {
         Terminal terminal = new Terminal(context);
         String output = terminal.executeShellCommandWithResult("command -v apk >/dev/null 2>&1 && echo apk || (command -v pkg >/dev/null 2>&1 && echo pkg || (command -v apt-get >/dev/null 2>&1 && echo apt))", context);
         String normalized = output == null ? "" : output.trim().toLowerCase();
@@ -99,7 +100,15 @@ public class LibraryChecker {
         return PackageManagerType.UNKNOWN;
     }
 
-    private String buildInstallCommand(PackageManagerType managerType, String packages) {
+    private PackageManagerType detectPackageManagerType() {
+        return detectPackageManagerType(context);
+    }
+
+    public static String buildInstallCommand(Context context, String packages) {
+        return buildInstallCommand(detectPackageManagerType(context), packages);
+    }
+
+    public static String buildInstallCommand(PackageManagerType managerType, String packages) {
         String sanitizedPackages = packages == null ? "" : packages.trim();
         if (sanitizedPackages.isEmpty()) {
             return "echo 'No packages requested for installation'";
@@ -113,17 +122,28 @@ public class LibraryChecker {
                 return "apk add " + sanitizedPackages;
             case UNKNOWN:
             default:
-                return "pkg install -y " + sanitizedPackages;
+                return "apk add " + sanitizedPackages;
         }
     }
 
     private static String[] resolveRequiredLibraries(PackageManagerType managerType) {
-        if (managerType == PackageManagerType.PKG) {
-            String required = DeviceUtils.is64bit() ? AppConfig.neededPkgsTermux() : AppConfig.neededPkgs32bitTermux();
-            return required.split(" ");
+        String required;
+        switch (managerType) {
+            case APK:
+                required = DeviceUtils.is64bit() ? AppConfig.neededPkgsAlpine() : AppConfig.neededPkgs32bitAlpine();
+                break;
+            case APT:
+                required = DeviceUtils.is64bit() ? AppConfig.neededPkgsDebianUbuntu() : AppConfig.neededPkgs32bitDebianUbuntu();
+                break;
+            case PKG:
+                required = DeviceUtils.is64bit() ? AppConfig.neededPkgsTermux() : AppConfig.neededPkgs32bitTermux();
+                break;
+            case UNKNOWN:
+            default:
+                required = DeviceUtils.is64bit() ? AppConfig.neededPkgsAlpine() : AppConfig.neededPkgs32bitAlpine();
+                break;
         }
-        String required = DeviceUtils.is64bit() ? AppConfig.neededPkgs() : AppConfig.neededPkgs32bit();
-        return required.split(" ");
+        return required.trim().split("\\s+");
     }
 
     // Method to check if the package is installed
@@ -143,21 +163,28 @@ public class LibraryChecker {
 
         Terminal terminal = new Terminal(context);
 
-        String dpkgOutput = terminal.executeShellCommandWithResult("dpkg-query -W -f='${binary:Package}\n'", context);
+            PackageManagerType managerType = detectPackageManagerType(context);
+            String dpkgOutput = managerType == PackageManagerType.APT
+                    ? terminal.executeShellCommandWithResult("dpkg-query -W -f='${binary:Package}\n'", context)
+                    : "";
         if (isUsablePackageOutput(dpkgOutput)) {
-            callback.onCommandCompleted(normalizeInstalledPackageOutput(dpkgOutput), "");
+            callback.onCommandCompleted(normalizeInstalledPackageOutput(dpkgOutput, managerType), "");
             return;
         }
 
-        String pkgOutput = terminal.executeShellCommandWithResult("pkg list-installed", context);
+        String pkgOutput = managerType == PackageManagerType.PKG
+                ? terminal.executeShellCommandWithResult("pkg list-installed", context)
+                : "";
         if (isUsablePackageOutput(pkgOutput)) {
-            callback.onCommandCompleted(normalizeInstalledPackageOutput(pkgOutput), "");
+            callback.onCommandCompleted(normalizeInstalledPackageOutput(pkgOutput, managerType), "");
             return;
         }
 
-        String apkOutput = terminal.executeShellCommandWithResult("apk info -v", context);
+        String apkOutput = managerType == PackageManagerType.APK
+                ? terminal.executeShellCommandWithResult("apk info -v", context)
+                : "";
         if (isUsablePackageOutput(apkOutput)) {
-            callback.onCommandCompleted(normalizeInstalledPackageOutput(apkOutput), "");
+            callback.onCommandCompleted(normalizeInstalledPackageOutput(apkOutput, managerType), "");
             return;
         }
 
@@ -168,10 +195,10 @@ public class LibraryChecker {
         return output != null && !output.trim().isEmpty() && !containsShellNotFound(output);
     }
 
-    private static String normalizeInstalledPackageOutput(String output) {
+    private static String normalizeInstalledPackageOutput(String output, PackageManagerType managerType) {
         StringBuilder normalized = new StringBuilder();
         for (String line : output.split("\n")) {
-            String packageName = normalizeInstalledPackageName(line);
+            String packageName = normalizeInstalledPackageName(line, managerType);
             if (!packageName.isEmpty()) {
                 normalized.append(packageName).append("\n");
             }
@@ -179,7 +206,11 @@ public class LibraryChecker {
         return normalized.toString();
     }
 
-    private static String normalizeInstalledPackageName(String rawLine) {
+    private static String normalizeInstalledPackageName(String rawLine, PackageManagerType managerType) {
+        return normalizeComparablePackageName(rawLine, managerType);
+    }
+
+    private static String normalizeComparablePackageName(String rawLine, PackageManagerType managerType) {
         if (rawLine == null) {
             return "";
         }
@@ -187,21 +218,47 @@ public class LibraryChecker {
         if (line.isEmpty() || line.startsWith("WARNING:") || line.startsWith("ERROR:")) {
             return "";
         }
+        line = line.replaceAll("[<>=].*$", "").trim();
 
-        int slashIndex = line.indexOf('/');
-        if (slashIndex > 0) {
-            line = line.substring(0, slashIndex);
-        }
+        switch (managerType) {
+            case APT:
+                int firstSpace = line.indexOf(' ');
+                if (firstSpace > 0) {
+                    line = line.substring(0, firstSpace);
+                }
+                int colonIndex = line.indexOf(':');
+                if (colonIndex > 0) {
+                    line = line.substring(0, colonIndex);
+                }
+                break;
+            case PKG:
+                int slashIndex = line.indexOf('/');
+                if (slashIndex > 0) {
+                    line = line.substring(0, slashIndex);
+                }
+                firstSpace = line.indexOf(' ');
+                if (firstSpace > 0) {
+                    line = line.substring(0, firstSpace);
+                }
+                break;
+            case APK:
+            case UNKNOWN:
+            default:
+                slashIndex = line.indexOf('/');
+                if (slashIndex > 0) {
+                    line = line.substring(0, slashIndex);
+                }
+                firstSpace = line.indexOf(' ');
+                if (firstSpace > 0) {
+                    line = line.substring(0, firstSpace);
+                }
 
-        int firstSpace = line.indexOf(' ');
-        if (firstSpace > 0) {
-            line = line.substring(0, firstSpace);
-        }
-
-        Pattern alpineVersionPattern = Pattern.compile("^(.+)-\\d.*$");
-        Matcher matcher = alpineVersionPattern.matcher(line);
-        if (matcher.matches()) {
-            line = matcher.group(1);
+                Pattern alpineVersionPattern = Pattern.compile("^(.+)-\\d.*$");
+                Matcher matcher = alpineVersionPattern.matcher(line);
+                if (matcher.matches()) {
+                    line = matcher.group(1);
+                }
+                break;
         }
 
         return line.trim();
@@ -217,6 +274,7 @@ public class LibraryChecker {
     public void checkAndInstallXFCE4(Activity activity) {
         // XFCE4 meta-package
         String xfce4Package = "xfce4";
+        PackageManagerType managerType = detectPackageManagerType();
 
         // Check if XFCE4 is installed
         isPackageInstalled(xfce4Package, (output, errors) -> {
@@ -226,10 +284,13 @@ public class LibraryChecker {
             if (output != null) {
                 Set<String> installedPackages = new HashSet<>();
                 for (String installedPackage : output.split("\n")) {
-                    installedPackages.add(installedPackage.trim());
+                    String normalizedInstalled = normalizeComparablePackageName(installedPackage, managerType);
+                    if (!normalizedInstalled.isEmpty()) {
+                        installedPackages.add(normalizedInstalled);
+                    }
                 }
 
-                isInstalled = installedPackages.contains(xfce4Package.trim());
+                isInstalled = installedPackages.contains(normalizeComparablePackageName(xfce4Package, managerType));
             }
 
             // If not installed, show a dialog to install it
