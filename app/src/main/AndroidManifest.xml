@@ -97,22 +97,8 @@
             android:label="@string/rafaelia_logs_title" />
         <activity
             android:name=".RomReceiverActivity"
-            android:exported="true"
-            android:grantUriPermissions="true"
-            android:label="@string/importRom">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <action android:name="android.intent.action.SEND" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data android:scheme="file" />
-                <data android:scheme="content" />
-                <data android:pathPattern=".*\\.cvbi" />
-                <data android:mimeType="application/octet-stream" />
-            </intent-filter>
-        </activity>
+            android:exported="false"
+            android:label="@string/importRom" />
         <activity
             android:name=".Minitools"
             android:exported="false"

@@ -75,6 +75,15 @@ JNIEXPORT jint JNICALL
 Java_com_vectras_vm_core_NativeFastPath_nativeCopyBytes(JNIEnv* env, jclass clazz, jbyteArray src, jint srcOffset, jbyteArray dst, jint dstOffset, jint length) {
     (void)clazz;
     if (vectra_kernel_ensure() != RMR_UK_OK || !src || !dst || srcOffset < 0 || dstOffset < 0 || length < 0) return -1;
+
+    jsize srcLen = (*env)->GetArrayLength(env, src);
+    jsize dstLen = (*env)->GetArrayLength(env, dst);
+    if (srcLen < 0 || dstLen < 0) return -1;
+
+    if (srcOffset > srcLen || dstOffset > dstLen) return -1;
+    if (length > srcLen - srcOffset) return -1;
+    if (length > dstLen - dstOffset) return -1;
+
     jbyte* s = (*env)->GetPrimitiveArrayCritical(env, src, NULL);
     jbyte* d = (*env)->GetPrimitiveArrayCritical(env, dst, NULL);
     if (!s || !d) {
@@ -82,7 +91,12 @@ Java_com_vectras_vm_core_NativeFastPath_nativeCopyBytes(JNIEnv* env, jclass claz
         if (d) (*env)->ReleasePrimitiveArrayCritical(env, dst, d, 0);
         return -1;
     }
-    int rc = RmR_UnifiedKernel_Copy(&g_unified_state, (uint8_t*)d + dstOffset, (const uint8_t*)s + srcOffset, (size_t)length);
+
+    int rc = RmR_UnifiedKernel_Copy(
+            &g_unified_state,
+            (uint8_t*)d + (size_t)dstOffset,
+            (const uint8_t*)s + (size_t)srcOffset,
+            (size_t)length);
     (*env)->ReleasePrimitiveArrayCritical(env, src, s, JNI_ABORT);
     (*env)->ReleasePrimitiveArrayCritical(env, dst, d, 0);
     return (jint)rc;
