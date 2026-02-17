@@ -33,9 +33,6 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Hashtable;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
 
 import android.app.Activity;
 import android.content.Context;
@@ -53,10 +50,16 @@ import com.vectras.qemu.Config;
 import com.vectras.vm.utils.UIUtils;
 
 /**
+ * Migração: para APIs de FD/open mode, a origem canônica agora é
+ * {@code com.vectras.vm.utils.FileUtils}. Esta classe mantém wrappers legados
+ * para preservar compatibilidade binária/chamadas antigas.
+ *
  * @author dev
  */
+@Deprecated
 public class FileUtils {
     private final static String TAG = "FileUtils";
+    @Deprecated
     public static HashMap<Integer, FileInfo> fds = new HashMap<Integer, FileInfo>();
 
     public static String getNativeLibDir(Context context) {
@@ -214,205 +217,38 @@ public class FileUtils {
         return true;
     }
 
+    @Deprecated
     public static int get_fd(final Context context, String path) {
         return get_fd(context, path, null);
     }
 
+    @Deprecated
     public static int get_fd(final Context context, String path, String backendMode) {
-        synchronized (fds) {
-            int fd = 0;
-            if (path == null)
-                return 0;
-
-//            Log.d(TAG, "Opening Filepath: " + path);
-            if (path.startsWith("/content//") || path.startsWith("content://")) {
-                String npath = unconvertDocumentFilePath(path);
-
-//Is this needed?
-//                FileInfo info = getExistingFd(npath);
-//                if (info!=null) {
-//                    ParcelFileDescriptor pfd = info.pfd;
-//                    fd = pfd.getFd();
-//                    Log.d(TAG, "Retrieved hashed documentfile: " + npath + ", FD: " + fd);
-//                    return fd;
-//                }
-
-
-//                Log.d(TAG, "Opening unconverted: " + npath);
-                try {
-                    Uri uri = Uri.parse(npath);
-                    String mode = resolveContentOpenMode(path, backendMode);
-                    ParcelFileDescriptor pfd = context.getContentResolver().openFileDescriptor(uri, mode);
-                    fd = pfd.getFd();
-//                    Log.d(TAG, "Opening DocumentFile: " + npath + ", FD: " + fd);
-                    fds.put(fd, new FileInfo(path, npath, pfd));
-
-                } catch (Exception e) {
-                    Log.e(TAG, "Could not open DocumentFile: " + npath + ", FD: " + fd);
-                    if(Config.debug)
-                        e.printStackTrace();
-                }
-            } else {
-                //Is this needed?
-//                FileInfo info = getExistingFd(path);
-//                if (info!=null) {
-//                    ParcelFileDescriptor pfd = info.pfd;
-//                    fd = pfd.getFd();
-//                    Log.d(TAG, "Retrieved hashed file: " + path + ", FD: " + fd);
-//                    return fd;
-//                }
-
-                try {
-                    int mode = resolveParcelOpenMode(path, backendMode);
-
-                    File file = new File(path);
-                    if (!file.exists())
-                        file.createNewFile();
-                    ParcelFileDescriptor pfd = ParcelFileDescriptor.open(file, mode);
-                    fd = pfd.getFd();
-                    fds.put(fd, new FileInfo(path, path, pfd));
-                    Log.d(TAG, "Opening File: " + path + ", FD: " + fd);
-                } catch (Exception e) {
-                    Log.e(TAG, "Could not open File: " + path + ", FD: " + fd);
-                    if(Config.debug)
-                        e.printStackTrace();
-                }
-
-            }
-            return fd;
-        }
+        return com.vectras.vm.utils.FileUtils.get_fd(context, path, backendMode);
     }
 
+    @Deprecated
     static String resolveContentOpenMode(String path, String backendMode) {
-        if (isIsoPath(path)) {
-            return "r";
-        }
-
-        String normalizedBackendMode = normalizeBackendMode(backendMode);
-        if ("r".equals(normalizedBackendMode) || "w".equals(normalizedBackendMode)
-                || "rw".equals(normalizedBackendMode) || "wt".equals(normalizedBackendMode)
-                || "wa".equals(normalizedBackendMode)) {
-            return normalizedBackendMode;
-        }
-
-        return "rw";
+        return com.vectras.vm.utils.FileUtils.resolveContentOpenMode(path, backendMode);
     }
 
+    @Deprecated
     static int resolveParcelOpenMode(String path, String backendMode) {
-        if (isIsoPath(path)) {
-            return ParcelFileDescriptor.MODE_READ_ONLY;
-        }
-
-        String normalizedBackendMode = normalizeBackendMode(backendMode);
-        if ("r".equals(normalizedBackendMode)) {
-            return ParcelFileDescriptor.MODE_READ_ONLY;
-        }
-
-        return ParcelFileDescriptor.MODE_READ_WRITE;
+        return com.vectras.vm.utils.FileUtils.resolveParcelOpenMode(path, backendMode);
     }
 
-    private static String normalizeBackendMode(String backendMode) {
-        return backendMode == null ? "" : backendMode.trim().toLowerCase();
-    }
-
-    private static boolean isIsoPath(String path) {
-        return path != null && path.toLowerCase().endsWith(".iso");
-    }
-
-    private static FileInfo getExistingFd(String npath) {
-        Set<Map.Entry<Integer, FileInfo>> fileInfoSet = fds.entrySet();
-        Iterator<Map.Entry<Integer, FileInfo>> iter = fileInfoSet.iterator();
-        while (iter.hasNext()) {
-            Map.Entry<Integer, FileInfo> entry = iter.next();
-            FileInfo fileInfo = entry.getValue();
-            if (fileInfo.npath.equals(npath)) {
-                return fileInfo;
-            }
-        }
-        return null;
-    }
-
+    @Deprecated
     public static void close_fds() {
-        synchronized (fds) {
-            Integer[] fds = FileUtils.fds.keySet().toArray(new Integer[FileUtils.fds.keySet().size()]);
-            for (int i = 0; i < fds.length; i++) {
-                FileUtils.close_fd(fds[i]);
-            }
+        Integer[] fdKeys = com.vectras.vm.utils.FileUtils.fds.keySet().toArray(
+                new Integer[com.vectras.vm.utils.FileUtils.fds.keySet().size()]);
+        for (int i = 0; i < fdKeys.length; i++) {
+            com.vectras.vm.utils.FileUtils.close_fd(fdKeys[i]);
         }
     }
 
+    @Deprecated
     public static int close_fd(int fd) {
-        if(!Config.closeFileDescriptors) {
-            return 0;
-        }
-        synchronized (fds) {
-//            Log.d(TAG, "Closing FD: " + fd);
-            if (FileUtils.fds.containsKey(fd)) {
-
-                FileInfo info = FileUtils.fds.get(fd);
-
-
-                try {
-
-                    ParcelFileDescriptor pfd = info.pfd;
-                    try {
-                        pfd.getFileDescriptor().sync();
-                    } catch (IOException e) {
-                        if(Config.debug) {
-                            Log.w(TAG, "Syncing DocumentFile: " + info.path + ": " + fd + " : " + e);
-                            e.printStackTrace();
-                        }
-                    }
-
-//                    Log.d(TAG, "Closing DocumentFile: " + info.npath + ", FD: " + fd);
-                    pfd.close();
-                    FileUtils.fds.remove(fd);
-                    return 0; // success for Native side
-                } catch (IOException e) {
-                    Log.e(TAG, "Error Closing DocumentFile: " + info.path + ": " + fd + " : " + e);
-                    if(Config.debug)
-                        e.printStackTrace();
-                }
-
-
-            } else {
-
-                ParcelFileDescriptor pfd = null;
-                String path = "unknown";
-                try {
-
-                    //xxx: check the hash
-                    FileInfo info = FileUtils.fds.get(fd);
-                    if(info!=null) {
-                        pfd = info.pfd;
-                        path = info.path;
-//                        Log.d(TAG, "Closing hashe File FD: " + fd + ": " + info.path);
-                    }
-
-                    //xxx: else get a new parcel
-                    if(pfd == null)
-                        pfd = ParcelFileDescriptor.fromFd(fd);
-
-//                    Log.d(TAG, "Closing File FD: " + fd);
-                    try {
-                        pfd.getFileDescriptor().sync();
-                    } catch (IOException e) {
-                        if(Config.debug) {
-                            Log.e(TAG, "Error Syncing File: " + path + ": " + fd + " : " + e);
-                            e.printStackTrace();
-                        }
-                    }
-
-                    pfd.close();
-                    return 0;
-                } catch (Exception e) {
-                    Log.e(TAG, "Error Closing File FD: " + path + ": " + fd + " : " + e);
-                    if(Config.debug)
-                        e.printStackTrace();
-                }
-            }
-            return -1;
-        }
+        return com.vectras.vm.utils.FileUtils.close_fd(fd);
     }
 
     public static void startLogging() {

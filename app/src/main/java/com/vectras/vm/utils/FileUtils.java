@@ -542,7 +542,7 @@ public class FileUtils {
 		return fd;
 	}
 
-	static String resolveContentOpenMode(String path, String backendMode) {
+	public static String resolveContentOpenMode(String path, String backendMode) {
 		if (isIsoPath(path)) {
 			return "r";
 		}
@@ -557,7 +557,7 @@ public class FileUtils {
 		return "rw";
 	}
 
-	static int resolveParcelOpenMode(String path, String backendMode) {
+	public static int resolveParcelOpenMode(String path, String backendMode) {
 		if (isIsoPath(path)) {
 			return ParcelFileDescriptor.MODE_READ_ONLY;
 		}
