@@ -12,6 +12,8 @@ import java.util.concurrent.TimeUnit;
  */
 public final class ProcessRuntimeOps {
 
+    private static final long DESTROY_GRACE_PERIOD_MS = 250L;
+
     public enum ExecutionCategory {
         INTERACTIVE(3_000L, TimeUnit.MILLISECONDS),
         NON_INTERACTIVE(1_500L, TimeUnit.MILLISECONDS),
@@ -36,26 +38,34 @@ public final class ProcessRuntimeOps {
     }
 
     public static final class TimeoutExecutionResult {
+        public enum Status {
+            SUCCESS,
+            ERROR,
+            TIMEOUT
+        }
+
+        public final Status status;
         public final int exitCode;
         public final boolean timedOut;
         public final String message;
 
-        private TimeoutExecutionResult(int exitCode, boolean timedOut, String message) {
+        private TimeoutExecutionResult(Status status, int exitCode, boolean timedOut, String message) {
+            this.status = status;
             this.exitCode = exitCode;
             this.timedOut = timedOut;
             this.message = message;
         }
 
         public static TimeoutExecutionResult success(int exitCode, String message) {
-            return new TimeoutExecutionResult(exitCode, false, message);
+            return new TimeoutExecutionResult(Status.SUCCESS, exitCode, false, message);
         }
 
-        public static TimeoutExecutionResult timeout(String message) {
-            return new TimeoutExecutionResult(-1, true, message);
+        public static TimeoutExecutionResult timeout(int exitCode, String message) {
+            return new TimeoutExecutionResult(Status.TIMEOUT, exitCode, true, message);
         }
 
         public static TimeoutExecutionResult failed(String message) {
-            return new TimeoutExecutionResult(-1, false, message);
+            return new TimeoutExecutionResult(Status.ERROR, -1, false, message);
         }
     }
 
@@ -107,6 +117,10 @@ public final class ProcessRuntimeOps {
     }
 
     public static TimeoutExecutionResult waitForWithCategory(Process process, ExecutionCategory category) {
+        return waitForByCategory(process, category);
+    }
+
+    public static TimeoutExecutionResult waitForByCategory(Process process, ExecutionCategory category) {
         if (process == null) {
             return TimeoutExecutionResult.failed("process_missing");
         }
@@ -128,7 +142,7 @@ public final class ProcessRuntimeOps {
         }
         try {
             if (!process.waitFor(Math.max(0L, timeout), timeUnit)) {
-                return TimeoutExecutionResult.timeout(label + "_timeout");
+                return terminateAfterTimeout(process, label);
             }
             return TimeoutExecutionResult.success(process.exitValue(), label + "_exit");
         } catch (InterruptedException e) {
@@ -136,6 +150,36 @@ public final class ProcessRuntimeOps {
             return TimeoutExecutionResult.failed(label + "_interrupted");
         } catch (IllegalThreadStateException e) {
             return TimeoutExecutionResult.failed(label + "_not_terminated");
+        }
+    }
+
+    private static TimeoutExecutionResult terminateAfterTimeout(Process process, String label) {
+        process.destroy();
+        int exitCodeAfterDestroy = waitForExit(process, DESTROY_GRACE_PERIOD_MS, TimeUnit.MILLISECONDS);
+        if (exitCodeAfterDestroy != Integer.MIN_VALUE) {
+            return TimeoutExecutionResult.timeout(exitCodeAfterDestroy, label + "_timeout_destroy");
+        }
+
+        process.destroyForcibly();
+        int exitCodeAfterForce = waitForExit(process, DESTROY_GRACE_PERIOD_MS, TimeUnit.MILLISECONDS);
+        if (exitCodeAfterForce != Integer.MIN_VALUE) {
+            return TimeoutExecutionResult.timeout(exitCodeAfterForce, label + "_timeout_forced");
+        }
+
+        return TimeoutExecutionResult.timeout(-1, label + "_timeout_kill_pending");
+    }
+
+    private static int waitForExit(Process process, long timeout, TimeUnit unit) {
+        try {
+            if (!process.waitFor(Math.max(0L, timeout), unit)) {
+                return Integer.MIN_VALUE;
+            }
+            return process.exitValue();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Integer.MIN_VALUE;
+        } catch (IllegalThreadStateException e) {
+            return Integer.MIN_VALUE;
         }
     }
 }
