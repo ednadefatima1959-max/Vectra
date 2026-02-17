@@ -182,26 +182,12 @@ public class TerminalBottomSheetDialog {
                     processBuilder.environment().put("XDG_RUNTIME_DIR", "${TMPDIR}");
                     processBuilder.environment().put("SDL_VIDEODRIVER", "x11");
 
-                    String[] prootCommand = {
-                            TermuxService.PREFIX_PATH + "/bin/proot", // PRoot binary path
-                            "--kill-on-exit",
-                            "--link2symlink",
-                            "-0",
-                            "-r", filesDir + "/distro", // Path to the rootfs
-                            "-b", "/dev",
-                            "-b", "/proc",
-                            "-b", "/sys",
-                            "-b", AppConfig.internalDataDirPath + "distro/root:/dev/shm",
-                            "-b", "/sdcard",
-                            "-b", "/storage",
-                            "-b", "/data",
-                            "-b", AppConfig.internalDataDirPath + "usr/tmp:/tmp",
-                            "-w", "/root",
-                            "/bin/sh",
-                            "--login"// The shell to execute inside PRoot
-                    };
-
-                    processBuilder.command(prootCommand);
+                    ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(activity, filesDir + "/distro", "/root")
+                            .setDisplay(":0")
+                            .setPulseServer("127.0.0.1")
+                            .setXdgRuntimeDir("${TMPDIR}");
+                    prootCommandBuilder.applyOptionalEnvironment(processBuilder.environment());
+                    processBuilder.command(prootCommandBuilder.buildCommand());
                     Process process = null;
                     ProcessOutputDrainer drainer = new ProcessOutputDrainer();
                     BufferedWriter writer = null;

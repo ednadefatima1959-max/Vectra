@@ -12,7 +12,6 @@ import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.termux.app.TermuxService;
 import com.vectras.vm.BuildConfig;
 
 import java.io.BufferedReader;
@@ -40,6 +39,7 @@ import com.vectras.vm.utils.DialogUtils;
 import com.vectras.vm.utils.NotificationUtils;
 import com.vectras.vm.core.BoundedStringRingBuffer;
 import com.vectras.vm.core.ProcessOutputDrainer;
+import com.vectras.vm.core.ProotCommandBuilder;
 import com.vectras.vm.core.TokenBucketRateLimiter;
 import com.vectras.vm.audit.AuditEvent;
 import com.vectras.vm.audit.AuditLedger;
@@ -228,26 +228,11 @@ public class Terminal {
                 processBuilder.environment().put("DISPLAY", DISPLAY);
                 processBuilder.environment().put("PULSE_SERVER", "127.0.0.1");
 
-                String[] prootCommand = {
-                        TermuxService.PREFIX_PATH + "/bin/proot",
-                        "--kill-on-exit",
-                        "--link2symlink",
-                        "-0",
-                        "-r", filesDir + "/distro",
-                        "-b", "/dev",
-                        "-b", "/proc",
-                        "-b", "/sys",
-                        "-b", AppConfig.internalDataDirPath + "distro/root:/dev/shm",
-                        "-b", "/sdcard",
-                        "-b", "/storage",
-                        "-b", "/data",
-                        "-b", AppConfig.internalDataDirPath + "usr/tmp:/tmp",
-                        "-w", "/root",
-                        "/bin/sh",
-                        "--login"
-                };
-
-                processBuilder.command(prootCommand);
+                ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(context, filesDir + "/distro", "/root")
+                        .setDisplay(DISPLAY)
+                        .setPulseServer("127.0.0.1");
+                prootCommandBuilder.applyOptionalEnvironment(processBuilder.environment());
+                processBuilder.command(prootCommandBuilder.buildCommand());
                 launchedProcess = processBuilder.start();
                 qemuProcess = launchedProcess;
                 Terminal.resetStreamingStopToken();
@@ -313,26 +298,12 @@ public class Terminal {
                 processBuilder.environment().put("XDG_RUNTIME_DIR", tmpDirPath != null ? tmpDirPath : "/tmp");
                 processBuilder.environment().put("SDL_VIDEODRIVER", "x11");
 
-                String[] prootCommand = {
-                        TermuxService.PREFIX_PATH + "/bin/proot", // PRoot binary path
-                        "--kill-on-exit",
-                        "--link2symlink",
-                        "-0",
-                        "-r", filesDir + "/distro", // Path to the rootfs
-                        "-b", "/dev",
-                        "-b", "/proc",
-                        "-b", "/sys",
-                        "-b", AppConfig.internalDataDirPath + "distro/root:/dev/shm",
-                        "-b", "/sdcard",
-                        "-b", "/storage",
-                        "-b", "/data",
-                        "-b", AppConfig.internalDataDirPath + "usr/tmp:/tmp",
-                        "-w", "/root",
-                        "/bin/sh",
-                        "--login"// The shell to execute inside PRoot
-                };
-
-                processBuilder.command(prootCommand);
+                ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(context, filesDir + "/distro", "/root")
+                        .setDisplay(DISPLAY)
+                        .setPulseServer("127.0.0.1")
+                        .setXdgRuntimeDir(tmpDirPath != null ? tmpDirPath : "/tmp");
+                prootCommandBuilder.applyOptionalEnvironment(processBuilder.environment());
+                processBuilder.command(prootCommandBuilder.buildCommand());
                 launchedProcess = processBuilder.start();
                 qemuProcess = launchedProcess;
                 Terminal.resetStreamingStopToken();
@@ -394,26 +365,11 @@ public class Terminal {
             processBuilder.environment().put("DISPLAY", DISPLAY);
             processBuilder.environment().put("PULSE_SERVER", "127.0.0.1");
 
-            String[] prootCommand = {
-                    TermuxService.PREFIX_PATH + "/bin/proot",
-                    "--kill-on-exit",
-                    "--link2symlink",
-                    "-0",
-                    "-r", filesDir + "/distro",
-                    "-b", "/dev",
-                    "-b", "/proc",
-                    "-b", "/sys",
-                    "-b", AppConfig.internalDataDirPath + "distro/root:/dev/shm",
-                    "-b", "/sdcard",
-                    "-b", "/storage",
-                    "-b", "/data",
-                    "-b", AppConfig.internalDataDirPath + "usr/tmp:/tmp",
-                    "-w", "/root",
-                    "/bin/sh",
-                    "--login"
-            };
-
-            processBuilder.command(prootCommand);
+            ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(context, filesDir + "/distro", "/root")
+                    .setDisplay(DISPLAY)
+                    .setPulseServer("127.0.0.1");
+            prootCommandBuilder.applyOptionalEnvironment(processBuilder.environment());
+            processBuilder.command(prootCommandBuilder.buildCommand());
             launchedProcess = processBuilder.start();
             qemuProcess = launchedProcess;
             Terminal.resetStreamingStopToken();
@@ -480,26 +436,11 @@ public class Terminal {
                 processBuilder.environment().put("DISPLAY", DISPLAY);
                 processBuilder.environment().put("PULSE_SERVER", "127.0.0.1");
 
-                String[] prootCommand = {
-                        TermuxService.PREFIX_PATH + "/bin/proot",
-                        "--kill-on-exit",
-                        "--link2symlink",
-                        "-0",
-                        "-r", filesDir + "/distro",
-                        "-b", "/dev",
-                        "-b", "/proc",
-                        "-b", "/sys",
-                        "-b", AppConfig.internalDataDirPath + "distro/root:/dev/shm",
-                        "-b", "/sdcard",
-                        "-b", "/storage",
-                        "-b", "/data",
-                        "-b", AppConfig.internalDataDirPath + "usr/tmp:/tmp",
-                        "-w", "/root",
-                        "/bin/sh",
-                        "--login"
-                };
-
-                processBuilder.command(prootCommand);
+                ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(context, filesDir + "/distro", "/root")
+                        .setDisplay(DISPLAY)
+                        .setPulseServer("127.0.0.1");
+                prootCommandBuilder.applyOptionalEnvironment(processBuilder.environment());
+                processBuilder.command(prootCommandBuilder.buildCommand());
                 launchedProcess = processBuilder.start();
                 qemuProcess = launchedProcess;
                 Terminal.resetStreamingStopToken();
