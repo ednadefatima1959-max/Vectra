@@ -28,11 +28,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.termux.app.TermuxActivity;
-import com.termux.app.TermuxService;
 import com.vectras.qemu.MainSettingsManager;
 import com.vectras.vm.AppConfig;
 import com.vectras.vm.R;
 import com.vectras.vm.VMManager;
+import com.vectras.vm.core.ProotCommandBuilder;
 import com.vectras.vm.network.RequestNetwork;
 import com.vectras.vm.network.RequestNetworkController;
 import com.vectras.vm.databinding.ActivitySetupWizard2Binding;
@@ -600,24 +600,10 @@ public class SetupWizard2Activity extends AppCompatActivity {
                 processBuilder.environment().put("TMPDIR", tmpDir.getAbsolutePath());
                 processBuilder.environment().put("SHELL", "/bin/sh");
 
-                String[] prootCommand = {
-                        TermuxService.PREFIX_PATH + "/bin/proot", // PRoot binary path
-                        "--kill-on-exit",
-                        "--link2symlink",
-                        "-0",
-                        "-r", filesDir + "/distro", // Path to the rootfs
-                        "-b", "/dev",
-                        "-b", "/proc",
-                        "-b", "/sys",
-                        "-b", "/sdcard",
-                        "-b", "/storage",
-                        "-b", "/data",
-                        "-w", "/root",
-                        "/bin/sh",
-                        "--login"// The shell to execute inside PRoot
-                };
-
-                processBuilder.command(prootCommand);
+                ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(this, filesDir + "/distro", "/root")
+                        .setPath("/bin:/usr/bin:/sbin:/usr/sbin");
+                prootCommandBuilder.applyOptionalEnvironment(processBuilder.environment());
+                processBuilder.command(prootCommandBuilder.buildCommand());
                 Process process = processBuilder.start();
                 // Get the input and output streams of the process
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
