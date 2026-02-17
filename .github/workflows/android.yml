@@ -83,6 +83,11 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
+    - name: Print Java and Gradle runtime versions
+      run: |
+        java -version
+        ./gradlew --version
+
     - name: Verify repository file dependencies
       env:
         ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}

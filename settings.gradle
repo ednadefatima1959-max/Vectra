@@ -1,3 +1,17 @@
+def resolveIntProperty = { String key, int defaultValue ->
+    def fromCli = gradle.startParameter.projectProperties.get(key)
+    def fromGradleProperties = settings.hasProperty(key) ? settings.property(key) : null
+    Integer.parseInt((fromCli ?: fromGradleProperties ?: defaultValue).toString())
+}
+
+def currentJava = JavaVersion.current()
+def configuredRuntime = resolveIntProperty('GRADLE_JAVA_RUNTIME_VERSION', resolveIntProperty('JAVA_LANGUAGE_VERSION', 17))
+def maxSupportedRuntime = resolveIntProperty('GRADLE_MAX_RUNTIME_JAVA_VERSION', 21)
+
+if (currentJava > JavaVersion.toVersion(maxSupportedRuntime)) {
+    throw new GradleException("Gradle runtime JVM acima do máximo suportado para este baseline. Detectado ${currentJava}, máximo suportado ${maxSupportedRuntime}. Configure JAVA_HOME ou org.gradle.java.home para JDK ${configuredRuntime}.")
+}
+
 rootProject.name = "Vectras VM"
 
 include ':app', ':terminal-emulator', ':terminal-view', ':shell-loader:stub', ':shell-loader'

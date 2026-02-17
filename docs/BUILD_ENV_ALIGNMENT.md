@@ -13,8 +13,10 @@ Checklist objetivo para resolver “não compila” por desalinhamento de SDK/JD
 
 - Runtime padrão obrigatório do Gradle: `GRADLE_JAVA_RUNTIME_VERSION=17` (ver `gradle.properties`).
 - Limite superior temporário de compatibilidade: `GRADLE_MAX_RUNTIME_JAVA_VERSION=21`.
+- `settings.gradle` faz um bootstrap check antecipado e aborta imediatamente quando `JavaVersion.current()` > `GRADLE_MAX_RUNTIME_JAVA_VERSION` (atual: 21).
 - O build raiz registra `verifyGradleRuntimeJvm` e também valida automaticamente em tarefas de build/assemble/test/lint/verify.
-- Erro de versão incompatível orienta ajuste de `JAVA_HOME` ou `org.gradle.java.home` com mensagem direta.
+- A orientação de erro é única e consistente: ajustar `JAVA_HOME` ou `org.gradle.java.home` para o runtime esperado (`GRADLE_JAVA_RUNTIME_VERSION`).
+- Esse erro pode aparecer antes de qualquer lógica do `build.gradle`, porque `settings.gradle` é carregado primeiro pelo Gradle durante a fase de inicialização.
 
 Configuração recomendada:
 
