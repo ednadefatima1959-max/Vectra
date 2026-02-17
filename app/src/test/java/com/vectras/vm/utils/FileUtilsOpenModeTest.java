@@ -44,6 +44,8 @@ public class FileUtilsOpenModeTest {
                 FileUtils.resolveParcelOpenMode("/storage/emulated/0/vm/disk.qcow2", "r"));
         assertEquals(ParcelFileDescriptor.MODE_READ_WRITE,
                 FileUtils.resolveParcelOpenMode("/storage/emulated/0/vm/disk.qcow2", "rw"));
+        assertEquals(ParcelFileDescriptor.MODE_READ_WRITE,
+                FileUtils.resolveParcelOpenMode("/storage/emulated/0/vm/disk.qcow2", ""));
     }
 
     @Test
