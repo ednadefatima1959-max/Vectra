@@ -16,7 +16,6 @@ import com.vectras.vm.BuildConfig;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -217,21 +216,11 @@ public class Terminal {
                 ProcessBuilder processBuilder = new ProcessBuilder();
 
                 String filesDir = Objects.requireNonNull(context.getFilesDir().getAbsolutePath());
-                File tmpDir = new File(Objects.requireNonNull(context.getFilesDir()), "usr/tmp");
-
-                processBuilder.environment().put("PROOT_TMP_DIR", tmpDir.getAbsolutePath());
-                processBuilder.environment().put("HOME", "/root");
-                processBuilder.environment().put("USER", user);
-                processBuilder.environment().put("TERM", "xterm-256color");
-                processBuilder.environment().put("TMPDIR", "/tmp");
-                processBuilder.environment().put("SHELL", "/bin/sh");
-                processBuilder.environment().put("DISPLAY", DISPLAY);
-                processBuilder.environment().put("PULSE_SERVER", "127.0.0.1");
-
                 ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(context, filesDir + "/distro", "/root")
+                        .setUser(user)
                         .setDisplay(DISPLAY)
                         .setPulseServer("127.0.0.1");
-                prootCommandBuilder.applyOptionalEnvironment(processBuilder.environment());
+                prootCommandBuilder.applyEnvironment(processBuilder.environment());
                 processBuilder.command(prootCommandBuilder.buildCommand());
                 launchedProcess = processBuilder.start();
                 qemuProcess = launchedProcess;
@@ -280,29 +269,15 @@ public class Terminal {
                 // Adjust these environment variables as necessary for your app
                 String filesDir = getContext().getFilesDir().getAbsolutePath();
 
-                File tmpDir = new File(getContext().getFilesDir(), "usr/tmp");
-
-                // Setup environment for the PRoot qemuProcess
-                processBuilder.environment().put("PROOT_TMP_DIR", tmpDir.getAbsolutePath());
-
-                processBuilder.environment().put("HOME", "/root");
-                processBuilder.environment().put("USER", user);
-                //processBuilder.environment().put("PATH", "/bin:/usr/bin:/sbin:/usr/sbin");
-                //processBuilder.environment().put("LD_LIBRARY_PATH", TermuxService.PREFIX_PATH + "/lib");
-                processBuilder.environment().put("TERM", "xterm-256color");
-                processBuilder.environment().put("TMPDIR", "/tmp");
-                processBuilder.environment().put("SHELL", "/bin/sh");
-                processBuilder.environment().put("DISPLAY", DISPLAY);
-                processBuilder.environment().put("PULSE_SERVER", "127.0.0.1");
-                String tmpDirPath = processBuilder.environment().get("TMPDIR");
-                processBuilder.environment().put("XDG_RUNTIME_DIR", tmpDirPath != null ? tmpDirPath : "/tmp");
-                processBuilder.environment().put("SDL_VIDEODRIVER", "x11");
+                String tmpDirPath = "/tmp";
 
                 ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(context, filesDir + "/distro", "/root")
+                        .setUser(user)
                         .setDisplay(DISPLAY)
                         .setPulseServer("127.0.0.1")
-                        .setXdgRuntimeDir(tmpDirPath != null ? tmpDirPath : "/tmp");
-                prootCommandBuilder.applyOptionalEnvironment(processBuilder.environment());
+                        .setXdgRuntimeDir(tmpDirPath)
+                        .setSdlVideoDriver("x11");
+                prootCommandBuilder.applyEnvironment(processBuilder.environment());
                 processBuilder.command(prootCommandBuilder.buildCommand());
                 launchedProcess = processBuilder.start();
                 qemuProcess = launchedProcess;
@@ -354,21 +329,11 @@ public class Terminal {
             ProcessBuilder processBuilder = new ProcessBuilder();
 
             String filesDir = Objects.requireNonNull(context.getFilesDir().getAbsolutePath());
-            File tmpDir = new File(Objects.requireNonNull(context.getFilesDir()), "usr/tmp");
-
-            processBuilder.environment().put("PROOT_TMP_DIR", tmpDir.getAbsolutePath());
-            processBuilder.environment().put("HOME", "/root");
-            processBuilder.environment().put("USER", user);
-            processBuilder.environment().put("TERM", "xterm-256color");
-            processBuilder.environment().put("TMPDIR", "/tmp");
-            processBuilder.environment().put("SHELL", "/bin/sh");
-            processBuilder.environment().put("DISPLAY", DISPLAY);
-            processBuilder.environment().put("PULSE_SERVER", "127.0.0.1");
-
             ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(context, filesDir + "/distro", "/root")
+                    .setUser(user)
                     .setDisplay(DISPLAY)
                     .setPulseServer("127.0.0.1");
-            prootCommandBuilder.applyOptionalEnvironment(processBuilder.environment());
+            prootCommandBuilder.applyEnvironment(processBuilder.environment());
             processBuilder.command(prootCommandBuilder.buildCommand());
             launchedProcess = processBuilder.start();
             qemuProcess = launchedProcess;
@@ -425,21 +390,11 @@ public class Terminal {
                 ProcessBuilder processBuilder = new ProcessBuilder();
 
                 String filesDir = Objects.requireNonNull(context.getFilesDir().getAbsolutePath());
-                File tmpDir = new File(Objects.requireNonNull(context.getFilesDir()), "usr/tmp");
-
-                processBuilder.environment().put("PROOT_TMP_DIR", tmpDir.getAbsolutePath());
-                processBuilder.environment().put("HOME", "/root");
-                processBuilder.environment().put("USER", user);
-                processBuilder.environment().put("TERM", "xterm-256color");
-                processBuilder.environment().put("TMPDIR", "/tmp");
-                processBuilder.environment().put("SHELL", "/bin/sh");
-                processBuilder.environment().put("DISPLAY", DISPLAY);
-                processBuilder.environment().put("PULSE_SERVER", "127.0.0.1");
-
                 ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(context, filesDir + "/distro", "/root")
+                        .setUser(user)
                         .setDisplay(DISPLAY)
                         .setPulseServer("127.0.0.1");
-                prootCommandBuilder.applyOptionalEnvironment(processBuilder.environment());
+                prootCommandBuilder.applyEnvironment(processBuilder.environment());
                 processBuilder.command(prootCommandBuilder.buildCommand());
                 launchedProcess = processBuilder.start();
                 qemuProcess = launchedProcess;
