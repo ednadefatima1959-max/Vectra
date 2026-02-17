@@ -132,9 +132,16 @@ public class ProcessSupervisor {
                 return;
             }
             if (currentAlive && process.isAlive() && currentPid <= 0L && incomingPid <= 0L) {
-                // Android 14/15 pode bloquear leitura de PID; evita crash por rebind com wrapper diferente.
-                Log.w(TAG, "bindProcess: PID unavailable; treating duplicate bind as idempotent for vmId=" + vmId);
-                return;
+                // Android 14/15 pode bloquear leitura de PID. Tratamos rebind imediato como idempotente,
+                // mas mantemos proteção contra sobrescrita tardia de processo potencialmente diferente.
+                long boundForMs = startMonoMs > 0L ? Math.max(0L, clock.monoMs() - startMonoMs) : Long.MAX_VALUE;
+                if (boundForMs <= 15_000L) {
+                    Log.w(TAG, "bindProcess: PID unavailable; treating duplicate bind as idempotent for vmId=" + vmId
+                            + " boundForMs=" + boundForMs);
+                    return;
+                }
+                Log.e(TAG, "bindProcess: PID unavailable and stale bind window exceeded for vmId=" + vmId
+                        + " boundForMs=" + boundForMs);
             }
 
             if (!currentAlive) {
