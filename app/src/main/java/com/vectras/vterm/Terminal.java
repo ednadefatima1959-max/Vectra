@@ -38,6 +38,7 @@ import com.vectras.vm.utils.DialogUtils;
 import com.vectras.vm.utils.NotificationUtils;
 import com.vectras.vm.core.BoundedStringRingBuffer;
 import com.vectras.vm.core.ProcessOutputDrainer;
+import com.vectras.vm.core.ProcessRuntimeOps;
 import com.vectras.vm.core.ProotCommandBuilder;
 import com.vectras.vm.core.TokenBucketRateLimiter;
 import com.vectras.vm.audit.AuditEvent;
@@ -401,7 +402,7 @@ public class Terminal {
                 Terminal.resetStreamingStopToken();
                 safeRegisterVmProcess(getContext(), vmId, launchedProcess, errors);
 
-                output.set(streamLog(userCommand, launchedProcess, true));
+                output.set(streamLog(userCommand, launchedProcess, !ProcessRuntimeOps.isLikelyInteractiveCommand(userCommand)));
 
             } catch (IOException e) {
                 VMManager.clearVmStarting(vmId);
