@@ -4,12 +4,60 @@ import android.os.SystemClock;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Operações runtime de processo centralizadas para reduzir redundância,
  * manter compatibilidade entre toolchains e preservar comportamento determinístico.
  */
 public final class ProcessRuntimeOps {
+
+    public enum ExecutionCategory {
+        INTERACTIVE(3_000L, TimeUnit.MILLISECONDS),
+        NON_INTERACTIVE(1_500L, TimeUnit.MILLISECONDS),
+        SETUP_EXTRACTION(120L, TimeUnit.SECONDS),
+        QUICK_QUERY(700L, TimeUnit.MILLISECONDS);
+
+        private final long timeout;
+        private final TimeUnit timeUnit;
+
+        ExecutionCategory(long timeout, TimeUnit timeUnit) {
+            this.timeout = timeout;
+            this.timeUnit = timeUnit;
+        }
+
+        public long timeout() {
+            return timeout;
+        }
+
+        public TimeUnit timeUnit() {
+            return timeUnit;
+        }
+    }
+
+    public static final class TimeoutExecutionResult {
+        public final int exitCode;
+        public final boolean timedOut;
+        public final String message;
+
+        private TimeoutExecutionResult(int exitCode, boolean timedOut, String message) {
+            this.exitCode = exitCode;
+            this.timedOut = timedOut;
+            this.message = message;
+        }
+
+        public static TimeoutExecutionResult success(int exitCode, String message) {
+            return new TimeoutExecutionResult(exitCode, false, message);
+        }
+
+        public static TimeoutExecutionResult timeout(String message) {
+            return new TimeoutExecutionResult(-1, true, message);
+        }
+
+        public static TimeoutExecutionResult failed(String message) {
+            return new TimeoutExecutionResult(-1, false, message);
+        }
+    }
 
     private ProcessRuntimeOps() {
         throw new AssertionError("ProcessRuntimeOps is utility-only");
@@ -56,5 +104,38 @@ public final class ProcessRuntimeOps {
 
     public static boolean isQmpAck(String result) {
         return result != null && result.contains("return");
+    }
+
+    public static TimeoutExecutionResult waitForWithCategory(Process process, ExecutionCategory category) {
+        if (process == null) {
+            return TimeoutExecutionResult.failed("process_missing");
+        }
+        if (category == null) {
+            return TimeoutExecutionResult.failed("category_missing");
+        }
+        return waitForWithTimeout(process, category.timeout(), category.timeUnit(), category.name().toLowerCase());
+    }
+
+    public static TimeoutExecutionResult waitForWithTimeout(Process process,
+                                                            long timeout,
+                                                            TimeUnit timeUnit,
+                                                            String label) {
+        if (process == null) {
+            return TimeoutExecutionResult.failed("process_missing");
+        }
+        if (timeUnit == null) {
+            return TimeoutExecutionResult.failed("time_unit_missing");
+        }
+        try {
+            if (!process.waitFor(Math.max(0L, timeout), timeUnit)) {
+                return TimeoutExecutionResult.timeout(label + "_timeout");
+            }
+            return TimeoutExecutionResult.success(process.exitValue(), label + "_exit");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return TimeoutExecutionResult.failed(label + "_interrupted");
+        } catch (IllegalThreadStateException e) {
+            return TimeoutExecutionResult.failed(label + "_not_terminated");
+        }
     }
 }
