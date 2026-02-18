@@ -14,6 +14,32 @@ extern "C" {
 #define RMR_KERNEL_ERR_STATE -2
 #define RMR_UK_NATIVE_OK_MAGIC 0x524D5255
 
+#if defined(__cplusplus)
+static_assert(RMR_UK_OK == RMR_KERNEL_OK, "status contract mismatch: RMR_UK_OK != RMR_KERNEL_OK");
+#else
+_Static_assert(RMR_UK_OK == RMR_KERNEL_OK, "status contract mismatch: RMR_UK_OK != RMR_KERNEL_OK");
+#endif
+
+#if defined(RMR_UK_ERR_ARG) && defined(RMR_KERNEL_ERR_ARG)
+#if defined(__cplusplus)
+static_assert(RMR_UK_ERR_ARG == RMR_KERNEL_ERR_ARG,
+              "status contract mismatch: RMR_UK_ERR_ARG != RMR_KERNEL_ERR_ARG");
+#else
+_Static_assert(RMR_UK_ERR_ARG == RMR_KERNEL_ERR_ARG,
+               "status contract mismatch: RMR_UK_ERR_ARG != RMR_KERNEL_ERR_ARG");
+#endif
+#endif
+
+#if defined(RMR_UK_ERR_STATE) && defined(RMR_KERNEL_ERR_STATE)
+#if defined(__cplusplus)
+static_assert(RMR_UK_ERR_STATE == RMR_KERNEL_ERR_STATE,
+              "status contract mismatch: RMR_UK_ERR_STATE != RMR_KERNEL_ERR_STATE");
+#else
+_Static_assert(RMR_UK_ERR_STATE == RMR_KERNEL_ERR_STATE,
+               "status contract mismatch: RMR_UK_ERR_STATE != RMR_KERNEL_ERR_STATE");
+#endif
+#endif
+
 #define RMR_UK_MAX_SLOTS 1024u
 
 typedef struct {
