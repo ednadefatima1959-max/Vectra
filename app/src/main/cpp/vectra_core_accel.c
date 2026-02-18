@@ -128,7 +128,7 @@ JNIEXPORT jint JNICALL Java_com_vectras_vm_core_NativeFastPath_nativeRotateRight
 
 JNIEXPORT jint JNICALL Java_com_vectras_vm_core_NativeFastPath_nativeVec2Pack(JNIEnv* env, jclass clazz, jint x, jint y){(void)env;(void)clazz;return ((y & 0xFFFF) << 16) | (x & 0xFFFF);} 
 JNIEXPORT jint JNICALL Java_com_vectras_vm_core_NativeFastPath_nativeVec2X(JNIEnv* env, jclass clazz, jint vec){(void)env;(void)clazz;return (jshort)(vec & 0xFFFF);} 
-JNIEXPORT jint JNICALL Java_com_vectras_vm_core_NativeFastPath_nativeVec2Y(JNIEnv* env, jclass clazz, jint vec){(void)env;(void)clazz;return (jshort)(vec >> 16);} 
+JNIEXPORT jint JNICALL Java_com_vectras_vm_core_NativeFastPath_nativeVec2Y(JNIEnv* env, jclass clazz, jint vec){(void)env;(void)clazz;/* cast para jshort após shift mantém o bit de sinal do y empacotado em 16 bits */return (jshort)(vec >> 16);} 
 JNIEXPORT jint JNICALL Java_com_vectras_vm_core_NativeFastPath_nativeVec2AddSat(JNIEnv* env, jclass clazz, jint a, jint b){(void)env;(void)clazz;int ax=(jshort)(a&0xFFFF), ay=(jshort)(a>>16), bx=(jshort)(b&0xFFFF), by=(jshort)(b>>16);int x=ax+bx,y=ay+by; if(x>32767)x=32767; if(x<-32768)x=-32768; if(y>32767)y=32767; if(y<-32768)y=-32768; return ((y & 0xFFFF)<<16)|(x & 0xFFFF);} 
 JNIEXPORT jint JNICALL Java_com_vectras_vm_core_NativeFastPath_nativeVec2Dot(JNIEnv* env, jclass clazz, jint a, jint b){(void)env;(void)clazz;int ax=(jshort)(a&0xFFFF), ay=(jshort)(a>>16), bx=(jshort)(b&0xFFFF), by=(jshort)(b>>16); return ax*bx + ay*by;} 
 JNIEXPORT jint JNICALL Java_com_vectras_vm_core_NativeFastPath_nativeVec2Mag2(JNIEnv* env, jclass clazz, jint v){(void)env;(void)clazz;int x=(jshort)(v&0xFFFF), y=(jshort)(v>>16); return x*x + y*y;} 
