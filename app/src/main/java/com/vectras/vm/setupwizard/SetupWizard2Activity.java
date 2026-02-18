@@ -230,7 +230,12 @@ public class SetupWizard2Activity extends AppCompatActivity {
                 intent.setData(Uri.parse(AppConfig.community));
                 startActivity(intent);
             } else if (SetupFeatureCore.isInstalledSystemFiles(this)) {
-                getDataForStandardSetup();
+                SetupFeatureCore.PostInstallCheckResult postInstallCheckResult = SetupFeatureCore.runPostInstallCheck(this);
+                if (postInstallCheckResult.ok) {
+                    getDataForStandardSetup();
+                } else {
+                    uiController(STEP_ERROR, withSetupSourceDiagnostic(postInstallCheckResult.summary()));
+                }
             } else {
                 extractSystemFiles();
             }
@@ -418,7 +423,12 @@ public class SetupWizard2Activity extends AppCompatActivity {
 
                     runOnUiThread(() -> new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         if (result) {
-                            getDataForStandardSetup();
+                            SetupFeatureCore.PostInstallCheckResult postInstallCheckResult = SetupFeatureCore.runPostInstallCheck(this);
+                            if (postInstallCheckResult.ok) {
+                                getDataForStandardSetup();
+                            } else {
+                                uiController(STEP_ERROR, withSetupSourceDiagnostic(postInstallCheckResult.summary()));
+                            }
                         } else {
                             uiController(STEP_ERROR, withSetupSourceDiagnostic(getString(R.string.system_files_installation_failed_content) + (!SetupFeatureCore.lastErrorLog.isEmpty() ? "\n\n" + SetupFeatureCore.lastErrorLog : "")));
                         }
