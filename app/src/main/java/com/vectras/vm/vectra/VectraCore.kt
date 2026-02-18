@@ -728,7 +728,6 @@ class VectraCycle(
     }
 
     private fun processEvent(event: VectraEvent, payload: ByteArray) {
-        val eventType = event.type
         // Update entropy hint based on event type
         val eventType = event.type
         val baseWeight = when (eventType) {
