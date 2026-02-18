@@ -155,10 +155,7 @@ public class SetupWizard2Activity extends AppCompatActivity {
         tarPath = getExternalFilesDir("data") + "/data.tar.gz";
 
         ListUtils.setupMirrorListForListmap(mirrorList);
-
-        HashMap<String, String> item = mirrorList.get(MainSettingsManager.getSelectedMirror(this));
-        selectedMirrorCommand = Objects.requireNonNull(item.get("mirror"));
-        selectedMirrorLocation = Objects.requireNonNull(item.get("location"));
+        applySelectedMirror(MainSettingsManager.getSelectedMirror(this));
 
         String persistedBootstrapLink = MainSettingsManager.getLastSetupBootstrapUrl(this);
         if (isBootstrapLinkValid(persistedBootstrapLink)) {
@@ -824,10 +821,8 @@ public class SetupWizard2Activity extends AppCompatActivity {
                 .create();
 
         listViewBinding.list.setOnItemClickListener((parent, view1, position, id) -> {
-            HashMap<String, String> item = mirrorList.get(position);
-            selectedMirrorCommand = Objects.requireNonNull(item.get("mirror"));
-            selectedMirrorLocation = Objects.requireNonNull(item.get("location"));
             MainSettingsManager.setSelectedMirror(SetupWizard2Activity.this, position);
+            applySelectedMirror(position);
 
             dialog.dismiss();
         });
@@ -835,6 +830,19 @@ public class SetupWizard2Activity extends AppCompatActivity {
         listViewBinding.list.post(() -> listViewBinding.list.setSelection(MainSettingsManager.getSelectedMirror(this)));
 
         dialog.show();
+    }
+
+    private void applySelectedMirror(int position) {
+        if (mirrorList.isEmpty()) {
+            selectedMirrorCommand = "echo ";
+            selectedMirrorLocation = "";
+            return;
+        }
+
+        int safePosition = Math.max(0, Math.min(position, mirrorList.size() - 1));
+        HashMap<String, String> item = mirrorList.get(safePosition);
+        selectedMirrorCommand = Objects.requireNonNull(item.get("mirror"));
+        selectedMirrorLocation = Objects.requireNonNull(item.get("location"));
     }
 
     public static class SpinnerSelectMirrorAdapter extends BaseAdapter {
