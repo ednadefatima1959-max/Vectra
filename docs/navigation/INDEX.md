@@ -4,6 +4,7 @@
 Navegação por audiência para documentos técnicos e operacionais alinhados ao código implementado.
 
 ## Audiências
+- **Big Tech / Board** → `BIGTECH_REVOLUTION_ANNOUNCE.md` (narrativa em 5 níveis)
 - **Investors & VCs** → `HIGH_LEVEL_INVESTORS.md` (diligência técnica)
 - **Scientists & Researchers** → `SCIENTISTS_RESEARCH.md` (protocolo reprodutível)
 - **Universities** → `UNIVERSITIES_ACADEMIC.md` (uso didático)
@@ -20,5 +21,5 @@ Navegação por audiência para documentos técnicos e operacionais alinhados ao
 - `../../archive/root-history/IMPLEMENTATION_COMPLETE.md`
 
 ## Metadados
-- Versão: 1.1
+- Versão: 1.3
 - Última atualização: 2026-02
