@@ -13,6 +13,7 @@ import com.vectras.vm.R;
 import com.vectras.vm.VectrasApp;
 import com.vectras.vm.adapter.LogsAdapter;
 import com.vectras.vm.core.LogcatRuntime;
+import com.vectras.vm.logger.VectrasStatus;
 
 
 public class LoggerFragment extends Fragment {
@@ -42,6 +43,8 @@ public class LoggerFragment extends Fragment {
         };
         logcatRuntime.addListener(logListener);
         logcatRuntime.acquire();
+
+        VectrasStatus.logNativeBridgeTelemetry("LoggerFragment#onCreateView");
 
         return view;
     }
