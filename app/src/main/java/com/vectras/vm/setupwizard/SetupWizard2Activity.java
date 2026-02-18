@@ -779,6 +779,12 @@ public class SetupWizard2Activity extends AppCompatActivity {
                     return;
                 }
 
+                if (exitValue == 0) {
+                    isExecutingCommand = false;
+                    runOnUiThread(this::finalizeSetupSuccess);
+                    return;
+                }
+
                 if (exitValue != 0) {
                     isExecutingCommand = false;
                     if (aria2Error && downloadBootstrapsCommand.contains("aria2c")) {
@@ -937,7 +943,9 @@ public class SetupWizard2Activity extends AppCompatActivity {
     private void appendTextAndScroll(String newLog) {
         logs += newLog;
 
-        if (newLog.contains("libproot.so --help") || newLog.contains("/bin/sh: can't fork:")) {
+        if (newLog.contains("xssFjnj58Id")) {
+            Log.d(TAG, "Setup completion marker observed: xssFjnj58Id");
+        } else if (newLog.contains("libproot.so --help") || newLog.contains("/bin/sh: can't fork:")) {
             isLibProotError = true;
         } else if (newLog.contains("not complete: /root/setup.tar.gz")) {
             aria2Error = true;
@@ -1029,6 +1037,17 @@ public class SetupWizard2Activity extends AppCompatActivity {
         }
 
         progressText = setupProgressPercent + "% | ";
+    }
+
+    private void finalizeSetupSuccess() {
+        MainSettingsManager.setStandardSetupVersion(this, AppConfig.standardSetupVersion);
+        MainSettingsManager.setsetUpWithManualSetupBefore(this, isCustomSetupMode);
+        uiController(STEP_PATERON);
+        if (isSystemUpdateMode) {
+            uiControllerFinalSteps(STEP_FINISH);
+        } else {
+            uiControllerFinalSteps(STEP_PATERON);
+        }
     }
 
     private void advanceSetupProgress(int targetPercent) {
