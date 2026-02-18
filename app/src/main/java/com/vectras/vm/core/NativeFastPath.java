@@ -65,6 +65,10 @@ public final class NativeFastPath {
     private static final AtomicLong TELEMETRY_FALLBACK_HITS = new AtomicLong();
     private static final AtomicBoolean TELEMETRY_BOOT_EMITTED = new AtomicBoolean(false);
 
+    private static final int ENTERPRISE_NECESSARY_COUNT = 7;
+    private static final int ENTERPRISE_URGENT_COUNT = 5;
+    private static final int ENTERPRISE_COMPLEMENTARY_COUNT = 14;
+
     private static final HardwareProfile BOOT_PROFILE;
 
     static {
@@ -130,15 +134,78 @@ public final class NativeFastPath {
                 TELEMETRY_AUDIT_CALLS.get(),
                 TELEMETRY_NATIVE_HITS.get(),
                 TELEMETRY_FALLBACK_HITS.get(),
-                7,
-                5,
-                14);
+                ENTERPRISE_NECESSARY_COUNT,
+                ENTERPRISE_URGENT_COUNT,
+                ENTERPRISE_COMPLEMENTARY_COUNT);
+    }
+
+    public static String formatHardwareKernelContractLine(String sourceTag) {
+        NativeBridgeTelemetrySnapshot snapshot = readNativeBridgeTelemetry();
+        return String.format(Locale.US,
+                "NATIVE_CONTRACT[%s] avail=%s sig=0x%08X ptr=%d cache=%d page=%d features=%s cores=%d arena=%d io=%d",
+                sourceTag,
+                snapshot.nativeAvailable ? "1" : "0",
+                snapshot.hardwareSignature,
+                snapshot.pointerBits,
+                snapshot.cacheLineBytes,
+                snapshot.pageBytes,
+                describeFeatureMask(snapshot.featureMask),
+                snapshot.kernelCpuCores,
+                snapshot.kernelArenaBytes,
+                snapshot.kernelIoQuantumBytes);
+    }
+
+    public static String describeFeatureMask(int featureMask) {
+        StringBuilder sb = new StringBuilder();
+        appendFeature(sb, featureMask, FEATURE_NEON, "NEON");
+        appendFeature(sb, featureMask, FEATURE_AES, "AES");
+        appendFeature(sb, featureMask, FEATURE_CRC32, "CRC32");
+        appendFeature(sb, featureMask, FEATURE_POPCNT, "POPCNT");
+        appendFeature(sb, featureMask, FEATURE_SSE42, "SSE4_2");
+        appendFeature(sb, featureMask, FEATURE_AVX2, "AVX2");
+        appendFeature(sb, featureMask, FEATURE_SIMD, "SIMD");
+        if (sb.length() == 0) {
+            return "none";
+        }
+        return sb.toString();
+    }
+
+    private static void appendFeature(StringBuilder sb, int featureMask, int flag, String label) {
+        if ((featureMask & flag) == 0) {
+            return;
+        }
+        if (sb.length() > 0) {
+            sb.append('|');
+        }
+        sb.append(label);
+    }
+
+    public static int getDeterminismScore() {
+        NativeBridgeTelemetrySnapshot snapshot = readNativeBridgeTelemetry();
+        long nativeHits = snapshot.nativeHits;
+        long fallbackHits = snapshot.fallbackHits;
+        long total = nativeHits + fallbackHits;
+        if (total <= 0) {
+            return snapshot.nativeAvailable ? 100 : 60;
+        }
+        long weighted = (nativeHits * 100L) / total;
+        if (!snapshot.nativeAvailable) {
+            weighted = Math.min(weighted, 70L);
+        }
+        if (weighted < 0L) {
+            weighted = 0L;
+        }
+        if (weighted > 100L) {
+            weighted = 100L;
+        }
+        return (int) weighted;
     }
 
     public static String formatNativeBridgeTelemetryLine(String sourceTag) {
         NativeBridgeTelemetrySnapshot snapshot = readNativeBridgeTelemetry();
+        int determinismScore = getDeterminismScore();
         return String.format(Locale.US,
-                "NATIVE_BRIDGE[%s] avail=%s hw(sig=0x%08X ptr=%d cache=%d page=%d feat=0x%08X) kernel(cores=%d arena=%d io=%d) ops(copy=%d bytes=%d xor=%d crc=%d route=%d audit=%d nativeHit=%d fallback=%d) gates(n=%d/u=%d/c=%d)",
+                "NATIVE_BRIDGE[%s] avail=%s hw(sig=0x%08X ptr=%d cache=%d page=%d feat=0x%08X/%s) kernel(cores=%d arena=%d io=%d) ops(copy=%d bytes=%d xor=%d crc=%d route=%d audit=%d nativeHit=%d fallback=%d) gates(n=%d/u=%d/c=%d) det=%d",
                 sourceTag,
                 snapshot.nativeAvailable ? "1" : "0",
                 snapshot.hardwareSignature,
@@ -146,6 +213,7 @@ public final class NativeFastPath {
                 snapshot.cacheLineBytes,
                 snapshot.pageBytes,
                 snapshot.featureMask,
+                describeFeatureMask(snapshot.featureMask),
                 snapshot.kernelCpuCores,
                 snapshot.kernelArenaBytes,
                 snapshot.kernelIoQuantumBytes,
@@ -159,7 +227,8 @@ public final class NativeFastPath {
                 snapshot.fallbackHits,
                 snapshot.necessaryCount,
                 snapshot.urgentCount,
-                snapshot.complementaryCount);
+                snapshot.complementaryCount,
+                determinismScore);
     }
 
     public static String emitBootTelemetryLineIfNeeded() {
