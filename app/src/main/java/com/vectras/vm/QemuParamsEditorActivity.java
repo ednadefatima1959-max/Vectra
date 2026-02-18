@@ -100,12 +100,12 @@ public class QemuParamsEditorActivity extends AppCompatActivity {
             if (t.startsWith("-")) switches++;
         }
 
-        boolean hasQmp = safe.contains("-qmp") || safe.contains("qmpsocket");
-        boolean hasAccel = safe.contains("-accel") || safe.contains("kvm");
-        boolean hasCpu = safe.contains("-cpu");
-        boolean hasMem = safe.contains("-m ") || safe.startsWith("-m");
-        boolean hasSmp = safe.contains("-smp");
-        boolean hasDrive = safe.contains("-drive") || safe.contains("-hda") || safe.contains("-hdb");
+        boolean hasQmp = hasFlag(tokens, "-qmp") || safe.contains("qmpsocket");
+        boolean hasAccel = hasFlag(tokens, "-accel") || containsAny(tokens, "kvm", "tcg", "hvf", "whpx");
+        boolean hasCpu = hasFlag(tokens, "-cpu");
+        boolean hasMem = hasFlag(tokens, "-m");
+        boolean hasSmp = hasFlag(tokens, "-smp");
+        boolean hasDrive = hasFlag(tokens, "-drive") || hasFlag(tokens, "-hda") || hasFlag(tokens, "-hdb") || hasFlag(tokens, "-cdrom");
 
         String analysis = getString(R.string.qemu_params_analysis_template,
                 tokenCount,
@@ -118,6 +118,46 @@ public class QemuParamsEditorActivity extends AppCompatActivity {
                 hasQmp ? "✓" : "—",
                 hasAccel ? "✓" : "—");
         binding.tvParamAnalysis.setText(analysis);
+    }
+
+    private boolean containsAny(String[] tokens, String... values) {
+        if (tokens == null || values == null) return false;
+        for (String token : tokens) {
+            if (token == null) continue;
+            String lower = token.toLowerCase();
+            for (String value : values) {
+                if (value == null) continue;
+                if (lower.contains(value.toLowerCase())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean hasFlag(String[] tokens, String flag) {
+        if (tokens == null || flag == null || flag.isEmpty()) return false;
+
+        for (int i = 0; i < tokens.length; i++) {
+            String token = tokens[i];
+            if (token == null || token.isEmpty()) continue;
+
+            if (token.equals(flag)) {
+                return true;
+            }
+
+            if (token.startsWith(flag + "=")) {
+                return true;
+            }
+
+            if (flag.length() == 2 && token.startsWith(flag) && token.length() > flag.length()) {
+                char next = token.charAt(flag.length());
+                if (Character.isDigit(next)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
 
