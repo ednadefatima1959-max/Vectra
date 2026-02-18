@@ -73,6 +73,7 @@ public class SetupWizard2Activity extends AppCompatActivity {
     private static final String BOOTSTRAP_PREFIX_ARIA2 = " aria2c -x 4 --async-dns=false --disable-ipv6 --check-certificate=false -o setup.tar.gz ";
     private static final String BOOTSTRAP_PREFIX_CURL = " curl -o setup.tar.gz -L ";
     private static final Pattern ARIA2_PROGRESS_PATTERN = Pattern.compile("\\((\\d{1,3})%\\)");
+    private static final Pattern CURL_PROGRESS_PATTERN = Pattern.compile("^\\s*(\\d{1,3})\\s+\\d");
 
     private enum SetupSource {
         REMOTE,
@@ -100,6 +101,7 @@ public class SetupWizard2Activity extends AppCompatActivity {
     String tarPath = "";
     String progressText ="0%";
     int setupProgressPercent = 0;
+    boolean bootstrapDownloadActive = false;
     SetupSource setupSource = SetupSource.REMOTE;
     boolean isSystemUpdateMode = false;
     boolean isExecutingCommand = false;
@@ -509,6 +511,7 @@ public class SetupWizard2Activity extends AppCompatActivity {
                 logs = "";
                 progressText = "";
                 setupProgressPercent = 0;
+                bootstrapDownloadActive = false;
                 aria2Error = false;
                 isServerError = false;
                 String vncPassword = MainSettingsManager.getVncExternalPassword(this);
@@ -790,21 +793,32 @@ public class SetupWizard2Activity extends AppCompatActivity {
         }
 
         if (newLog.contains("Downloading Qemu...")) {
+            bootstrapDownloadActive = true;
             advanceSetupProgress(70);
         }
 
-        Matcher aria2Matcher = ARIA2_PROGRESS_PATTERN.matcher(newLog);
-        if (aria2Matcher.find()) {
-            int downloadPercent = safeParseInt(aria2Matcher.group(1));
-            int mappedDownloadProgress = 70 + Math.min(5, Math.max(0, (downloadPercent * 5) / 100));
-            advanceSetupProgress(mappedDownloadProgress);
+        if (bootstrapDownloadActive) {
+            Matcher aria2Matcher = ARIA2_PROGRESS_PATTERN.matcher(newLog);
+            if (aria2Matcher.find()) {
+                int downloadPercent = safeParseInt(aria2Matcher.group(1));
+                int mappedDownloadProgress = 70 + Math.min(5, Math.max(0, (downloadPercent * 5) / 100));
+                advanceSetupProgress(mappedDownloadProgress);
+            }
+
+            Matcher curlMatcher = CURL_PROGRESS_PATTERN.matcher(newLog);
+            if (curlMatcher.find()) {
+                int curlPercent = safeParseInt(curlMatcher.group(1));
+                int mappedCurlProgress = 70 + Math.min(5, Math.max(0, (curlPercent * 5) / 100));
+                advanceSetupProgress(mappedCurlProgress);
+            }
         }
 
         if (newLog.contains("Installing Qemu...")) {
+            bootstrapDownloadActive = false;
             advanceSetupProgress(75);
         }
 
-        if (newLog.contains("tar -xzvf ") || newLog.contains("setup.tar.gz") || newLog.contains("x qemu-system")) {
+        if (newLog.contains("tar -xzvf ") || newLog.startsWith("x ")) {
             advanceSetupProgress(78);
         }
 
@@ -814,6 +828,10 @@ public class SetupWizard2Activity extends AppCompatActivity {
 
         if (newLog.contains("Just a sec...")) {
             advanceSetupProgress(95);
+        }
+
+        if (newLog.contains("xssFjnj58Id")) {
+            advanceSetupProgress(100);
         }
 
         progressText = setupProgressPercent + "% | ";
