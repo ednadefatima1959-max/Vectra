@@ -449,6 +449,15 @@ class VectraEventBus(private val arenaHandle: Int = 0) {
         )
     }
 
+    fun resolvePayload(event: VectraEvent?): ByteArray {
+        if (event == null || event.payloadLength <= 0) return ByteArray(0)
+        val source = event.payload ?: return ByteArray(0)
+        val len = event.payloadLength.coerceAtMost(source.size)
+        val resolved = ByteArray(len)
+        NativeFastPath.copyBytes(source, 0, resolved, 0, len)
+        return resolved
+    }
+
     private fun postInternal(
         type: VectraEvent.EventType,
         priority: Int,
@@ -683,7 +692,7 @@ class VectraCycle(
             val eventType = event.type
             Log.d(
                 TAG,
-                "event_processed timestamp=${event.timestamp} type=$eventType priority=${event.priority}"
+                "event_processed timestamp=${event.timestamp} type=${event.type} priority=${event.priority}"
             )
         }
 
@@ -721,6 +730,7 @@ class VectraCycle(
     private fun processEvent(event: VectraEvent, payload: ByteArray) {
         val eventType = event.type
         // Update entropy hint based on event type
+        val eventType = event.type
         val baseWeight = when (eventType) {
             VectraEvent.EventType.RADIO_EVENT -> 10 // Radio events add more rho
             VectraEvent.EventType.NETWORK_CHANGE -> 5

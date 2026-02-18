@@ -243,7 +243,6 @@ public class SystemMonitorFragment extends Fragment {
             if (!isViewBindingAvailable()) return;
             String result = Terminal.executeShellCommandWithResult("ps -e command && echo \"psendhere\" && cat /proc/cpuinfo", requireActivity());
             requireActivity().runOnUiThread(() -> {
-                if (!isViewBindingAvailable()) return;
                 int markerIndex = result.indexOf("\npsendhere");
                 if (result.isEmpty()) {
                     binding.tvProcesses.setText(getString(R.string.nothing_here));
