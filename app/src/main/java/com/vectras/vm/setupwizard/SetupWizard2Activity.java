@@ -728,64 +728,42 @@ public class SetupWizard2Activity extends AppCompatActivity {
 
                 if (result.status == ProcessRuntimeOps.TimeoutExecutionResult.Status.TIMEOUT) {
                     isExecutingCommand = false;
-                    handleSetupFailureWithRollback(
-                            setupTimestamp,
-                            "timeout during setup",
-                            SetupFeatureCore.formatPostCheckFailure(java.util.Arrays.asList(
-                                    "timeout",
-                                    ProcessRuntimeOps.ExecutionCategory.SETUP_EXTRACTION.name().toLowerCase()
-                            ))
-                    );
+                    final String timeoutMessage = "Command timed out ["
+                            + ProcessRuntimeOps.ExecutionCategory.SETUP_EXTRACTION.name()
+                            + "]: "
+                            + result.message;
+                    Log.e(TAG, withSetupSourceDiagnostic(timeoutMessage));
+                    executeBestEffortRollback(setupTimestamp, "timeout during setup");
+                    runOnUiThread(() -> {
+                        appendTextAndScroll("Error: " + withSetupSourceDiagnostic(timeoutMessage) + "\n");
+                        uiController(STEP_ERROR, logs);
+                    });
                     return;
                 }
 
                 if (result.status == ProcessRuntimeOps.TimeoutExecutionResult.Status.ERROR) {
                     isExecutingCommand = false;
-                    handleSetupFailureWithRollback(
-                            setupTimestamp,
-                            "execution error during setup",
-                            SetupFeatureCore.formatPostCheckFailure(java.util.Arrays.asList(
-                                    "execution-error",
-                                    ProcessRuntimeOps.ExecutionCategory.SETUP_EXTRACTION.name().toLowerCase()
-                            ))
-                    );
+                    final String operationErrorMessage = "Command execution error ["
+                            + ProcessRuntimeOps.ExecutionCategory.SETUP_EXTRACTION.name()
+                            + "]: "
+                            + result.message;
+                    Log.e(TAG, withSetupSourceDiagnostic(operationErrorMessage));
+                    executeBestEffortRollback(setupTimestamp, "execution error during setup");
+                    runOnUiThread(() -> {
+                        appendTextAndScroll("Error: " + withSetupSourceDiagnostic(operationErrorMessage) + "\n");
+                        uiController(STEP_ERROR, logs);
+                    });
                     return;
                 }
 
                 int exitValue = result.exitCode;
                 if (exitValue == 0 && criticalSetupStderr) {
                     isExecutingCommand = false;
-                    handleSetupFailureWithRollback(
-                            setupTimestamp,
-                            "critical stderr detected",
-                            SetupFeatureCore.formatPostCheckFailure(java.util.Arrays.asList("critical-stderr"))
-                    );
-                    return;
-                }
-
-                if (exitValue == 0) {
-                    SetupFeatureCore.PostInstallCheckResult postInstallCheck = SetupFeatureCore.runPostInstallCheck(this);
-                    if (postInstallCheck.ok) {
-                        runOnUiThread(() -> {
-                            MainSettingsManager.setStandardSetupVersion(this, AppConfig.standardSetupVersion);
-                            MainSettingsManager.setsetUpWithManualSetupBefore(this, isCustomSetupMode);
-                            uiController(STEP_PATERON);
-                            if (isSystemUpdateMode) {
-                                uiControllerFinalSteps(STEP_FINISH);
-                            } else {
-                                uiControllerFinalSteps(STEP_PATERON);
-                            }
-                            isExecutingCommand = false;
-                        });
-                    } else {
-                        isExecutingCommand = false;
-                        executeBestEffortRollback(setupTimestamp, "post install check failed");
-                        runOnUiThread(() -> {
-                            String technicalMessage = withSetupSourceDiagnostic(postInstallCheck.technicalMessage());
-                            appendTextAndScroll("Error: " + technicalMessage + "\n");
-                            uiController(STEP_ERROR, technicalMessage);
-                        });
-                    }
+                    executeBestEffortRollback(setupTimestamp, "critical stderr detected");
+                    runOnUiThread(() -> {
+                        appendTextAndScroll("Error: " + withSetupSourceDiagnostic("critical stderr detected during setup") + "\n");
+                        uiController(STEP_ERROR, logs);
+                    });
                     return;
                 }
 
@@ -797,11 +775,12 @@ public class SetupWizard2Activity extends AppCompatActivity {
                             startSetup();
                         });
                     } else {
-                        handleSetupFailureWithRollback(
-                                setupTimestamp,
-                                "non-zero exit code: " + exitValue,
-                                SetupFeatureCore.formatPostCheckFailure(java.util.Arrays.asList("exit-" + exitValue))
-                        );
+                        executeBestEffortRollback(setupTimestamp, "non-zero exit code: " + exitValue);
+                        runOnUiThread(() -> {
+                            String toastMessage = "Command failed with exit code: " + exitValue;
+                            appendTextAndScroll("Error: " + withSetupSourceDiagnostic(toastMessage) + "\n");
+                            uiController(STEP_ERROR, logs);
+                        });
                     }
                     return;
                 }
@@ -825,6 +804,10 @@ public class SetupWizard2Activity extends AppCompatActivity {
                 }
 
                 isExecutingCommand = false;
+                // Handle exceptions by printing the stack trace in the terminal output
+                final String errorMessage = e.getMessage();
+                Log.e(TAG, withSetupSourceDiagnostic("executeShellCommand IO error: " + errorMessage), e);
+                executeBestEffortRollback(setupTimestamp, "io error during setup");
                 runOnUiThread(() -> {
                     MainSettingsManager.setStandardSetupVersion(this, AppConfig.standardSetupVersion);
                     MainSettingsManager.setsetUpWithManualSetupBefore(this, isCustomSetupMode);
@@ -940,6 +923,44 @@ public class SetupWizard2Activity extends AppCompatActivity {
                         "if [ -f \"$BACKUP_BASE/current/etc-profile\" ]; then cp -a \"$BACKUP_BASE/current/etc-profile\" /etc/profile; fi; " +
                         "rm -rf \"$STAGE_DIR\"; " +
                         "printf '{\\"version\\":1,\\"timestamp\\":\\"" + setupTimestamp + "\\",\\"phase\\":\\"ROLLED_BACK\\",\\"stage_dir\\":\\"/root/.vectras-staging/" + setupTimestamp + "\\",\\"message\\":\\"" + sanitizedReason + "\\"}\\n' > /root/.vectras-setup/setup_state.json";
+
+                ProcessBuilder processBuilder = new ProcessBuilder();
+                String filesDir = getFilesDir().getAbsolutePath();
+                String tmpDirPath = getFilesDir().getAbsolutePath() + "/usr/tmp";
+                ProotCommandBuilder prootCommandBuilder = new ProotCommandBuilder(this, filesDir + "/distro", "/root")
+                        .setPath("/bin:/usr/bin:/sbin:/usr/sbin")
+                        .setTmpDir(tmpDirPath);
+                prootCommandBuilder.applyEnvironment(processBuilder.environment());
+                processBuilder.command(prootCommandBuilder.buildCommand());
+                processBuilder.redirectErrorStream(true);
+                Process process = processBuilder.start();
+                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()))) {
+                    writer.write(rollbackCommand);
+                    writer.newLine();
+                    writer.flush();
+                }
+                process.waitFor();
+            } catch (Exception e) {
+                Log.e(TAG, "Best-effort rollback failed: " + e.getMessage(), e);
+            }
+        }).start();
+    }
+
+    private void executeBestEffortRollback(String setupTimestamp, String reason) {
+        if (setupTimestamp == null || setupTimestamp.isEmpty()) {
+            return;
+        }
+        new Thread(() -> {
+            try {
+                String sanitizedReason = reason == null ? "unknown error" : reason.replace("\"", "").replace("\n", " ");
+                String rollbackCommand = "set -e; " +
+                        "BACKUP_BASE=/root/.vectras-backups; " +
+                        "STAGE_DIR=/root/.vectras-staging/" + setupTimestamp + "; " +
+                        "mkdir -p /root/.vectras-setup; " +
+                        "if [ -d \"$BACKUP_BASE/current/usr-local-bin\" ]; then rm -rf /usr/local/bin; cp -a \"$BACKUP_BASE/current/usr-local-bin\" /usr/local/bin; fi; " +
+                        "if [ -f \"$BACKUP_BASE/current/etc-profile\" ]; then cp -a \"$BACKUP_BASE/current/etc-profile\" /etc/profile; fi; " +
+                        "rm -rf \"$STAGE_DIR\"; " +
+                        "printf '{\\\"version\\\":1,\\\"timestamp\\\":\\\"" + setupTimestamp + "\\\",\\\"phase\\\":\\\"ROLLED_BACK\\\",\\\"stage_dir\\\":\\\"/root/.vectras-staging/" + setupTimestamp + "\\\",\\\"message\\\":\\\"" + sanitizedReason + "\\\"}\\n' > /root/.vectras-setup/setup_state.json";
 
                 ProcessBuilder processBuilder = new ProcessBuilder();
                 String filesDir = getFilesDir().getAbsolutePath();
