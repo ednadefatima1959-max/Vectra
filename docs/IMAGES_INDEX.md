@@ -27,6 +27,7 @@ Formato canônico adotado neste repositório: **híbrido controlado**.
 - **Obrigatório para conteúdo local**: ASCII versionado em `docs/assets/ascii/`.
 - **Permitido para binário**: apenas como referência externa com URL estável e proveniência documentada.
 - **Fonte única de verdade**: [`docs/assets/MANIFEST.md`](assets/MANIFEST.md).
+- **Mapa fullstack do código-fonte**: [`docs/FULLSTACK_SOURCE_MAP.md`](FULLSTACK_SOURCE_MAP.md).
 
 > Regra curta: **não existe PNG local obrigatório**; o obrigatório é a rastreabilidade no manifesto (ASCII local ou binário externo com proveniência).
 
