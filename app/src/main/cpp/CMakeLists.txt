@@ -76,11 +76,12 @@ if(TARGET bitraf_static)
     target_include_directories(bitraf_static PRIVATE
         ${VECTRA_RMR_INCLUDE_DIR})
     target_compile_definitions(vectra_core_accel PRIVATE RMR_ENABLE_BITRAF_MODULE=1)
-    if(TARGET bitraf_static)
-        target_link_libraries(vectra_core_accel PRIVATE bitraf_static)
-    endif()
 else()
     target_compile_definitions(vectra_core_accel PRIVATE RMR_ENABLE_BITRAF_MODULE=0)
+endif()
+
+if(TARGET bitraf_static)
+    target_link_libraries(vectra_core_accel PRIVATE bitraf_static)
 endif()
 
 target_compile_options(vectra_core_accel PRIVATE
