@@ -61,7 +61,9 @@ add_tree_if_exists() {
 
 # Evidências de download/cache
 add_tree_if_exists "$ANDROID_CACHE_HOME/cache" "android-cache"
-add_tree_if_exists "$ANDROID_SDK_ROOT/cmdline-tools/latest/source.properties" "cmdline-tools-meta"
+add_tree_if_exists "$ANDROID_SDK_ROOT/cmdline-tools/latest" "cmdline-tools-installed"
+add_tree_if_exists "$ANDROID_SDK_ROOT/platform-tools" "platform-tools-installed"
+add_tree_if_exists "$ANDROID_SDK_ROOT/build-tools" "build-tools-installed"
 add_tree_if_exists "$ANDROID_SDK_ROOT/licenses" "licenses"
 add_tree_if_exists "$ANDROID_SDK_ROOT/packages.xml" "packages-xml"
 
