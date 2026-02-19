@@ -63,7 +63,17 @@ if(TARGET rmr_policy_static)
         ${VECTRA_RMR_INCLUDE_DIR})
 endif()
 
-target_compile_definitions(vectra_core_accel PRIVATE RMR_ENABLE_POLICY_MODULE=1 RMR_ENABLE_BITRAF_MODULE=1)
+if(TARGET rmr_policy_static)
+    target_compile_definitions(vectra_core_accel PRIVATE RMR_ENABLE_POLICY_MODULE=1)
+else()
+    target_compile_definitions(vectra_core_accel PRIVATE RMR_ENABLE_POLICY_MODULE=0)
+endif()
+
+if(TARGET bitraf_static)
+    target_compile_definitions(vectra_core_accel PRIVATE RMR_ENABLE_BITRAF_MODULE=1)
+else()
+    target_compile_definitions(vectra_core_accel PRIVATE RMR_ENABLE_BITRAF_MODULE=0)
+endif()
 
 target_compile_options(vectra_core_accel PRIVATE
     ${VECTRA_COMMON_COMPILE_OPTIONS}
