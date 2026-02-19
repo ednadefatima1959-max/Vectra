@@ -346,12 +346,44 @@ public final class NativeFastPath {
         if (data == null || length <= 0) return 0;
         TELEMETRY_XOR_CALLS.incrementAndGet();
         int value = LowLevelBridge.xorChecksumCompat(data, offset, length);
+        trackLowLevelRouteHit();
+        return value;
+    }
+
+    public static int fold32(int a, int b, int c, int d) {
+        int folded = LowLevelBridge.fold32(a, b, c, d);
+        trackLowLevelRouteHit();
+        return folded;
+    }
+
+    public static int reduceXor(byte[] data, int offset, int length) {
+        int reduced = LowLevelBridge.reduceXor(data, offset, length);
+        trackLowLevelRouteHit();
+        return reduced;
+    }
+
+    public static int checksum32(byte[] data, int offset, int length, int seed) {
+        int checksum = LowLevelBridge.checksum32(data, offset, length, seed);
+        trackLowLevelRouteHit();
+        return checksum;
+    }
+
+    private static void trackLowLevelRouteHit() {
         if (LowLevelBridge.wasLastCallNative()) {
             telemetryNativeHit();
         } else {
             telemetryFallbackHit();
         }
-        return value;
+    }
+
+    public static int crc32c(int initial, byte[] data, int offset, int length) {
+        if (data == null || length <= 0) {
+            return initial;
+        }
+        TELEMETRY_CRC_CALLS.incrementAndGet();
+        int crc = LowLevelBridge.crc32cCompat(initial, data, offset, length);
+        trackLowLevelRouteHit();
+        return crc;
     }
 
     public static int allocArena(int bytes) {
@@ -753,20 +785,6 @@ public final class NativeFastPath {
         }
         telemetryFallbackHit();
         return signature;
-    }
-
-    public static int crc32c(int initial, byte[] data, int offset, int length) {
-        if (data == null || length <= 0) {
-            return initial;
-        }
-        TELEMETRY_CRC_CALLS.incrementAndGet();
-        int crc = LowLevelBridge.crc32cCompat(initial, data, offset, length);
-        if (LowLevelBridge.wasLastCallNative()) {
-            telemetryNativeHit();
-        } else {
-            telemetryFallbackHit();
-        }
-        return crc;
     }
 
     public static int parity2D8(int data16) {

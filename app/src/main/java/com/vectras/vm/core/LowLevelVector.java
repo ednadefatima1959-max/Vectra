@@ -21,6 +21,6 @@ public final class LowLevelVector {
         int a1 = y(packedA);
         int b0 = x(packedB);
         int b1 = y(packedB);
-        return LowLevelBridge.fold32(a0 + salt, a1 - salt, b0 ^ salt, b1);
+        return NativeFastPath.fold32(a0 + salt, a1 - salt, b0 ^ salt, b1);
     }
 }
