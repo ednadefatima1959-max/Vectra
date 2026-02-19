@@ -3,11 +3,13 @@ package com.vectras.vm.core;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class LowLevelBridgeEquivalenceTest {
 
     @Test
-    public void fold32MatchesFallbackForFixedInputs() {
+    public void fold32UsesDeterministicFallbackAndMatchesBridgeWhenNativeLoaded() {
         int[][] vectors = new int[][]{
                 {0, 0, 0, 0},
                 {1, 2, 3, 4},
@@ -20,11 +22,22 @@ public class LowLevelBridgeEquivalenceTest {
             int fallback = LowLevelDeterminism.fold32Fallback(v[0], v[1], v[2], v[3]);
             int bridged = LowLevelBridge.fold32(v[0], v[1], v[2], v[3]);
             assertEquals(fallback, bridged);
+            if (!LowLevelBridge.isLoaded()) {
+                assertFalse(LowLevelBridge.wasLastCallNative());
+            }
+        }
+
+        if (LowLevelBridge.isLoaded()) {
+            int[] probe = vectors[vectors.length - 1];
+            int fallback = LowLevelDeterminism.fold32Fallback(probe[0], probe[1], probe[2], probe[3]);
+            int bridged = LowLevelBridge.fold32(probe[0], probe[1], probe[2], probe[3]);
+            assertTrue(LowLevelBridge.wasLastCallNative());
+            assertEquals(fallback, bridged);
         }
     }
 
     @Test
-    public void reduceXorMatchesFallbackForEdgeRanges() {
+    public void reduceXorUsesDeterministicFallbackAndMatchesBridgeWhenNativeLoaded() {
         byte[] signedBytes = new byte[]{
                 (byte) 0x80, (byte) 0xFF, (byte) 0x7F, (byte) 0x00,
                 (byte) 0xA5, (byte) 0x5A, (byte) 0xC3, (byte) 0x3C,
@@ -46,14 +59,26 @@ public class LowLevelBridgeEquivalenceTest {
             int fallback = LowLevelDeterminism.reduceXorFallback(signedBytes, offset, length);
             int bridged = LowLevelBridge.reduceXor(signedBytes, offset, length);
             assertEquals(fallback, bridged);
+            if (!LowLevelBridge.isLoaded()) {
+                assertFalse(LowLevelBridge.wasLastCallNative());
+            }
         }
 
+        assertEquals(0, LowLevelDeterminism.reduceXorFallback(new byte[0], 0, 0));
+        assertEquals(0, LowLevelBridge.reduceXor(new byte[0], 0, 0));
         assertEquals(0, LowLevelDeterminism.reduceXorFallback(signedBytes, -1, 1));
         assertEquals(0, LowLevelBridge.reduceXor(signedBytes, -1, 1));
+
+        if (LowLevelBridge.isLoaded()) {
+            int fallback = LowLevelDeterminism.reduceXorFallback(signedBytes, 0, signedBytes.length);
+            int bridged = LowLevelBridge.reduceXor(signedBytes, 0, signedBytes.length);
+            assertTrue(LowLevelBridge.wasLastCallNative());
+            assertEquals(fallback, bridged);
+        }
     }
 
     @Test
-    public void checksum32MatchesFallbackForSeedsAndBoundaries() {
+    public void checksum32UsesDeterministicFallbackAndMatchesBridgeWhenNativeLoaded() {
         byte[] data = new byte[]{
                 (byte) 0x00, (byte) 0x01, (byte) 0x02, (byte) 0x80,
                 (byte) 0xFF, (byte) 0x10, (byte) 0x20, (byte) 0x30,
@@ -75,15 +100,20 @@ public class LowLevelBridgeEquivalenceTest {
                 int fallback = LowLevelDeterminism.checksum32Fallback(data, offset, length, seed);
                 int bridged = LowLevelBridge.checksum32(data, offset, length, seed);
                 assertEquals(fallback, bridged);
+                if (!LowLevelBridge.isLoaded()) {
+                    assertFalse(LowLevelBridge.wasLastCallNative());
+                }
             }
         }
 
         int invalidFallback = LowLevelDeterminism.checksum32Fallback(data, -1, 2, 0x55AA);
         int invalidBridge = LowLevelBridge.checksum32(data, -1, 2, 0x55AA);
         assertEquals(invalidFallback, invalidBridge);
+
         if (LowLevelBridge.isLoaded()) {
             int fallback = LowLevelDeterminism.checksum32Fallback(data, 0, data.length, 0xA5A5A5A5);
             int bridged = LowLevelBridge.checksum32(data, 0, data.length, 0xA5A5A5A5);
+            assertTrue(LowLevelBridge.wasLastCallNative());
             assertEquals(fallback, bridged);
         }
     }
