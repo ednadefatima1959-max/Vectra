@@ -55,12 +55,13 @@ Save this as `app/google-services.json` to enable builds without a real Firebase
 
 ## Produção / Ambiente Real (Obrigatório para Firebase funcional)
 
-Ao sair do fallback `minimal placeholder`, atualize o arquivo com dados reais do seu projeto Firebase:
+Ao sair do fallback `minimal placeholder`, use configuração real de produção com passos objetivos:
 
-1. Substitua `project_id` e `storage_bucket` do exemplo com os valores reais do projeto (não use `vectras-vm-placeholder`).
-2. Use um `google-services.json` baixado do console Firebase para o app Android correto.
+1. Substitua `project_id` e `storage_bucket` por valores reais do seu projeto Firebase (não use `vectras-vm-placeholder`).
+2. Baixe o `google-services.json` do Firebase Console para o app Android correto e use esse arquivo como fonte da verdade.
+3. Não publique build de produção com arquivo de placeholder.
 
-### Exemplo real (sem `*-placeholder`)
+### Exemplo real (sem `*-placeholder`, apenas referência de estrutura)
 
 ```json
 {
@@ -98,11 +99,12 @@ Ao sair do fallback `minimal placeholder`, atualize o arquivo com dados reais do
 
 - [ ] Arquivo salvo em `app/google-services.json`.
 - [ ] `package_name` no JSON compatível com o package da aplicação (`com.vectras.vm`).
-- [ ] Executar Sync Gradle após substituir o arquivo para aplicar a configuração.
+- [ ] Executar **Sync Gradle** após substituir o arquivo para aplicar a configuração.
+- [ ] Confirmar que o build variante de release também resolve `google-services.json` corretamente.
 
 ### Aviso de risco funcional
 
-Se `vectras-vm-placeholder` ou qualquer configuração de placeholder for mantida em produção, Firebase Analytics, Crashlytics e Messaging ficam inoperantes.
+Se `vectras-vm-placeholder` ou qualquer configuração de placeholder for mantida em produção, Firebase Analytics, Crashlytics e Messaging ficam inoperantes (risco funcional direto em telemetria, estabilidade e push notifications).
 
 ## CI/CD
 
