@@ -214,43 +214,43 @@ rmr_status_t rmr_legacy_kernel_get_capabilities(const rmr_legacy_kernel_t *kerne
 }
 
 static void rmr_unified_caps_from_hw(const RmR_HW_Info *hw, RmR_UnifiedCapabilities *out) {
-  uint32_t arch_signature = 0x0000u;
+  uint32_t arch_signature = RMR_SIG_ARCH_UNKNOWN;
 
   switch (hw->arch) {
     case 4u: /* ARM64 */
-      arch_signature = 0x0100u;
+      arch_signature = RMR_SIG_ARCH_ARM64;
       break;
     case 3u: /* ARM32 */
-      arch_signature = 0x0200u;
+      arch_signature = RMR_SIG_ARCH_ARM32;
       break;
     case 2u: /* X64 */
-      arch_signature = 0x0300u;
+      arch_signature = RMR_SIG_ARCH_X64;
       break;
     case 1u: /* X86 */
-      arch_signature = 0x0400u;
+      arch_signature = RMR_SIG_ARCH_X86;
       break;
     case 5u: /* RISCV64 */
-      arch_signature = 0x0500u;
+      arch_signature = RMR_SIG_ARCH_RISCV64;
       break;
     default:
       switch (hw->arch_hex) {
         case 0xA64u: /* ARM64 */
-          arch_signature = 0x0100u;
+          arch_signature = RMR_SIG_ARCH_ARM64;
           break;
         case 0xA32u: /* ARM32 */
-          arch_signature = 0x0200u;
+          arch_signature = RMR_SIG_ARCH_ARM32;
           break;
         case 0x8664u: /* X64 */
-          arch_signature = 0x0300u;
+          arch_signature = RMR_SIG_ARCH_X64;
           break;
         case 0x86u: /* X86 */
-          arch_signature = 0x0400u;
+          arch_signature = RMR_SIG_ARCH_X86;
           break;
         case 0x52u: /* RISCV64 */
-          arch_signature = 0x0500u;
+          arch_signature = RMR_SIG_ARCH_RISCV64;
           break;
         default:
-          arch_signature = 0x0000u;
+          arch_signature = RMR_SIG_ARCH_UNKNOWN;
           break;
       }
       break;

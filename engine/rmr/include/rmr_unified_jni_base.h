@@ -55,6 +55,13 @@ typedef struct {
   uint32_t gpio_pin_stride;
 } RmR_UnifiedCapabilities;
 
+#define RMR_SIG_ARCH_UNKNOWN 0x0000u
+#define RMR_SIG_ARCH_ARM64 0x0100u
+#define RMR_SIG_ARCH_ARM32 0x0200u
+#define RMR_SIG_ARCH_X64 0x0300u
+#define RMR_SIG_ARCH_X86 0x0400u
+#define RMR_SIG_ARCH_RISCV64 0x0500u
+
 typedef struct {
   uint32_t seed;
   uint32_t arena_bytes;
