@@ -81,7 +81,9 @@ target_compile_options(vectra_core_accel PRIVATE
 
 target_link_libraries(vectra_core_accel PRIVATE ${log-lib})
 
-target_link_libraries(vectra_core_accel PRIVATE rmr_policy_static)
+if(TARGET rmr_policy_static)
+    target_link_libraries(vectra_core_accel PRIVATE rmr_policy_static)
+endif()
 
 if(TARGET bitraf_static)
     target_compile_options(bitraf_static PRIVATE
@@ -91,7 +93,9 @@ if(TARGET bitraf_static)
         ${VECTRA_RMR_INCLUDE_DIR})
 endif()
 
-target_link_libraries(vectra_core_accel PRIVATE bitraf_static)
+if(TARGET bitraf_static)
+    target_link_libraries(vectra_core_accel PRIVATE bitraf_static)
+endif()
 
 target_include_directories(vectra_core_accel PRIVATE
     ${VECTRA_RMR_INCLUDE_DIR})
