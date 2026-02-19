@@ -79,8 +79,8 @@ Mapa arquivo-a-arquivo em três linhas por item: papel, ligação e comando de i
 
 
 ## `tools/export_source_tarball.sh`
-- **Papel**: exporta arquivos-fonte versionados para diretório dedicado e gera pacote `.tar.gz` para redação/edição externa.
-- **Liga com**: usa `git ls-files` e organiza saída em `archive/source-export/` por timestamp.
+- **Papel**: exporta código-fonte do repositório e também downloads/código instalado via SDK/NDK/CMake (quando presentes), gerando pacote `.tar.gz` para redação/edição externa.
+- **Liga com**: integra `git ls-files`, `.android-sdk` e cache `~/.android/cache`, organizando saída em `archive/source-export/` por timestamp.
 - **Inspeção**: `bash tools/export_source_tarball.sh` e `find archive/source-export -maxdepth 3 -type f | sort`.
 
 ## `tools/audit_non_md_inventory.py`
