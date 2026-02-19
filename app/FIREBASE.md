@@ -53,6 +53,59 @@ Save this as `app/google-services.json` to enable builds without a real Firebase
 
 **Note**: Firebase features (analytics, crashlytics, messaging) will not work with the placeholder configuration.
 
+## Produção / Ambiente Real (Obrigatório para Firebase funcional)
+
+Ao sair do fallback `minimal placeholder`, use configuração real de produção com passos objetivos:
+
+1. Substitua `project_id` e `storage_bucket` por valores reais do seu projeto Firebase (não use `vectras-vm-placeholder`).
+2. Baixe o `google-services.json` do Firebase Console para o app Android correto e use esse arquivo como fonte da verdade.
+3. Não publique build de produção com arquivo de placeholder.
+
+### Exemplo real (sem `*-placeholder`, apenas referência de estrutura)
+
+```json
+{
+  "project_info": {
+    "project_number": "123456789012",
+    "project_id": "vectras-vm-prod",
+    "storage_bucket": "vectras-vm-prod.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123456789012:android:abcdef1234567890abcd12",
+        "android_client_info": {
+          "package_name": "com.vectras.vm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyRealProjectKeyExample123456789"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+```
+
+### Checklist de validação
+
+- [ ] Arquivo salvo em `app/google-services.json`.
+- [ ] `package_name` no JSON compatível com o package da aplicação (`com.vectras.vm`).
+- [ ] Executar **Sync Gradle** após substituir o arquivo para aplicar a configuração.
+- [ ] Confirmar que o build variante de release também resolve `google-services.json` corretamente.
+
+### Aviso de risco funcional
+
+Se `vectras-vm-placeholder` ou qualquer configuração de placeholder for mantida em produção, Firebase Analytics, Crashlytics e Messaging ficam inoperantes (risco funcional direto em telemetria, estabilidade e push notifications).
+
 ## CI/CD
 
 For CI builds, ensure the `google-services.json` file is available via:
