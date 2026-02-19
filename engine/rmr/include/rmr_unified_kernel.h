@@ -133,10 +133,12 @@ rmr_status_t rmr_legacy_kernel_get_capabilities(const rmr_legacy_kernel_t *kerne
 typedef RmR_UnifiedKernel rmr_jni_kernel_state_t;
 
 typedef struct {
+  /* signature = stable architecture code compatible with NativeFastPath.ARCH_*. */
   uint32_t signature;
   uint32_t pointer_bits;
   uint32_t cache_line_bytes;
   uint32_t page_bytes;
+  /* feature_mask = feature bits only; excludes architecture-identification bits. */
   uint32_t feature_mask;
   uint32_t register_width_bits;
   uint32_t pin_count_hint;
