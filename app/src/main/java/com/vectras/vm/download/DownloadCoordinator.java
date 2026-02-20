@@ -33,15 +33,17 @@ public class DownloadCoordinator {
                                    @NonNull String url,
                                    @NonNull String finalName,
                                    @Nullable String expectedHash) {
+        String sanitizedName = DownloadPathResolver.sanitizeName(finalName);
+
         Data input = new Data.Builder()
                 .putString(DownloadWorker.KEY_ROM_ID, romId)
                 .putString(DownloadWorker.KEY_URL, url)
-                .putString(DownloadWorker.KEY_FINAL_NAME, finalName)
+                .putString(DownloadWorker.KEY_FINAL_NAME, sanitizedName)
                 .putString(DownloadWorker.KEY_EXPECTED_HASH, expectedHash)
                 .build();
 
         DownloadStateStore stateStore = new DownloadStateStore(appContext);
-        stateStore.upsert(DownloadWorker.buildInitialState(appContext, romId, url, finalName, expectedHash));
+        stateStore.upsert(DownloadWorker.buildInitialState(appContext, romId, url, sanitizedName, expectedHash));
 
         Constraints constraints = new Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)

@@ -7,6 +7,7 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
+import android.text.TextUtils;
 import android.view.View;
 
 import androidx.activity.EdgeToEdge;
@@ -24,6 +25,9 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.vectras.qemu.MainSettingsManager;
 import com.vectras.vm.databinding.ActivityRomInfoBinding;
+import com.vectras.vm.download.DownloadItemState;
+import com.vectras.vm.download.DownloadStateStore;
+import com.vectras.vm.download.DownloadStatus;
 import com.vectras.vm.network.RequestNetwork;
 import com.vectras.vm.network.RequestNetworkController;
 import com.vectras.vm.utils.DialogUtils;
@@ -112,62 +116,7 @@ public class RomInfo extends AppCompatActivity {
                     runOnUiThread(() -> {
                         if (selectedFileName.equals(getIntent().getStringExtra("filename")) ||
                                 (selectedFileName.endsWith(".cvbi.zip") && selectedFileName.equals(getIntent().getStringExtra("filename") + ".zip"))) {
-                            Intent intent = new Intent();
-
-                            if (getIntent().hasExtra("icon") &&
-                                    !Objects.requireNonNull(getIntent().getStringExtra("icon")).isEmpty() &&
-                                    (!selectedFileName.endsWith(".cvbi")
-                                            || !selectedFileName.endsWith(".cvbi.zip"))) {
-
-                                Glide.with(this)
-                                        .asBitmap()
-                                        .load(getIntent().getStringExtra("icon"))
-                                        .into(new CustomTarget<Bitmap>() {
-                                            @Override
-                                            public void onResourceReady(@NonNull Bitmap resource,
-                                                                        @Nullable Transition<? super Bitmap> transition) {
-                                                ImageUtils.saveBitmapToPNGFile(resource, Objects.requireNonNull(getExternalCacheDir()).getAbsolutePath(), "thumbnail.png");
-                                                intent.putExtra("romicon", getExternalCacheDir().getAbsolutePath() + "/thumbnail.png");
-                                            }
-
-                                            @Override
-                                            public void onLoadCleared(@Nullable Drawable placeholder) {
-                                                intent.putExtra("romicon", "");
-                                            }
-                                        });
-                            } else {
-                                intent.putExtra("romicon", "");
-                            }
-
-                            intent.setClass(getApplicationContext(), VMCreatorActivity.class);
-                            intent.putExtra("addromnow", "");
-                            intent.putExtra("romname", getIntent().getStringExtra("title"));
-                            intent.putExtra("romfilename", getIntent().getStringExtra("filename"));
-                            intent.putExtra("finalromfilename", getIntent().getStringExtra("finalromfilename"));
-                            intent.putExtra("rompath", finalFilePath);
-                            intent.putExtra("romuri", uri.toString());
-                            if (Objects.requireNonNull(getIntent().getStringExtra("extra")).contains(selectedFileName)) {
-                                intent.putExtra("addtodrive", "");
-                                intent.putExtra("romextra", getIntent().getStringExtra("extra"));
-                            } else {
-                                intent.putExtra("addtodrive", "1");
-                                intent.putExtra("romextra", getIntent().getStringExtra("extra"));
-                            }
-                            switch (Objects.requireNonNull(getIntent().getStringExtra("arch"))) {
-                                case "X86_64":
-                                    MainSettingsManager.setArch(this, "X86_64");
-                                    break;
-                                case "i386":
-                                    MainSettingsManager.setArch(this, "I386");
-                                    break;
-                                case "ARM64":
-                                    MainSettingsManager.setArch(this, "ARM64");
-                                    break;
-                                case "PowerPC":
-                                    MainSettingsManager.setArch(this, "PPC");
-                                    break;
-                            }
-                            startActivity(intent);
+                            openVmCreatorWithRom(finalFilePath, uri.toString(), selectedFileName);
                         } else {
                             DialogUtils.oneDialog(RomInfo.this,
                                     getString(R.string.problem_has_been_detected),
@@ -181,6 +130,91 @@ public class RomInfo extends AppCompatActivity {
                     });
                 });
             });
+
+
+    private boolean openVmCreatorFromCompletedDownload() {
+        String romId = getIntent().getStringExtra("id");
+        if (romId == null || romId.trim().isEmpty()) {
+            romId = getIntent().getStringExtra("vecid");
+        }
+        if (romId == null || romId.trim().isEmpty()) {
+            return false;
+        }
+
+        DownloadItemState itemState = new DownloadStateStore(this).getById(romId);
+        if (itemState == null || !DownloadStatus.COMPLETED.equals(itemState.status) || TextUtils.isEmpty(itemState.finalPath)) {
+            return false;
+        }
+
+        File downloadedFile = new File(itemState.finalPath);
+        if (!downloadedFile.exists()) {
+            return false;
+        }
+
+        openVmCreatorWithRom(downloadedFile.getAbsolutePath(), null, downloadedFile.getName());
+        return true;
+    }
+
+    private void openVmCreatorWithRom(@NonNull String romPath, @Nullable String romUri, @NonNull String selectedFileName) {
+        Intent intent = new Intent();
+
+        if (getIntent().hasExtra("icon") &&
+                !Objects.requireNonNull(getIntent().getStringExtra("icon")).isEmpty() &&
+                (!selectedFileName.endsWith(".cvbi")
+                        || !selectedFileName.endsWith(".cvbi.zip"))) {
+
+            Glide.with(this)
+                    .asBitmap()
+                    .load(getIntent().getStringExtra("icon"))
+                    .into(new CustomTarget<Bitmap>() {
+                        @Override
+                        public void onResourceReady(@NonNull Bitmap resource,
+                                                    @Nullable Transition<? super Bitmap> transition) {
+                            ImageUtils.saveBitmapToPNGFile(resource, Objects.requireNonNull(getExternalCacheDir()).getAbsolutePath(), "thumbnail.png");
+                            intent.putExtra("romicon", getExternalCacheDir().getAbsolutePath() + "/thumbnail.png");
+                        }
+
+                        @Override
+                        public void onLoadCleared(@Nullable Drawable placeholder) {
+                            intent.putExtra("romicon", "");
+                        }
+                    });
+        } else {
+            intent.putExtra("romicon", "");
+        }
+
+        intent.setClass(getApplicationContext(), VMCreatorActivity.class);
+        intent.putExtra("addromnow", "");
+        intent.putExtra("romname", getIntent().getStringExtra("title"));
+        intent.putExtra("romfilename", getIntent().getStringExtra("filename"));
+        intent.putExtra("finalromfilename", getIntent().getStringExtra("finalromfilename"));
+        intent.putExtra("rompath", romPath);
+        if (!TextUtils.isEmpty(romUri)) {
+            intent.putExtra("romuri", romUri);
+        }
+        if (Objects.requireNonNull(getIntent().getStringExtra("extra")).contains(selectedFileName)) {
+            intent.putExtra("addtodrive", "");
+            intent.putExtra("romextra", getIntent().getStringExtra("extra"));
+        } else {
+            intent.putExtra("addtodrive", "1");
+            intent.putExtra("romextra", getIntent().getStringExtra("extra"));
+        }
+        switch (Objects.requireNonNull(getIntent().getStringExtra("arch"))) {
+            case "X86_64":
+                MainSettingsManager.setArch(this, "X86_64");
+                break;
+            case "i386":
+                MainSettingsManager.setArch(this, "I386");
+                break;
+            case "ARM64":
+                MainSettingsManager.setArch(this, "ARM64");
+                break;
+            case "PowerPC":
+                MainSettingsManager.setArch(this, "PPC");
+                break;
+        }
+        startActivity(intent);
+    }
 
     public String getPath(Uri uri) {
         return FileUtils.getPath(RomInfo.this, uri);
@@ -216,7 +250,11 @@ public class RomInfo extends AppCompatActivity {
         });
 
         if (getIntent().hasExtra("isRomInfo") && getIntent().getBooleanExtra("isRomInfo", false)) {
-            binding.btnPick.setOnClickListener(v -> romPicker.launch("*/*"));
+            binding.btnPick.setOnClickListener(v -> {
+                if (!openVmCreatorFromCompletedDownload()) {
+                    romPicker.launch("*/*");
+                }
+            });
         } else {
             binding.btnPick.setVisibility(View.GONE);
         }

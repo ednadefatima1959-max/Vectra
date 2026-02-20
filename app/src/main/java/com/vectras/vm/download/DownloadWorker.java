@@ -59,32 +59,28 @@ public class DownloadWorker extends Worker {
     public Result doWork() {
         String romId = getInputData().getString(KEY_ROM_ID);
         String url = getInputData().getString(KEY_URL);
-        String finalName = getInputData().getString(KEY_FINAL_NAME);
+        String requestedFinalName = getInputData().getString(KEY_FINAL_NAME);
         String expectedHash = getInputData().getString(KEY_EXPECTED_HASH);
 
-        if (isBlank(romId) || isBlank(url) || isBlank(finalName)) {
+        if (isBlank(romId) || isBlank(url) || isBlank(requestedFinalName)) {
             Log.e(TAG, "Missing required input data");
             return Result.failure();
         }
 
         createDownloadChannel();
+        DownloadPathResolver.ResolvedPaths resolvedPaths = DownloadPathResolver.resolve(getApplicationContext(), requestedFinalName);
+        String finalName = resolvedPaths.safeFileName;
+
         setForegroundAsync(buildForegroundInfo(0, finalName));
 
-        File downloadDir = getApplicationContext().getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);
-        if (downloadDir == null && getApplicationContext().getFilesDir() != null) {
-            downloadDir = new File(getApplicationContext().getFilesDir(), "downloads");
-        }
-        if (downloadDir == null) {
-            return Result.failure();
-        }
-
+        File downloadDir = resolvedPaths.baseDir;
         if (!downloadDir.exists() && !downloadDir.mkdirs()) {
             Log.e(TAG, "Unable to create download directory: " + downloadDir);
             return Result.failure();
         }
 
-        File partialFile = new File(downloadDir, finalName + ".part");
-        File targetFile = new File(downloadDir, finalName);
+        File partialFile = resolvedPaths.partialFile;
+        File targetFile = resolvedPaths.finalFile;
         long existingPartialBytes = partialFile.exists() ? partialFile.length() : 0L;
         DownloadStateStore stateStore = new DownloadStateStore(getApplicationContext());
         stateStore.upsert(new DownloadItemState(
@@ -118,7 +114,7 @@ public class DownloadWorker extends Worker {
                 return Result.failure();
             }
 
-            if (!partialFile.renameTo(targetFile)) {
+            if (!partialFile.getAbsoluteFile().renameTo(targetFile.getAbsoluteFile())) {
                 Log.e(TAG, "Unable to move partial file to final path");
                 stateStore.updateStatus(romId, DownloadStatus.FAILED);
                 return Result.failure();
@@ -354,12 +350,9 @@ public class DownloadWorker extends Worker {
                                                @NonNull String url,
                                                @NonNull String finalName,
                                                String expectedHash) {
-        File downloadDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);
-        if (downloadDir == null && context.getFilesDir() != null) {
-            downloadDir = new File(context.getFilesDir(), "downloads");
-        }
-        File partialFile = downloadDir == null ? null : new File(downloadDir, finalName + ".part");
-        File targetFile = downloadDir == null ? null : new File(downloadDir, finalName);
+        DownloadPathResolver.ResolvedPaths resolvedPaths = DownloadPathResolver.resolve(context, finalName);
+        File partialFile = resolvedPaths.partialFile;
+        File targetFile = resolvedPaths.finalFile;
         return new DownloadItemState(
                 romId,
                 url,
