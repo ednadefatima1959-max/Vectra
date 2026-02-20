@@ -39,6 +39,7 @@ public class DownloadWorker extends Worker {
 
     public static final String DOWNLOAD_CHANNEL_ID = "download_channel";
     private static final int NOTIFICATION_ID_BASE = 40000;
+    private static final long PROGRESS_PERSIST_INTERVAL_MS = 1000L;
 
     public DownloadWorker(@NonNull Context context, @NonNull WorkerParameters params) {
         super(context, params);
@@ -75,42 +76,69 @@ public class DownloadWorker extends Worker {
 
         File partialFile = new File(downloadDir, finalName + ".part");
         File targetFile = new File(downloadDir, finalName);
+        DownloadStateStore stateStore = new DownloadStateStore(getApplicationContext());
+        stateStore.upsert(new DownloadItemState(
+                romId,
+                url,
+                partialFile.getAbsolutePath(),
+                targetFile.getAbsolutePath(),
+                0L,
+                0L,
+                expectedHash,
+                DownloadStatus.RUNNING,
+                System.currentTimeMillis()
+        ));
 
         try {
-            downloadToPartial(url, partialFile, finalName);
+            downloadToPartial(romId, url, partialFile, finalName, stateStore);
 
             if (!isBlank(expectedHash)) {
                 String actualHash = sha256(partialFile);
                 if (!expectedHash.equalsIgnoreCase(actualHash)) {
                     Log.e(TAG, "Hash mismatch for " + finalName + " expected=" + expectedHash + " actual=" + actualHash);
                     partialFile.delete();
+                    stateStore.updateStatus(romId, DownloadStatus.HASH_MISMATCH);
                     return Result.failure();
                 }
             }
 
             if (targetFile.exists() && !targetFile.delete()) {
                 Log.e(TAG, "Unable to replace existing file " + targetFile);
+                stateStore.updateStatus(romId, DownloadStatus.FAILED);
                 return Result.failure();
             }
 
             if (!partialFile.renameTo(targetFile)) {
                 Log.e(TAG, "Unable to move partial file to final path");
+                stateStore.updateStatus(romId, DownloadStatus.FAILED);
                 return Result.failure();
             }
 
             setForegroundAsync(buildForegroundInfo(100, finalName));
+            stateStore.updateProgress(romId, targetFile.length(), targetFile.length(), DownloadStatus.COMPLETED);
             Data output = new Data.Builder().putString(KEY_OUTPUT_PATH, targetFile.getAbsolutePath()).build();
             return Result.success(output);
         } catch (IOException networkError) {
+            String message = networkError.getMessage();
+            if (message != null && message.contains("Work cancelled")) {
+                stateStore.updateStatus(romId, DownloadStatus.CANCELED);
+                return Result.failure();
+            }
             Log.e(TAG, "Download failed, will retry", networkError);
+            stateStore.updateStatus(romId, DownloadStatus.FAILED);
             return Result.retry();
         } catch (Exception e) {
             Log.e(TAG, "Download failed", e);
+            stateStore.updateStatus(romId, DownloadStatus.FAILED);
             return Result.failure();
         }
     }
 
-    private void downloadToPartial(String sourceUrl, File partialFile, String finalName) throws IOException {
+    private void downloadToPartial(String romId,
+                                   String sourceUrl,
+                                   File partialFile,
+                                   String finalName,
+                                   DownloadStateStore stateStore) throws IOException {
         HttpURLConnection connection = null;
         InputStream inputStream = null;
         FileOutputStream outputStream = null;
@@ -126,7 +154,7 @@ public class DownloadWorker extends Worker {
                 throw new IOException("Unexpected HTTP status: " + statusCode);
             }
 
-            int contentLength = connection.getContentLength();
+            long contentLength = connection.getContentLengthLong();
             inputStream = connection.getInputStream();
             outputStream = new FileOutputStream(partialFile, false);
 
@@ -134,8 +162,10 @@ public class DownloadWorker extends Worker {
             long downloaded = 0L;
             int bytesRead;
             int lastProgress = -1;
+            long lastPersistAt = 0L;
             while ((bytesRead = inputStream.read(buffer)) != -1) {
                 if (isStopped()) {
+                    stateStore.updateStatus(romId, DownloadStatus.CANCELED);
                     throw new IOException("Work cancelled");
                 }
                 outputStream.write(buffer, 0, bytesRead);
@@ -149,8 +179,15 @@ public class DownloadWorker extends Worker {
                         lastProgress = progress;
                     }
                 }
+
+                long now = System.currentTimeMillis();
+                if (now - lastPersistAt >= PROGRESS_PERSIST_INTERVAL_MS) {
+                    stateStore.updateProgress(romId, downloaded, contentLength, DownloadStatus.RUNNING);
+                    lastPersistAt = now;
+                }
             }
             outputStream.flush();
+            stateStore.updateProgress(romId, downloaded, contentLength, DownloadStatus.RUNNING);
         } finally {
             if (outputStream != null) {
                 outputStream.close();
@@ -162,6 +199,30 @@ public class DownloadWorker extends Worker {
                 connection.disconnect();
             }
         }
+    }
+
+    static DownloadItemState buildInitialState(@NonNull Context context,
+                                               @NonNull String romId,
+                                               @NonNull String url,
+                                               @NonNull String finalName,
+                                               String expectedHash) {
+        File downloadDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);
+        if (downloadDir == null && context.getFilesDir() != null) {
+            downloadDir = new File(context.getFilesDir(), "downloads");
+        }
+        File partialFile = downloadDir == null ? null : new File(downloadDir, finalName + ".part");
+        File targetFile = downloadDir == null ? null : new File(downloadDir, finalName);
+        return new DownloadItemState(
+                romId,
+                url,
+                partialFile == null ? null : partialFile.getAbsolutePath(),
+                targetFile == null ? null : targetFile.getAbsolutePath(),
+                0L,
+                0L,
+                expectedHash,
+                DownloadStatus.QUEUED,
+                System.currentTimeMillis()
+        );
     }
 
     private ForegroundInfo buildForegroundInfo(int progress, String fileName) {

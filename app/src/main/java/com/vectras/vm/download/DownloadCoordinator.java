@@ -18,10 +18,14 @@ import java.util.concurrent.TimeUnit;
 
 public class DownloadCoordinator {
 
+    public static final String DOWNLOAD_WORK_TAG = "rom_download";
+
     private final WorkManager workManager;
+    private final Context appContext;
 
     public DownloadCoordinator(@NonNull Context context) {
-        workManager = WorkManager.getInstance(context.getApplicationContext());
+        appContext = context.getApplicationContext();
+        workManager = WorkManager.getInstance(appContext);
     }
 
     @NonNull
@@ -36,6 +40,9 @@ public class DownloadCoordinator {
                 .putString(DownloadWorker.KEY_EXPECTED_HASH, expectedHash)
                 .build();
 
+        DownloadStateStore stateStore = new DownloadStateStore(appContext);
+        stateStore.upsert(DownloadWorker.buildInitialState(appContext, romId, url, finalName, expectedHash));
+
         Constraints constraints = new Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build();
@@ -44,6 +51,7 @@ public class DownloadCoordinator {
                 .setInputData(input)
                 .setConstraints(constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
+                .addTag(DOWNLOAD_WORK_TAG)
                 .addTag(tagForRom(romId))
                 .build();
 
@@ -54,6 +62,7 @@ public class DownloadCoordinator {
 
     public void cancelRomDownload(@NonNull String romId) {
         workManager.cancelUniqueWork(DownloadWorker.WORK_NAME_PREFIX + romId);
+        new DownloadStateStore(appContext).updateStatus(romId, DownloadStatus.CANCELED);
     }
 
     public void cancelById(@NonNull UUID requestId) {
