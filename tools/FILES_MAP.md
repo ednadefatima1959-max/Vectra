@@ -38,6 +38,12 @@ Mapa arquivo-a-arquivo em três linhas por item: papel, ligação e comando de i
 - **Inspeção**: `file "tools/verify_repo_file_dependencies.py"` e, quando texto, `sed -n "1,80p" "tools/verify_repo_file_dependencies.py"`.
 
 
+## `tools/verify_bootstrap_assets.py`
+- **Papel**: valida presença, tamanho e estrutura TAR dos bootstraps versionados em `app/src/main/assets/bootstrap/`.
+- **Liga com**: consumido pela task Gradle `verifyBootstrapAssets` em [`build.gradle`](../build.gradle).
+- **Inspeção**: `python3 tools/verify_bootstrap_assets.py`.
+
+
 
 ## `tools/termux-arm64-orchestrator/README.md`
 - **Papel**: documentação local do orquestrador de build arm64/Android 15.

@@ -67,7 +67,7 @@ Referências estruturais:
 ```bash
 git ls-files
 find . -maxdepth 2 -type d | sort
-./tools/gradle_with_jdk21.sh verifyRepoFileDependencies
+./tools/gradle_with_jdk21.sh verifyRepoFileDependencies verifyBootstrapAssets
 ```
 
 ## Índices

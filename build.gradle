@@ -179,6 +179,14 @@ tasks.register("verifyGradleRuntimeJvm") {
 }
 
 
+tasks.register("verifyBootstrapAssets", Exec) {
+    group = "verification"
+    description = "Valida presença e integridade básica dos bootstraps versionados no app"
+    workingDir rootDir
+    commandLine "python3", "tools/verify_bootstrap_assets.py"
+}
+
+
 tasks.register("verifyRepoFileDependencies", Exec) {
     group = "verification"
     description = "Verifica se dependências locais de arquivos/módulos existem no repositório"
