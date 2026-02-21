@@ -34,7 +34,7 @@
 #define RMR_KERNEL_ERR_ALLOC     -5
 
 /* magic for native OK check */
-#define RMR_UK_NATIVE_OK_MAGIC   0x52414641u  /* "RAFA" */
+#define RMR_UK_NATIVE_OK_MAGIC   0x56414343u  /* "VACC" — MUST match NativeFastPath.NATIVE_OK_MAGIC */
 
 /* ── architecture IDs ── */
 #define RMR_ARCH_UNKNOWN   0x00u
