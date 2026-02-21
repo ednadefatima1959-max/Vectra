@@ -1,3 +1,4 @@
+<!-- #/app/src/main/res/layout/activity_import_export_settings.xml -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -17,11 +18,15 @@
         <com.google.android.material.appbar.CollapsingToolbarLayout
             style="@style/App.CollapsingToolbarLarge"
             app:title="@string/import_and_export"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             app:subtitle="@string/settings">
 
             <com.google.android.material.appbar.MaterialToolbar
                 android:id="@+id/toolbar"
                 style="@style/App.CollapsingMaterialToolbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 app:navigationIcon="@drawable/arrow_back_rounded_24px" />
 
         </com.google.android.material.appbar.CollapsingToolbarLayout>

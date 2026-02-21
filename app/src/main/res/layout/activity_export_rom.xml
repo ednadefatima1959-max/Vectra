@@ -1,3 +1,4 @@
+<!-- #/app/src/main/res/layout/activity_export_rom.xml -->
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -19,6 +20,8 @@
             android:id="@+id/collapsingToolbarLayout"
             style="@style/App.CollapsingToolbarLarge"
             app:title="@string/export"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             app:toolbarId="@id/toolbar">
 
             <LinearLayout
@@ -31,6 +34,7 @@
                     android:id="@+id/toolbar"
                     style="@style/App.CollapsingMaterialToolbar"
                     android:layout_width="0dp"
+                    android:layout_height="wrap_content"
                     android:layout_weight="1" />
 
                 <com.google.android.material.button.MaterialButton

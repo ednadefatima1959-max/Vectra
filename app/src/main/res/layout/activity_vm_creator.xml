@@ -1,3 +1,4 @@
+<!-- #/app/src/main/res/layout/activity_vm_creator.xml -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/main"
@@ -17,6 +18,8 @@
             android:id="@+id/collapsingToolbarLayout"
             style="@style/App.CollapsingToolbarLarge"
             app:title="@string/create"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             app:toolbarId="@id/toolbar" >
 
             <LinearLayout
@@ -28,6 +31,7 @@
                     android:id="@+id/toolbar"
                     style="@style/App.CollapsingMaterialToolbar"
                     android:layout_width="0dp"
+                    android:layout_height="wrap_content"
                     android:layout_weight="1"/>
                 <com.google.android.material.button.MaterialButton
                     style="?attr/materialIconButtonFilledStyle"

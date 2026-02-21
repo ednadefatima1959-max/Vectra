@@ -1,3 +1,4 @@
+<!-- #/app/src/main/res/layout/activity_rafaelia_logs.xml -->
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -92,31 +93,43 @@
                     android:id="@+id/filter_all"
                     style="@style/Widget.Material3.Chip.Filter"
                     android:checked="true"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:text="@string/rafaelia_filter_all" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/filter_init"
                     style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:text="@string/rafaelia_filter_init" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/filter_tick"
                     style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:text="@string/rafaelia_filter_tick" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/filter_shutdown"
                     style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:text="@string/rafaelia_filter_shutdown" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/filter_entropy"
                     style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:text="@string/rafaelia_filter_entropy" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/filter_coherence"
                     style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:text="@string/rafaelia_filter_coherence" />
             </com.google.android.material.chip.ChipGroup>
 
