@@ -1,0 +1,108 @@
+# ═══════════════════════════════════════════════════════════
+# qemu_launch.yml — RAFAELIA QEMU Launch Configuration
+# ψ = intenção | Ω = Amor (coerência máxima)
+# ═══════════════════════════════════════════════════════════
+
+version: "1.0"
+project: "Vectras-VM-Android / RAFAELIA"
+
+# ── Global defaults ─────────────────────────────────────────
+defaults:
+  memory_mb: 2048
+  cpus: 2
+  kvm_preferred: true
+  virtio_net: true
+  virtio_disk: true
+  nographic: true
+  serial: "mon:stdio"
+
+# ── Machine profiles ────────────────────────────────────────
+profiles:
+
+  x86_64_standard:
+    arch: x86_64
+    machine: "pc"
+    cpu_kvm: host
+    cpu_tcg: qemu64
+    firmware:
+      efi: "app/src/main/assets/roms/RELEASEX64_OVMF.fd"
+      efi_vars: "app/src/main/assets/roms/RELEASEX64_OVMF_VARS.fd"
+      bios_fallback: "app/src/main/assets/roms/bios-vectras.bin"
+    accel_priority: [kvm, hvf, tcg]
+    extra_args:
+      - "-device virtio-balloon"
+      - "-device virtio-rng-pci"
+
+  arm64_virt:
+    arch: aarch64
+    machine: "virt"
+    machine_opts:
+      gic_version: 3
+      iommu: "none"
+    cpu_kvm: host
+    cpu_tcg: cortex-a72
+    firmware:
+      efi: "app/src/main/assets/roms/QEMU_EFI.img"
+      efi_vars: "app/src/main/assets/roms/QEMU_VARS.img"
+    accel_priority: [kvm, tcg]
+    extra_args:
+      - "-device virtio-gpu-pci"
+      - "-device virtio-keyboard-pci"
+      - "-device virtio-mouse-pci"
+
+  arm64_lowmem:
+    arch: aarch64
+    machine: "virt"
+    memory_mb: 512
+    cpus: 1
+    cpu_tcg: cortex-a53
+    accel_priority: [tcg]
+    nographic: true
+
+  x86_32_compat:
+    arch: i386
+    machine: "pc"
+    memory_mb: 512
+    cpus: 1
+    accel_priority: [tcg]
+    firmware:
+      bios_fallback: "app/src/main/assets/roms/bios-vectras.bin"
+
+# ── SDK/NDK build requirements ──────────────────────────────
+build_env:
+  ndk_version: "27.2.12479018"
+  compile_sdk: 35
+  min_sdk: 23
+  target_sdk: 35
+  cmake_version: "3.22.1"
+  java_version: 17
+  abi_filters:
+    - arm64-v8a
+    - armeabi-v7a
+    - x86
+    - x86_64
+
+# ── RMR engine compile flags ────────────────────────────────
+engine_flags:
+  common:
+    - "-O3"
+    - "-ffast-math"
+    - "-fvisibility=hidden"
+    - "-DRMR_BAREMETAL=1"
+    - "-DRMR_JNI_BUILD=1"
+  arm64:
+    - "-march=armv8-a+crc"
+    - "-mabi=lp64"
+  x86_64:
+    - "-msse4.2"
+    - "-mpopcnt"
+
+# ── QEMU QMP telemetry fields ────────────────────────────────
+telemetry:
+  enable: true
+  poll_interval_ms: 1000
+  fields:
+    - vcpu_count
+    - halted_count
+    - running_count
+    - balloon_actual
