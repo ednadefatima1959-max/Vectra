@@ -55,4 +55,9 @@ public class AuditEvent {
         }
         return object.toString();
     }
+
+    /** Alias for {@link #toJsonLine()} — returns serialized JSON string. */
+    public String toJson() {
+        return toJsonLine();
+    }
 }

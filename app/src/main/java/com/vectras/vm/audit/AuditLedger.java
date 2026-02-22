@@ -78,4 +78,17 @@ public class AuditLedger {
         //noinspection ResultOfMethodCallIgnored
         current.renameTo(rotated);
     }
+
+    /**
+     * Returns true if the ledger storage directory is accessible and writable.
+     * Used by {@code RafaeliaPathValidator} on PATH_MEMORY (Σ).
+     */
+    public static synchronized boolean isHealthy(Context context) {
+        try {
+            File baseDir = context != null ? context.getFilesDir() : new File(AppConfig.internalDataDirPath);
+            return baseDir != null && baseDir.exists() && baseDir.canWrite();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
 }
