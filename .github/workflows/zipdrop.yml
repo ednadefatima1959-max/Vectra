@@ -1,33 +1,64 @@
-name: zipdrop-extract
+name: zipdrop-overlay
 
 on:
   push:
     branches: [ "main" ]
     paths:
-      - "_incoming/**.zip"
+      - "_incoming/*.zip"
 
 jobs:
-  unzip_and_commit:
+  apply:
     if: "!contains(github.event.head_commit.message, '[zipdrop]')"
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-
-      - name: Run zipdrop
+      - name: Apply incoming zip(s)
+        shell: bash
         run: |
-          python tools/zipdrop.py
+          set -euo pipefail
+          shopt -s nullglob
 
-      - name: Commit extracted content
+          for z in _incoming/*.zip; do
+            echo ">> Applying $z"
+            unzip -o "$z" -d .
+
+            python - <<'PY'
+import pathlib, shutil
+
+base = pathlib.Path(".")
+
+dl = base/"__DELTA__"/"DELETE_LIST.txt"
+if dl.exists():
+    for line in dl.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        p = pathlib.Path(line)
+        if p.is_absolute() or ".." in p.parts:
+            print("SKIP unsafe delete path:", line)
+            continue
+        target = base/p
+        if target.is_symlink() or target.is_file():
+            target.unlink(missing_ok=True)
+        elif target.is_dir():
+            shutil.rmtree(target, ignore_errors=True)
+
+# limpa metadados pra não poluir o repo
+shutil.rmtree(base/"__DELTA__", ignore_errors=True)
+PY
+
+            rm -f "$z"
+          done
+
+      - name: Commit changes
+        shell: bash
         run: |
           if git diff --quiet; then
             echo "No changes after zipdrop."
@@ -36,5 +67,5 @@ jobs:
           git config user.name  "zipdrop-bot"
           git config user.email "zipdrop-bot@users.noreply.github.com"
           git add -A
-          git commit -m "[zipdrop] extract incoming zip(s)"
+          git commit -m "[zipdrop] apply delta"
           git push
