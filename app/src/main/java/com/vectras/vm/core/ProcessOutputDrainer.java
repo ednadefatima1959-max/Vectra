@@ -9,6 +9,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -50,9 +52,7 @@ public class ProcessOutputDrainer {
     private final TokenBucketRateLimiter closeErrorLogLimiter =
             new TokenBucketRateLimiter(CLOSE_ERROR_LOG_REFILL_PER_SEC, CLOSE_ERROR_LOG_BURST);
     private final ErrorReporter errorReporter;
-    private final Object activeStreamsLock = new Object();
-    private InputStream activeStdout;
-    private InputStream activeStderr;
+    private final Set<InputStream> activeStreams = ConcurrentHashMap.newKeySet();
 
     public ProcessOutputDrainer() {
         this(new LogcatErrorReporter());
@@ -64,16 +64,13 @@ public class ProcessOutputDrainer {
 
     public void cancel() {
         cancelled.set(true);
-
-        InputStream stdoutToClose;
-        InputStream stderrToClose;
-        synchronized (activeStreamsLock) {
-            stdoutToClose = activeStdout;
-            stderrToClose = activeStderr;
+        for (InputStream stream : activeStreams) {
+            try {
+                stream.close();
+            } catch (IOException ignored) {
+                // Best effort close to unblock readers.
+            }
         }
-
-        closeActiveStream("stdout", stdoutToClose);
-        closeActiveStream("stderr", stderrToClose);
     }
 
     public void drain(Process process, OutputLineConsumer consumer) throws InterruptedException {
@@ -145,43 +142,22 @@ public class ProcessOutputDrainer {
 
     private void readStream(String name, InputStream stream, String vmContext, OutputLineConsumer consumer) {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            activeStreams.add(stream);
             String line;
             while (!cancelled.get() && (line = reader.readLine()) != null) {
                 consumer.onLine(name, line);
             }
         } catch (IOException e) {
+            if (cancelled.get()) {
+                return;
+            }
             if (ioErrorLogLimiter.tryAcquire()) {
                 errorReporter.onReadError(name, vmContext, e);
             } else if (ioErrorSuppressedLogLimiter.tryAcquire()) {
                 errorReporter.onReadErrorSuppressed(name, vmContext, e);
             }
         } finally {
-            synchronized (activeStreamsLock) {
-                if ("stdout".equals(name)) {
-                    if (activeStdout == stream) {
-                        activeStdout = null;
-                    }
-                } else if ("stderr".equals(name)) {
-                    if (activeStderr == stream) {
-                        activeStderr = null;
-                    }
-                }
-            }
-        }
-    }
-
-    private void closeActiveStream(String streamName, InputStream stream) {
-        if (stream == null) {
-            return;
-        }
-
-        try {
-            stream.close();
-        } catch (IOException e) {
-            if (closeErrorLogLimiter.tryAcquire()) {
-                Log.w(TAG, "cancel close failure on " + streamName
-                        + " [" + e.getClass().getSimpleName() + "]: " + e.getMessage(), e);
-            }
+            activeStreams.remove(stream);
         }
     }
 

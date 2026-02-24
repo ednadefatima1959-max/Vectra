@@ -7,7 +7,10 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class ProcessOutputDrainerTest {
     @Test
@@ -129,6 +132,44 @@ public class ProcessOutputDrainerTest {
         Assert.assertTrue("some errors must be observable", reporter.acceptedErrors.get() >= 1);
     }
 
+
+    @Test
+    public void shouldCancelBlockedDrainWithoutFatalErrorAndWithoutLeakedThread() throws Exception {
+        BlockingUntilCloseInputStream blockingStdout = new BlockingUntilCloseInputStream();
+        Process fake = new DualStreamProcess(blockingStdout, new ByteArrayInputStream(new byte[0]));
+        CountingErrorReporter reporter = new CountingErrorReporter();
+        ProcessOutputDrainer drainer = new ProcessOutputDrainer(reporter);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        CountDownLatch finished = new CountDownLatch(1);
+
+        Thread drainThread = new Thread(() -> {
+            try {
+                drainer.drain(fake, "vm-cancel", (stream, line) -> { });
+            } catch (Throwable t) {
+                failure.set(t);
+            } finally {
+                finished.countDown();
+            }
+        }, "process-drain-test-thread");
+
+        try {
+            drainThread.start();
+            Assert.assertTrue("drain should reach blocking read",
+                    blockingStdout.awaitFirstRead(500, TimeUnit.MILLISECONDS));
+
+            drainer.cancel();
+
+            Assert.assertTrue("drain should finish after cancel", finished.await(500, TimeUnit.MILLISECONDS));
+            drainThread.join(500);
+            Assert.assertFalse("drain thread must not remain alive", drainThread.isAlive());
+            Assert.assertNull("cancel should not fail drain", failure.get());
+            Assert.assertEquals("cancelled read should not be treated as fatal", 0, reporter.acceptedErrors.get());
+            Assert.assertEquals("cancelled read should not be rate-limited fatal", 0, reporter.suppressedErrors.get());
+        } finally {
+            drainer.shutdown();
+        }
+    }
+
     private static class FakeProcess extends Process {
         private final InputStream stdout;
         private final InputStream stderr;
@@ -184,6 +225,40 @@ public class ProcessOutputDrainerTest {
                 return -1;
             }
             return data[index++];
+        }
+    }
+
+    private static class BlockingUntilCloseInputStream extends InputStream {
+        private final Object lock = new Object();
+        private final CountDownLatch firstReadLatch = new CountDownLatch(1);
+        private boolean closed;
+
+        @Override
+        public int read() throws IOException {
+            firstReadLatch.countDown();
+            synchronized (lock) {
+                while (!closed) {
+                    try {
+                        lock.wait();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("interrupted", e);
+                    }
+                }
+            }
+            throw new IOException("stream closed");
+        }
+
+        @Override
+        public void close() {
+            synchronized (lock) {
+                closed = true;
+                lock.notifyAll();
+            }
+        }
+
+        boolean awaitFirstRead(long timeout, TimeUnit unit) throws InterruptedException {
+            return firstReadLatch.await(timeout, unit);
         }
     }
 
