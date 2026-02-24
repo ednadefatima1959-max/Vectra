@@ -81,7 +81,13 @@ class LocaleManager private constructor(private val context: Context) {
     ): Boolean = withContext(Dispatchers.IO) {
         val module = LanguageModule.getByCode(languageCode) ?: return@withContext false
 
-        if (!EndpointValidator.isAllowed(module.downloadUrl, EndpointFeature.LANGUAGE_MODULE_DOWNLOAD)) {
+        if (module.isBuiltIn) {
+            return@withContext true
+        }
+
+        val endpoint = NetworkEndpoints.languageModule(module.languageCode)
+        val validatedUrl = EndpointValidator.validateLanguageModuleEndpoint(endpoint)
+        if (validatedUrl == null) {
             android.util.Log.e(
                 "LocaleManager",
                 "Invalid module download URL for language module: $languageCode"
@@ -89,14 +95,10 @@ class LocaleManager private constructor(private val context: Context) {
             return@withContext false
         }
 
-        if (module.isBuiltIn) {
-            return@withContext true
-        }
-
         var connection: HttpURLConnection? = null
         try {
             onProgress?.invoke(0)
-            connection = (URL(module.downloadUrl).openConnection() as HttpURLConnection).apply {
+            connection = (URL(validatedUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 30000
                 readTimeout = 30000

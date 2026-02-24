@@ -10,7 +10,6 @@ data class LanguageModule(
     val languageCode: String,
     val languageName: String,
     val nativeName: String,
-    val downloadUrl: String,
     val version: Int,
     val sizeBytes: Long,
     val isBuiltIn: Boolean = false,
@@ -28,7 +27,6 @@ data class LanguageModule(
                 languageCode = "en",
                 languageName = "English",
                 nativeName = "English",
-                downloadUrl = "",
                 version = 1,
                 sizeBytes = 0,
                 isBuiltIn = true,
@@ -38,7 +36,6 @@ data class LanguageModule(
                 languageCode = "pt",
                 languageName = "Portuguese",
                 nativeName = "Português",
-                downloadUrl = NetworkEndpoints.languageModule("pt"),
                 version = 1,
                 sizeBytes = 50000,
                 isBuiltIn = false
@@ -47,7 +44,6 @@ data class LanguageModule(
                 languageCode = "es",
                 languageName = "Spanish",
                 nativeName = "Español",
-                downloadUrl = NetworkEndpoints.languageModule("es"),
                 version = 1,
                 sizeBytes = 50000,
                 isBuiltIn = false
@@ -56,7 +52,6 @@ data class LanguageModule(
                 languageCode = "fr",
                 languageName = "French",
                 nativeName = "Français",
-                downloadUrl = NetworkEndpoints.languageModule("fr"),
                 version = 1,
                 sizeBytes = 50000,
                 isBuiltIn = false
@@ -65,7 +60,6 @@ data class LanguageModule(
                 languageCode = "de",
                 languageName = "German",
                 nativeName = "Deutsch",
-                downloadUrl = NetworkEndpoints.languageModule("de"),
                 version = 1,
                 sizeBytes = 50000,
                 isBuiltIn = false
