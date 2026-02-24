@@ -74,11 +74,8 @@ public class ProcessOutputDrainer {
                 consumer.onLine(name, line);
             }
         } catch (IOException e) {
-            if (ioErrorLogLimiter.tryAcquire()) {
-                Log.w(TAG, name + " read failed", e);
-            } else if (ioErrorSuppressedLogLimiter.tryAcquire()) {
-                Log.w(TAG, name + " read failed (details suppressed by rate limiter)");
-            }
+            Log.w(TAG, "readStream non-fatal failure on " + name
+                    + " [" + e.getClass().getSimpleName() + "]: " + e.getMessage(), e);
         }
     }
 
