@@ -296,11 +296,6 @@ public class StartVM {
 
         if (MainSettingsManager.getVmUi(activity).equals("VNC")) {
 
-            if (!MainSettingsManager.getVncExternalPassword(activity).isEmpty()) {
-                params.add("-object ");
-                params.add("secret,id=vncpass,data=\"" + MainSettingsManager.getVncExternalPassword(activity) + "\"");
-            }
-
             String vncStr = "-vnc ";
             params.add(vncStr);
             // Allow connections only from localhost using localsocket without a password
@@ -308,7 +303,9 @@ public class StartVM {
 
                 String vncParams = Config.defaultVNCHost + ":" + Config.defaultVNCPort;
 
-                if (!MainSettingsManager.getVncExternalPassword(activity).isEmpty()) vncParams += ",password-secret=vncpass";
+                if (!MainSettingsManager.getVncExternalPassword(activity).isEmpty()) {
+                    vncParams += ",password=on";
+                }
 
                 params.add(vncParams);
             } else {
