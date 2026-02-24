@@ -13,6 +13,7 @@ import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
 import com.vectras.vm.R;
+import com.vectras.vm.network.EndpointValidator;
 import com.vectras.vm.utils.NotificationUtils;
 
 import java.io.File;
@@ -20,6 +21,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -67,6 +69,14 @@ public class DownloadWorker extends Worker {
             return Result.failure();
         }
 
+        DownloadStateStore stateStore = new DownloadStateStore(getApplicationContext());
+        EndpointValidationOutcome endpointValidation = validateDownloadEndpoint(url);
+        if (!endpointValidation.allowed) {
+            Log.w(TAG, "Rejecting download endpoint for romId=" + romId + " reasonClass=" + endpointValidation.reasonClass);
+            stateStore.updateStatus(romId, DownloadStatus.FAILED);
+            return Result.failure();
+        }
+
         createDownloadChannel();
         DownloadPathResolver.ResolvedPaths resolvedPaths = DownloadPathResolver.resolve(getApplicationContext(), requestedFinalName);
         String finalName = resolvedPaths.safeFileName;
@@ -82,7 +92,6 @@ public class DownloadWorker extends Worker {
         File partialFile = resolvedPaths.partialFile;
         File targetFile = resolvedPaths.finalFile;
         long existingPartialBytes = partialFile.exists() ? partialFile.length() : 0L;
-        DownloadStateStore stateStore = new DownloadStateStore(getApplicationContext());
         stateStore.upsert(new DownloadItemState(
                 romId,
                 url,
@@ -345,6 +354,30 @@ public class DownloadWorker extends Worker {
         }
     }
 
+    static EndpointValidationOutcome validateDownloadEndpoint(String url) {
+        if (isBlank(url)) {
+            return EndpointValidationOutcome.rejected("BlankEndpoint");
+        }
+
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (Exception e) {
+            return EndpointValidationOutcome.rejected(e.getClass().getSimpleName());
+        }
+
+        if (uri.getScheme() == null || !"https".equalsIgnoreCase(uri.getScheme())) {
+            return EndpointValidationOutcome.rejected("NonHttpsScheme");
+        }
+        if (uri.getHost() == null || uri.getHost().trim().isEmpty()) {
+            return EndpointValidationOutcome.rejected("MissingHost");
+        }
+        if (!EndpointValidator.isAllowed(url)) {
+            return EndpointValidationOutcome.rejected("DisallowedEndpoint");
+        }
+        return EndpointValidationOutcome.allowed();
+    }
+
     static DownloadItemState buildInitialState(@NonNull Context context,
                                                @NonNull String romId,
                                                @NonNull String url,
@@ -411,6 +444,24 @@ public class DownloadWorker extends Worker {
 
     private static boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    static final class EndpointValidationOutcome {
+        final boolean allowed;
+        final String reasonClass;
+
+        private EndpointValidationOutcome(boolean allowed, String reasonClass) {
+            this.allowed = allowed;
+            this.reasonClass = reasonClass;
+        }
+
+        static EndpointValidationOutcome allowed() {
+            return new EndpointValidationOutcome(true, "None");
+        }
+
+        static EndpointValidationOutcome rejected(String reasonClass) {
+            return new EndpointValidationOutcome(false, reasonClass);
+        }
     }
 
     private static final class DownloadResult {
