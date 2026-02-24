@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 public final class KvmProbe {
 
@@ -15,6 +16,7 @@ public final class KvmProbe {
     private static final String KVM_SYS_MODULE_PATH = "/sys/module/kvm";
     private static final String PROC_MODULES_PATH = "/proc/modules";
     private static final String PROC_CPUINFO_PATH = "/proc/cpuinfo";
+    private static final Pattern TOKEN_VIRT = Pattern.compile("\\bvirt\\b");
 
     private KvmProbe() {
         throw new AssertionError("KvmProbe is a utility class and cannot be instantiated");
@@ -99,7 +101,7 @@ public final class KvmProbe {
             return normalized.contains(" hcr_el2")
                     || normalized.contains(" kvm")
                     || normalized.contains(" hypervisor")
-                    || normalized.contains(" virt");
+                    || TOKEN_VIRT.matcher(normalized).find();
         }
         return false;
     }

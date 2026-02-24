@@ -32,7 +32,17 @@ public class KvmProbeTest {
     @Test
     public void supportsCpuVirtualization_detectsArm64Hints() {
         assertTrue(KvmProbe.supportsCpuVirtualization("arm64-v8a", "Features : fp asimd hypervisor"));
+        assertTrue(KvmProbe.supportsCpuVirtualization("arm64-v8a", "Features : fp asimd hcr_el2"));
+        assertTrue(KvmProbe.supportsCpuVirtualization("arm64-v8a", "Features : fp asimd kvm"));
         assertTrue(KvmProbe.supportsCpuVirtualization("arm64-v8a", "Features : fp asimd virt"));
         assertFalse(KvmProbe.supportsCpuVirtualization("arm64-v8a", "Features : fp asimd"));
+    }
+
+    @Test
+    public void supportsCpuVirtualization_armVirtTokenDoesNotMatchVirtio() {
+        String cpuInfo = "processor	: 0\n"
+                + "Features	: fp asimd evtstrm virtio crc32\n";
+
+        assertFalse(KvmProbe.supportsCpuVirtualization("arm64-v8a", cpuInfo));
     }
 }
