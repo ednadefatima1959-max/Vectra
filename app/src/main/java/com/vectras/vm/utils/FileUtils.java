@@ -46,6 +46,7 @@ import java.io.OutputStreamWriter;
 import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 
@@ -515,7 +516,7 @@ public class FileUtils {
 		}
 	}
 
-	public static HashMap<Integer, ParcelFileDescriptor> fds = new HashMap<Integer, ParcelFileDescriptor>();
+	public static final ConcurrentHashMap<Integer, ParcelFileDescriptor> fds = new ConcurrentHashMap<Integer, ParcelFileDescriptor>();
 
 	public static int get_fd(final Context context, String path) {
 		return get_fd(context, path, null);
