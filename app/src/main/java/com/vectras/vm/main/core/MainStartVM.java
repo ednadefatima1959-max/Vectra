@@ -22,6 +22,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.vectras.qemu.Config;
 import com.vectras.qemu.MainSettingsManager;
 import com.vectras.qemu.MainVNCActivity;
+import com.vectras.qemu.utils.QmpClient;
 import com.vectras.vm.AppConfig;
 import com.vectras.vm.BuildConfig;
 import com.vectras.vm.MainService;
@@ -428,6 +429,23 @@ public class MainStartVM {
         }
     }
 
+    private static void applyVncPasswordOverQmpIfNeeded(Context context) {
+        if (!MainSettingsManager.getVmUi(context).equals("VNC")) {
+            return;
+        }
+
+        if (!MainSettingsManager.getVncExternal(context)) {
+            return;
+        }
+
+        String password = MainSettingsManager.getVncExternalPassword(context);
+        if (password == null || password.isEmpty()) {
+            return;
+        }
+
+        new Thread(() -> QmpClient.sendCommand(QmpClient.setVncPassword(password), 3, 500)).start();
+    }
+
     private static final class LaunchPoller {
         private final Handler handler = new Handler(Looper.getMainLooper());
         private WeakReference<Context> contextRef = new WeakReference<>(null);
@@ -454,6 +472,7 @@ public class MainStartVM {
                         if (headless) {
                             Log.i(TAG, "engine-only launch completed without frontend attach");
                         } else if (MainSettingsManager.getVmUi(launchContext).equals("VNC")) {
+                            applyVncPasswordOverQmpIfNeeded(launchContext);
                             if (MainSettingsManager.getVncExternal(launchContext)) {
                                 Config.currentVNCServervmID = vmId;
                                 DialogUtils.oneDialog(launchContext,

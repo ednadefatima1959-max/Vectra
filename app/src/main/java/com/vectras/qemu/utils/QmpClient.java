@@ -217,8 +217,30 @@ public class QmpClient {
 	private static void sendRequest(PrintWriter out, String request) {
 
 	    if(Config.debugQmp)
-		    Log.i(TAG, "QMP request" + request);
+		    Log.i(TAG, "QMP request" + sanitizeRequestForLogs(request));
 		out.println(request);
+	}
+
+	private static String sanitizeRequestForLogs(String request) {
+		if (request == null || request.trim().isEmpty()) {
+			return request;
+		}
+
+		try {
+			JSONObject object = new JSONObject(request);
+			JSONObject arguments = object.optJSONObject("arguments");
+			if (arguments != null) {
+				if (arguments.has("password")) {
+					arguments.put("password", "***");
+				}
+				if (arguments.has("arg")) {
+					arguments.put("arg", "***");
+				}
+			}
+			return object.toString();
+		} catch (Exception ignored) {
+			return request;
+		}
 	}
 
     private static String getResponse(BufferedReader in) throws Exception {
@@ -291,6 +313,20 @@ public class QmpClient {
 		return jsonObject.toString();
 
 	}
+
+    public static String setVncPassword(String passwd) {
+		JSONObject arguments = new JSONObject();
+		arguments.put("protocol", "vnc");
+		arguments.put("password", passwd);
+
+		JSONObject jsonObject = new JSONObject();
+		jsonObject.put("execute", "set_password");
+		jsonObject.put("arguments", arguments);
+		jsonObject.put("id", "vectras");
+
+		return jsonObject.toString();
+
+    }
 
     public static String changevncpasswd(String passwd) {
 		JSONObject arguments = new JSONObject();
