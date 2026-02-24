@@ -94,8 +94,10 @@ public class ProcessOutputDrainer {
         } catch (RuntimeException e) {
             out.cancel(true);
             err.cancel(true);
-            Log.w(TAG, "drain failed", e);
-            throw e;
+            if (!cancelled.get()) {
+                Log.w(TAG, "drain failed", e);
+                throw e;
+            }
         }
     }
 
@@ -201,15 +203,22 @@ public class ProcessOutputDrainer {
         }
     }
 
-    private static void waitFuture(Future<?> future) throws InterruptedException {
+    private void waitFuture(Future<?> future) throws InterruptedException {
         try {
             future.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw e;
         } catch (ExecutionException e) {
-            throw new IllegalStateException("stream drain failed", e.getCause());
+            Throwable cause = e.getCause();
+            if (cancelled.get() && cause instanceof CancellationException) {
+                return;
+            }
+            throw new IllegalStateException("stream drain failed", cause != null ? cause : e);
         } catch (CancellationException e) {
+            if (cancelled.get()) {
+                return;
+            }
             throw new IllegalStateException("stream drain cancelled", e);
         }
     }
