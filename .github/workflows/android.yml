@@ -131,7 +131,14 @@ jobs:
 
       - name: Accept Android SDK licenses (non-interactive)
         run: |
-          yes | sdkmanager --licenses > /dev/null
+          licenses_input_file="$(mktemp)"
+          trap 'rm -f "${licenses_input_file}"' EXIT
+          for _ in $(seq 1 200); do
+            echo 'y'
+          done > "${licenses_input_file}"
+
+          sdkmanager --licenses < "${licenses_input_file}" > /dev/null
+          echo "Android SDK licenses accepted"
 
       - name: Install Android SDK packages
         run: |
@@ -248,7 +255,14 @@ jobs:
 
       - name: Accept Android SDK licenses (non-interactive)
         run: |
-          yes | sdkmanager --licenses > /dev/null
+          licenses_input_file="$(mktemp)"
+          trap 'rm -f "${licenses_input_file}"' EXIT
+          for _ in $(seq 1 200); do
+            echo 'y'
+          done > "${licenses_input_file}"
+
+          sdkmanager --licenses < "${licenses_input_file}" > /dev/null
+          echo "Android SDK licenses accepted"
 
       - name: Install Android SDK packages
         run: |
@@ -329,7 +343,14 @@ jobs:
 
     - name: Accept Android SDK licenses (non-interactive)
       run: |
-        yes | sdkmanager --licenses > /dev/null
+        licenses_input_file="$(mktemp)"
+        trap 'rm -f "${licenses_input_file}"' EXIT
+        for _ in $(seq 1 200); do
+          echo 'y'
+        done > "${licenses_input_file}"
+
+        sdkmanager --licenses < "${licenses_input_file}" > /dev/null
+        echo "Android SDK licenses accepted"
 
     - name: Install Android SDK packages
       run: |
