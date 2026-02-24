@@ -30,6 +30,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.app.TermuxService;
 import com.vectras.qemu.MainSettingsManager;
 import com.vectras.vm.main.MainActivity;
+import com.vectras.vm.network.NetworkEndpoints;
 import com.vectras.vm.setupwizard.SetupWizard2Activity;
 import com.vectras.vm.utils.CommandUtils;
 import com.vectras.vm.utils.DialogUtils;
@@ -86,7 +87,7 @@ public class Minitools extends AppCompatActivity {
                 DialogUtils.twoDialog(Minitools.this, getString(R.string.setup_sound), getResources().getString(R.string.setup_sound_guide_content), getString(R.string.start_setup), getString(R.string.cancel), true, R.drawable.volume_up_24px, true,
                         () -> {
                             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                            ClipData clip = ClipData.newPlainText("Setup", "curl -o setup.sh https://raw.githubusercontent.com/AnBui2004/termux/refs/heads/main/installpulseaudio.sh && chmod +rwx setup.sh && ./setup.sh && rm setup.sh");
+                            ClipData clip = ClipData.newPlainText("Setup", "curl -o setup.sh " + NetworkEndpoints.termuxPulseAudioScript() + " && chmod +rwx setup.sh && ./setup.sh && rm setup.sh");
                             clipboard.setPrimaryClip(clip);
                             Intent intent = getPackageManager()
                                     .getLaunchIntentForPackage("com.termux");
@@ -102,7 +103,7 @@ public class Minitools extends AppCompatActivity {
                         () -> {
                             Intent intent = new Intent();
                             intent.setAction(ACTION_VIEW);
-                            intent.setData(Uri.parse("https://github.com/termux/termux-app/releases"));
+                            intent.setData(Uri.parse(NetworkEndpoints.termuxReleasePage()));
                             startActivity(intent);
                         }, null, null);
             }
@@ -163,6 +164,17 @@ public class Minitools extends AppCompatActivity {
 
         spinnerselectmirror.setAdapter(new SpinnerSelectMirrorAdapter(listmapForSelectMirrors));
         spinnerselectmirror.setSelection(MainSettingsManager.getSelectedMirror(Minitools.this));
+    }
+
+    private void openExternalLink(String url) {
+        if (!EndpointValidator.isValidHttpUrl(url)) {
+            Toast.makeText(getApplicationContext(), getResources().getString(R.string.failed), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent intent = new Intent();
+        intent.setAction(ACTION_VIEW);
+        intent.setData(Uri.parse(url));
+        startActivity(intent);
     }
 
     public class SpinnerSelectMirrorAdapter extends BaseAdapter {

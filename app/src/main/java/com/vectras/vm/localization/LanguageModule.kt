@@ -1,5 +1,7 @@
 package com.vectras.vm.localization
 
+import com.vectras.vm.network.NetworkEndpoints
+
 /**
  * Represents a downloadable language module for the app.
  * Language modules are designed to be downloaded on-demand to save device resources.
@@ -36,7 +38,7 @@ data class LanguageModule(
                 languageCode = "pt",
                 languageName = "Portuguese",
                 nativeName = "Português",
-                downloadUrl = "https://raw.githubusercontent.com/rafaelmeloreisnovo/Vectras-VM-Android/main/resources/lang/pt.json",
+                downloadUrl = NetworkEndpoints.languageModule("pt"),
                 version = 1,
                 sizeBytes = 50000,
                 isBuiltIn = false
@@ -45,7 +47,7 @@ data class LanguageModule(
                 languageCode = "es",
                 languageName = "Spanish",
                 nativeName = "Español",
-                downloadUrl = "https://raw.githubusercontent.com/rafaelmeloreisnovo/Vectras-VM-Android/main/resources/lang/es.json",
+                downloadUrl = NetworkEndpoints.languageModule("es"),
                 version = 1,
                 sizeBytes = 50000,
                 isBuiltIn = false
@@ -54,7 +56,7 @@ data class LanguageModule(
                 languageCode = "fr",
                 languageName = "French",
                 nativeName = "Français",
-                downloadUrl = "https://raw.githubusercontent.com/rafaelmeloreisnovo/Vectras-VM-Android/main/resources/lang/fr.json",
+                downloadUrl = NetworkEndpoints.languageModule("fr"),
                 version = 1,
                 sizeBytes = 50000,
                 isBuiltIn = false
@@ -63,7 +65,7 @@ data class LanguageModule(
                 languageCode = "de",
                 languageName = "German",
                 nativeName = "Deutsch",
-                downloadUrl = "https://raw.githubusercontent.com/rafaelmeloreisnovo/Vectras-VM-Android/main/resources/lang/de.json",
+                downloadUrl = NetworkEndpoints.languageModule("de"),
                 version = 1,
                 sizeBytes = 50000,
                 isBuiltIn = false
