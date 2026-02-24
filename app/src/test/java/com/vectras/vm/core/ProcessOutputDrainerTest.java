@@ -53,6 +53,23 @@ public class ProcessOutputDrainerTest {
         Assert.assertEquals(1, out.get());
         Assert.assertEquals(stderrLines, err.get());
     }
+
+
+    @Test
+    public void shouldInvokeAuditCallbackOnIoException() throws Exception {
+        Process fake = new IOExceptionProcess();
+        AtomicInteger callbacks = new AtomicInteger();
+        ProcessOutputDrainer drainer = new ProcessOutputDrainer((stream, exception) -> callbacks.incrementAndGet());
+
+        try {
+            drainer.drain(fake, (stream, line) -> { });
+        } finally {
+            drainer.shutdown();
+        }
+
+        Assert.assertEquals(2, callbacks.get());
+    }
+
     @Test(expected = IllegalStateException.class)
     public void shouldPropagateWorkerFailure() throws Exception {
         Process fake = new FakeProcess("ok\n", "err\n");
@@ -84,4 +101,21 @@ public class ProcessOutputDrainerTest {
         @Override public int exitValue() { return 0; }
         @Override public void destroy() {}
     }
+
+    private static class IOExceptionProcess extends Process {
+        @Override public OutputStream getOutputStream() { return OutputStream.nullOutputStream(); }
+        @Override public InputStream getInputStream() { return new ThrowingInputStream(); }
+        @Override public InputStream getErrorStream() { return new ThrowingInputStream(); }
+        @Override public int waitFor() { return 0; }
+        @Override public int exitValue() { return 0; }
+        @Override public void destroy() {}
+    }
+
+    private static class ThrowingInputStream extends InputStream {
+        @Override
+        public int read() throws java.io.IOException {
+            throw new java.io.IOException("forced");
+        }
+    }
+
 }
