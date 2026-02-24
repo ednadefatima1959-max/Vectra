@@ -22,6 +22,30 @@ class FullBufferBitmapData extends AbstractBitmapData {
 
 	int xoffset;
 	int yoffset;
+	private Bitmap reusableFrameBitmap;
+	private Bitmap.Config reusableFrameBitmapConfig;
+
+	private void recycleReusableFrameBitmap() {
+		if (reusableFrameBitmap != null && !reusableFrameBitmap.isRecycled()) {
+			reusableFrameBitmap.recycle();
+		}
+		reusableFrameBitmap = null;
+		reusableFrameBitmapConfig = null;
+	}
+
+	private Bitmap getReusableFrameBitmap() {
+		Bitmap.Config requiredConfig = Config.bitmapConfig;
+		if (reusableFrameBitmap == null
+				|| reusableFrameBitmap.isRecycled()
+				|| reusableFrameBitmap.getWidth() != framebufferwidth
+				|| reusableFrameBitmap.getHeight() != framebufferheight
+				|| reusableFrameBitmapConfig != requiredConfig) {
+			recycleReusableFrameBitmap();
+			reusableFrameBitmap = Bitmap.createBitmap(framebufferwidth, framebufferheight, requiredConfig);
+			reusableFrameBitmapConfig = requiredConfig;
+		}
+		return reusableFrameBitmap;
+	}
 	
 	/**
 	 * @author Michael A. MacDonald
@@ -41,15 +65,15 @@ class FullBufferBitmapData extends AbstractBitmapData {
 		 */
 		@Override
 		public void draw(Canvas canvas) {
+			Bitmap frameBitmap = getReusableFrameBitmap();
 			if (vncCanvas.getScaleType() == ImageView.ScaleType.FIT_CENTER)
 			{
 				//canvas.drawBitmap(data.bitmapPixels, 0, data.framebufferwidth, xoffset, yoffset, framebufferwidth, framebufferheight, false, null);
 
                 //XXX; Vectras: for Hardware accelerated surfaces we have to stop using the above deprecated method and use a bitmap-backed method
                 // this fixes the issue with Nougat Devices displaying black screen for 24bit color mode C24bit
-                Bitmap bitmapTmp = Bitmap.createBitmap(framebufferwidth, framebufferheight, Config.bitmapConfig);
-                bitmapTmp.setPixels(bitmapPixels, 0, data.framebufferwidth, 0, 0, framebufferwidth, framebufferheight);
-                canvas.drawBitmap(bitmapTmp, xoffset, yoffset, null);
+                frameBitmap.setPixels(bitmapPixels, 0, data.framebufferwidth, 0, 0, framebufferwidth, framebufferheight);
+                canvas.drawBitmap(frameBitmap, xoffset, yoffset, null);
 
 			}
 			else
@@ -73,9 +97,14 @@ class FullBufferBitmapData extends AbstractBitmapData {
 
                     //XXX; for Hardware accelerated surfaces we have to stop using the above deprecated method and use a bitmap-backed method
                     // this fixes the issue with Nougat Devices displaying black screen for 24bit color mode C24bit
-                    Bitmap bitmapTmp = Bitmap.createBitmap(framebufferwidth, framebufferheight, Config.bitmapConfig);
-                    bitmapTmp.setPixels(bitmapPixels, offset(xo, yo), data.framebufferwidth, 0, 0, drawWidth, drawHeight);
-                    canvas.drawBitmap(bitmapTmp, (float) vncCanvas.getWidth() / -2 + (float) framebufferwidth / 2, (float) vncCanvas.getHeight() / 2 - (float) framebufferheight / 2, null);
+                    frameBitmap.setPixels(bitmapPixels, 0, data.framebufferwidth, 0, 0, framebufferwidth, framebufferheight);
+					Rect srcRect = new Rect(xo, yo, xo + drawWidth, yo + drawHeight);
+					Rect destRect = new Rect(
+							(int) ((float) vncCanvas.getWidth() / -2 + (float) framebufferwidth / 2),
+							(int) ((float) vncCanvas.getHeight() / 2 - (float) framebufferheight / 2),
+							(int) ((float) vncCanvas.getWidth() / -2 + (float) framebufferwidth / 2 + drawWidth),
+							(int) ((float) vncCanvas.getHeight() / 2 - (float) framebufferheight / 2 + drawHeight));
+					canvas.drawBitmap(frameBitmap, srcRect, destRect, null);
 
 				/*
 				}
@@ -264,6 +293,12 @@ class FullBufferBitmapData extends AbstractBitmapData {
 	@Override
 	void writeFullUpdateRequest(boolean incremental) throws IOException {
 		rfb.writeFramebufferUpdateRequest(0, 0, framebufferwidth, framebufferheight, incremental);
+	}
+
+	@Override
+	void dispose() {
+		recycleReusableFrameBitmap();
+		super.dispose();
 	}
 
 }
