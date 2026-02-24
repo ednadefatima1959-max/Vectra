@@ -84,7 +84,7 @@ import java.util.regex.Pattern;
 public class VMManager {
 
     public static final String TAG = "VMManager";
-    public static String finalJson = "";
+    private static volatile String finalJson = "";
     public static String pendingDeviceID = "";
     public static String generatedVMId = "";
     public static int restoredVMs = 0;
@@ -97,6 +97,14 @@ public class VMManager {
     private static final ConcurrentHashMap<String, VmRuntimeState> VM_STATES = new ConcurrentHashMap<>();
     private static final AtomicLong UNKNOWN_VM_SEQUENCE = new AtomicLong(1L);
     private static final Pattern SAFE_COMMAND_CHARS = Pattern.compile("^[a-zA-Z0-9_./,:=+\\-\"' ]+$");
+
+    public static String getFinalJson() {
+        return finalJson;
+    }
+
+    private static synchronized void setFinalJson(String value) {
+        finalJson = value == null ? "" : value;
+    }
 
     private enum VmRuntimeState {
         STOPPED,
@@ -784,7 +792,7 @@ public class VMManager {
             return;
         }
         vmList.remove(position);
-        finalJson = new Gson().toJson(vmList);
+        setFinalJson(new Gson().toJson(vmList));
         if (!vmId.isEmpty()) {
             int _startRepeat = 0;
             String _currentVMIDToScan;
@@ -797,7 +805,7 @@ public class VMManager {
                             _currentVMIDToScan = FileUtils.readAFile(_filelist.get(_startRepeat) + "/vmID.txt").replace("\n", "");
                             if (!_currentVMIDToScan.isEmpty()) {
                                 if (_currentVMIDToScan.equals(vmId)) {
-                                    if (!finalJson.contains(_filelist.get(_startRepeat))) {
+                                    if (!getFinalJson().contains(_filelist.get(_startRepeat))) {
                                         FileUtils.deleteDirectory(_filelist.get(_startRepeat));
                                     } else {
                                         isKeptSomeFiles = true;
@@ -874,8 +882,9 @@ public class VMManager {
     }
 
     public static void cleanUp() {
-        finalJson = FileUtils.readAFile(AppConfig.romsdatajson);
-        if (!finalJson.isEmpty()) {
+        setFinalJson(FileUtils.readAFile(AppConfig.romsdatajson));
+        String snapshot = getFinalJson();
+        if (!snapshot.isEmpty()) {
             int _startRepeat = 0;
             ArrayList<String> _filelist = new ArrayList<>();
             FileUtils.getAListOfAllFilesAndFoldersInADirectory(AppConfig.vmFolder, _filelist);
@@ -883,7 +892,7 @@ public class VMManager {
                 for (int _repeat = 0; _repeat < _filelist.size(); _repeat++) {
                     if (_startRepeat < _filelist.size()) {
                         if (!isFileExists(_filelist.get(_startRepeat) + "/vmID.txt")) {
-                            if (!finalJson.contains(_filelist.get(_startRepeat))) {
+                            if (!snapshot.contains(_filelist.get(_startRepeat))) {
                                 FileUtils.deleteDirectory(_filelist.get(_startRepeat));
                             }
                         }
@@ -1036,15 +1045,16 @@ public class VMManager {
                 return;
             }
         }
-        finalJson = FileUtils.readAFile(AppConfig.romsdatajson);
-        if (!finalJson.isEmpty()) {
+        setFinalJson(FileUtils.readAFile(AppConfig.romsdatajson));
+        String snapshot = getFinalJson();
+        if (!snapshot.isEmpty()) {
             int _startRepeat = 0;
             ArrayList<String> _filelist = new ArrayList<>();
             FileUtils.getAListOfAllFilesAndFoldersInADirectory(AppConfig.vmFolder, _filelist);
             if (!_filelist.isEmpty()) {
                 for (int _repeat = 0; _repeat < _filelist.size(); _repeat++) {
                     if (_startRepeat < _filelist.size()) {
-                        if (!finalJson.contains(Objects.requireNonNull(Uri.parse(_filelist.get(_startRepeat)).getLastPathSegment()))) {
+                        if (!snapshot.contains(Objects.requireNonNull(Uri.parse(_filelist.get(_startRepeat)).getLastPathSegment()))) {
                             FileUtils.moveAFile(_filelist.get(_startRepeat), AppConfig.recyclebin + Uri.parse(_filelist.get(_startRepeat)).getLastPathSegment());
                         }
                     }
