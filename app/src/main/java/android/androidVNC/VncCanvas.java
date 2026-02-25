@@ -134,6 +134,12 @@ public class VncCanvas extends AppCompatImageView {
 	public static int retries;
 	public static int MAX_RETRIES = 5;
 
+	enum RetryAction {
+		NONE,
+		RETRY,
+		RETRY_WITH_REDUCED_LOAD
+	}
+
 	/**
 	 * Create a view showing a VNC connection
 	 * 
@@ -196,22 +202,11 @@ public class VncCanvas extends AppCompatImageView {
 				} catch (Throwable e) {
 					if (maintainConnection) {
 						Log.e(TAG, "initializeVncCanvas: ", e);
-						// Ensure we dismiss the progress dialog
-						// before we fatal error finish
-						if (pd.isShowing()) {
-							pd.dismiss();
-						}
+						dismissProgressDialog(pd);
 						if (e instanceof OutOfMemoryError) {
-							// TODO Not sure if this will happen but...
-							// figure out how to gracefully notify the user
-							// Instantiating an alert dialog here doesn't work
-							// because we are out of memory. :(
+							handleOutOfMemoryError((OutOfMemoryError) e, pd, display);
 						} else if (e instanceof ArrayIndexOutOfBoundsException || e instanceof IOException) {
-							// Retry
-							if (retries < MAX_RETRIES) {
-								retries++;
-								reload();
-							}
+							handleRetryableFailure(e, display);
 						} else {
 							String error = "VNC connection failed!";
 							if (e.getMessage() != null && (e.getMessage().contains("authentication"))) {
@@ -229,6 +224,108 @@ public class VncCanvas extends AppCompatImageView {
 			}
 		};
 		t.start();
+	}
+
+	static RetryAction decideRetryAction(Throwable error, int currentRetries, int maxRetries, int currentCompressLevel,
+			int currentJpegQuality) {
+		if (!(error instanceof ArrayIndexOutOfBoundsException || error instanceof IOException)) {
+			return RetryAction.NONE;
+		}
+		if (currentRetries >= maxRetries) {
+			return RetryAction.NONE;
+		}
+		if (currentCompressLevel < 9 || currentJpegQuality > 0) {
+			return RetryAction.RETRY_WITH_REDUCED_LOAD;
+		}
+		return RetryAction.RETRY;
+	}
+
+	private void handleOutOfMemoryError(OutOfMemoryError error, ProgressDialog pd, Display display) {
+		releaseTransientResources();
+		Point size = new Point();
+		display.getSize(size);
+		Log.e(TAG,
+				"OutOfMemory during VNC init - display=" + size.x + "x" + size.y + ", pendingColorModel="
+						+ pendingColorModel + ", compressLevel=" + compressLevel + ", jpegQuality=" + jpegQuality
+						+ ", retries=" + retries + "/" + MAX_RETRIES,
+				error);
+		dismissProgressDialog(pd);
+		handler.post(new Runnable() {
+			@Override
+			public void run() {
+				Utils.showFatalErrorMessage(getContext(),
+						"Memória insuficiente para abrir o console VNC. Feche outros apps e tente novamente.");
+			}
+		});
+	}
+
+	private void handleRetryableFailure(Throwable error, Display display) {
+		RetryAction retryAction = decideRetryAction(error, retries, MAX_RETRIES, compressLevel, jpegQuality);
+		if (retryAction == RetryAction.NONE) {
+			handler.post(new Runnable() {
+				@Override
+				public void run() {
+					Utils.showFatalErrorMessage(getContext(),
+							"VNC connection failed after " + retries + " retry attempts.<br>" + error.getLocalizedMessage());
+				}
+			});
+			return;
+		}
+
+		if (retryAction == RetryAction.RETRY_WITH_REDUCED_LOAD) {
+			applyRetryDegradation();
+		}
+
+		retries++;
+		Point size = new Point();
+		display.getSize(size);
+		Log.w(TAG,
+				"Retrying VNC init after failure. action=" + retryAction + ", retries=" + retries + "/" + MAX_RETRIES
+						+ ", display=" + size.x + "x" + size.y + ", pendingColorModel=" + pendingColorModel
+						+ ", compressLevel=" + compressLevel + ", jpegQuality=" + jpegQuality,
+				error);
+		reload();
+	}
+
+	private void applyRetryDegradation() {
+		if (jpegQuality > 0) {
+			jpegQuality = Math.max(0, jpegQuality - 2);
+		}
+		if (compressLevel < 9) {
+			compressLevel = Math.min(9, compressLevel + 1);
+		}
+		if (pendingColorModel == COLORMODEL.C24bit) {
+			pendingColorModel = COLORMODEL.C256;
+		}
+	}
+
+	private void releaseTransientResources() {
+		closeConnection();
+		if (bitmapData != null) {
+			bitmapData.dispose();
+			bitmapData = null;
+		}
+		zlibBuf = null;
+		zrleBuf = null;
+		zrleTilePixels = null;
+		if (zlibInflater != null) {
+			zlibInflater.end();
+			zlibInflater = null;
+		}
+		if (rfb != null) {
+			rfb.close();
+		}
+	}
+
+	private void dismissProgressDialog(final ProgressDialog pd) {
+		handler.post(new Runnable() {
+			@Override
+			public void run() {
+				if (pd.isShowing()) {
+					pd.dismiss();
+				}
+			}
+		});
 	}
 
 	public void reload() {
