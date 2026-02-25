@@ -54,6 +54,7 @@ public class SetupFeatureCore {
     public static final String POST_CHECK_FAIL_PREFIX = "POST_CHECK_FAIL:";
     public static final String INTEGRITY_FAIL_PREFIX = "INTEGRITY_FAIL:";
     private static final String BOOTSTRAP_LOG_PREFIX = "PROOT_BOOTSTRAP";
+    private static final long MIN_TAR_BYTES = 1024L;
 
     public static boolean isInstalledSystemFiles(Context context) {
         return isInstalledProot(context) && isInstalledDistro(context);
@@ -866,6 +867,13 @@ public class SetupFeatureCore {
 
         // Step 1: Copy asset to filesDir
         isCompleted = copyAssetToFile(context, assetPath, extractedTarPath.toString());
+        if (!isCompleted) {
+            lastErrorLog = "COPY_ASSET_FAIL: Unable to copy system tar"
+                    + " asset=" + assetPath
+                    + " output=" + extractedTarPath;
+            Log.e(TAG, lastErrorLog);
+            return false;
+        }
 
         if (isCompleted) {
             File extractedTarFile = extractedTarPath.toFile();
@@ -1051,6 +1059,36 @@ public class SetupFeatureCore {
             commandJoiner.add(token);
         }
         return commandJoiner.toString();
+    }
+
+    private static String validateExtractedTarFile(Path extractedTarPath) {
+        File extractedTarFile = extractedTarPath.toFile();
+        if (!extractedTarPath.toString().endsWith(".tar")) {
+            return "TAR_INTEGRITY_FAIL: invalid-extension"
+                    + " path=" + extractedTarPath;
+        }
+        if (!extractedTarFile.exists()) {
+            return "TAR_INTEGRITY_FAIL: missing-file"
+                    + " path=" + extractedTarPath;
+        }
+        if (!extractedTarFile.isFile()) {
+            return "TAR_INTEGRITY_FAIL: not-regular-file"
+                    + " path=" + extractedTarPath;
+        }
+
+        long tarLength = extractedTarFile.length();
+        if (tarLength <= 0L) {
+            return "TAR_INTEGRITY_FAIL: empty-file"
+                    + " path=" + extractedTarPath
+                    + " length=" + tarLength;
+        }
+        if (tarLength < MIN_TAR_BYTES) {
+            return "TAR_INTEGRITY_FAIL: below-min-size"
+                    + " path=" + extractedTarPath
+                    + " length=" + tarLength
+                    + " min=" + MIN_TAR_BYTES;
+        }
+        return null;
     }
 
     public static boolean copyAssetToFile(Context context, String assetPath, String outputPath) {
