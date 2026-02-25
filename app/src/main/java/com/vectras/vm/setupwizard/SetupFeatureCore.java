@@ -7,6 +7,8 @@ import android.content.res.AssetManager;
 import android.os.Build;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
+
 import com.vectras.vm.AppConfig;
 import com.vectras.vm.R;
 import com.vectras.vm.VMManager;
@@ -53,7 +55,9 @@ public class SetupFeatureCore {
     public static final String INTEGRITY_FAIL_PREFIX = "INTEGRITY_FAIL:";
     public static final String EXTRACTION_FAIL_PREFIX = "EXTRACTION_FAIL:";
     public static final String POST_CHECK_FAIL_PREFIX = "POST_CHECK_FAIL:";
+    public static final String INTEGRITY_FAIL_PREFIX = "INTEGRITY_FAIL:";
     private static final String BOOTSTRAP_LOG_PREFIX = "PROOT_BOOTSTRAP";
+    private static final long MIN_TAR_BYTES = 1024L;
 
     public static boolean isInstalledSystemFiles(Context context) {
         return isInstalledProot(context) && isInstalledDistro(context);
@@ -723,6 +727,49 @@ public class SetupFeatureCore {
         return false;
     }
 
+    private static ArrayList<File> buildRequiredExecutablesForExtractFlow(Context context, String fromAsset) {
+        ArrayList<File> requiredExecutables = new ArrayList<>();
+        if (context == null || fromAsset == null) {
+            return requiredExecutables;
+        }
+
+        File filesDir = context.getFilesDir();
+        if ("bootstrap".equals(fromAsset)) {
+            requiredExecutables.add(new File(filesDir, "usr/bin/proot"));
+        }
+
+        if (fromAsset.contains("alpine")) {
+            requiredExecutables.add(new File(filesDir, "distro/bin/busybox"));
+            requiredExecutables.add(new File(filesDir, "distro/bin/sh"));
+            requiredExecutables.add(new File(filesDir, "distro/usr/bin/env"));
+        }
+
+        return requiredExecutables;
+    }
+
+    private static void enforceExecutableMode(List<File> requiredExecutables, List<String> failedItems) {
+        if (requiredExecutables == null || failedItems == null) {
+            return;
+        }
+
+        for (File requiredExecutable : requiredExecutables) {
+            if (requiredExecutable == null) {
+                continue;
+            }
+
+            String normalizedPath = requiredExecutable.getPath().replace('\\', '/');
+            if (!requiredExecutable.isFile()) {
+                failedItems.add("missing-required-executable:" + normalizedPath);
+                continue;
+            }
+
+            FileUtils.chmod(requiredExecutable, 0755);
+            if (!requiredExecutable.canExecute()) {
+                failedItems.add("chmod-failed:" + normalizedPath);
+            }
+        }
+    }
+
     private static String readTextFile(String path) {
         File file = new File(path);
         if (!file.exists()) {
@@ -743,7 +790,48 @@ public class SetupFeatureCore {
         }
     }
 
+    @Nullable
+    public static String computeSha256Hex(File file) {
+        if (file == null || !file.isFile()) {
+            return null;
+        }
+
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            Log.e(TAG, "computeSha256Hex digest init: ", e);
+            return null;
+        }
+
+        try (FileInputStream fileInputStream = new FileInputStream(file);
+             BufferedInputStream in = new BufferedInputStream(fileInputStream)) {
+            byte[] buffer = new byte[32 * 1024];
+            int n;
+            while ((n = in.read(buffer)) != -1) {
+                digest.update(buffer, 0, n);
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "computeSha256Hex read: ", e);
+            return null;
+        }
+
+        byte[] hash = digest.digest();
+        char[] out = new char[hash.length * 2];
+        final char[] hexMap = "0123456789abcdef".toCharArray();
+        for (int i = 0; i < hash.length; i++) {
+            int v = hash[i] & 0xFF;
+            out[i * 2] = hexMap[v >>> 4];
+            out[i * 2 + 1] = hexMap[v & 0x0F];
+        }
+        return new String(out);
+    }
+
     public static boolean startExtractSystemFiles(Context context) {
+        return startExtractSystemFiles(context, null);
+    }
+
+    public static boolean startExtractSystemFiles(Context context, @Nullable String bootstrapExpectedSha256) {
         if (isInstalledSystemFiles(context)) return true;
         lastErrorLog = "";
 
@@ -752,7 +840,7 @@ public class SetupFeatureCore {
         File binDir = new File(distroDir + "/bin");
         if (!binDir.exists()) {
             if (!isInstalledProot(context)) {
-                if (!extractSystemFiles(context, "bootstrap", "")) return false;
+                if (!extractSystemFiles(context, "bootstrap", "", bootstrapExpectedSha256)) return false;
             }
 
             if (isInstalledDistro(context)) return true;
@@ -772,6 +860,10 @@ public class SetupFeatureCore {
     }
 
     public static boolean extractSystemFiles(Context context, String fromAsset, String extractTo) {
+        return extractSystemFiles(context, fromAsset, extractTo, null);
+    }
+
+    public static boolean extractSystemFiles(Context context, String fromAsset, String extractTo, @Nullable String expectedSha256) {
         String randomFileName = VMManager.startRamdomVMID();
         final String[] selectedAssetHolder = new String[1];
         String assetPath = resolveAssetPath(context, fromAsset, selectedAssetHolder);
@@ -825,6 +917,13 @@ public class SetupFeatureCore {
 
         // Step 1: Copy asset to filesDir
         isCompleted = copyAssetToFile(context, assetPath, extractedTarPath.toString());
+        if (!isCompleted) {
+            lastErrorLog = "COPY_ASSET_FAIL: Unable to copy system tar"
+                    + " asset=" + assetPath
+                    + " output=" + extractedTarPath;
+            Log.e(TAG, lastErrorLog);
+            return false;
+        }
 
         if (isCompleted) {
             File extractedTarFile = extractedTarPath.toFile();
@@ -924,15 +1023,14 @@ public class SetupFeatureCore {
                     return false;
                 }
 
-                if ("bootstrap".equals(fromAsset)) {
-                    FileUtils.chmod(new File(context.getFilesDir(), "usr/bin/proot"), 0755);
-                }
+                ArrayList<String> extractionPostCheckFailedItems = new ArrayList<>();
+                ArrayList<File> requiredExecutables = buildRequiredExecutablesForExtractFlow(context, fromAsset);
+                enforceExecutableMode(requiredExecutables, extractionPostCheckFailedItems);
+
                 if (fromAsset.contains("alpine")) {
-                    FileUtils.chmod(new File(context.getFilesDir(), "distro/bin/busybox"), 0755);
                     setDNS(context);
                 }
 
-                ArrayList<String> extractionPostCheckFailedItems = new ArrayList<>();
                 if (!extractTargetPath.toFile().exists()) {
                     extractionPostCheckFailedItems.add("missing-extract-target");
                 }
@@ -995,6 +1093,36 @@ public class SetupFeatureCore {
             commandJoiner.add(token);
         }
         return commandJoiner.toString();
+    }
+
+    private static String validateExtractedTarFile(Path extractedTarPath) {
+        File extractedTarFile = extractedTarPath.toFile();
+        if (!extractedTarPath.toString().endsWith(".tar")) {
+            return "TAR_INTEGRITY_FAIL: invalid-extension"
+                    + " path=" + extractedTarPath;
+        }
+        if (!extractedTarFile.exists()) {
+            return "TAR_INTEGRITY_FAIL: missing-file"
+                    + " path=" + extractedTarPath;
+        }
+        if (!extractedTarFile.isFile()) {
+            return "TAR_INTEGRITY_FAIL: not-regular-file"
+                    + " path=" + extractedTarPath;
+        }
+
+        long tarLength = extractedTarFile.length();
+        if (tarLength <= 0L) {
+            return "TAR_INTEGRITY_FAIL: empty-file"
+                    + " path=" + extractedTarPath
+                    + " length=" + tarLength;
+        }
+        if (tarLength < MIN_TAR_BYTES) {
+            return "TAR_INTEGRITY_FAIL: below-min-size"
+                    + " path=" + extractedTarPath
+                    + " length=" + tarLength
+                    + " min=" + MIN_TAR_BYTES;
+        }
+        return null;
     }
 
     public static boolean copyAssetToFile(Context context, String assetPath, String outputPath) {
