@@ -12,6 +12,7 @@ function(rmr_apply_common_flags target_name)
 endfunction()
 
 add_library(rmr STATIC
+  engine/rmr/src/bitomega.c
   engine/rmr/src/rmr_cycles.c
   engine/rmr/src/rmr_hw_detect.c
   engine/rmr/src/rmr_bench.c
