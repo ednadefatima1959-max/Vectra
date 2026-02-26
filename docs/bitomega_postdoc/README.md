@@ -2,8 +2,10 @@
 Este diretório é o “pacote acadêmico” do BITΩ, mantendo a linguagem formal e executável.
 
 ## Convenção oficial de nomes (fonte de verdade)
-Os nomes esperados pelo processo de validação são os nomes **reais** publicados no
-`BITOMEGA_OVERLAY__V1.zip`:
+A convenção oficial segue **exatamente** os nomes internos publicados no
+`BITOMEGA_OVERLAY__V1.zip`.
+
+Arquivos centrais do overlay ZIP:
 
 - `01_FORMALISM_BITOMEGA.md`
 - `02_TRANSITION_GRAPH.md`
@@ -11,10 +13,21 @@ Os nomes esperados pelo processo de validação são os nomes **reais** publicad
 - `04_EXPERIMENTS.md`
 - `05_RESULTS_TABLES.md`
 
+Documentos complementares mantidos neste diretório:
+
+- `00_THESIS_OVERVIEW.md`
+- `06_LIMITATIONS_NEXT.md`
+
 Decisão adotada: **Estratégia A** (atualizar a checagem para os nomes atuais do ZIP).
-Não existe etapa de renomeação pós-extração para os aliases
-`01_FOUNDATIONS.md`, `02_METHODS.md`, `03_RESULTS.md`, `04_IMPL_DETAILS.md`,
-`05_VALIDATION.md`.
+Não existe etapa de renomeação pós-extração para aliases legados.
+
+Aliases legados **não utilizados**:
+
+- `01_FOUNDATIONS.md`
+- `02_METHODS.md`
+- `03_RESULTS.md`
+- `04_IMPL_DETAILS.md`
+- `05_VALIDATION.md`
 
 ## Compatibilidade com aliases antigos
 Aliases históricos podem aparecer em rascunhos internos, mas **não** fazem parte da
@@ -37,8 +50,11 @@ Executar:
 docs/bitomega_postdoc/validate_pack.sh
 ```
 
-O script valida o conjunto completo do pacote (`00` até `06`) usando a mesma
-convenção de nomes do ZIP.
+O script valida:
+
+1. presença dos arquivos oficiais do ZIP;
+2. presença dos arquivos complementares locais;
+3. ausência dos aliases legados.
 
 ## Ordem sugerida
 1. 00_THESIS_OVERVIEW.md
