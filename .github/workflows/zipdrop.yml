@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - "_incoming1/*.zip"
+      - "_incoming/*.zip"
       - "*.zip"
 
 jobs:
