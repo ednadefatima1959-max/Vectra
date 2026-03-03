@@ -19,6 +19,7 @@ on:
       - 'README.md'
       - '.github/workflows/android.yml'
   pull_request:
+    branches: [main]
     paths:
       - 'app/**'
       - 'terminal-emulator/**'
@@ -303,8 +304,8 @@ jobs:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
         run: ./gradlew verifyRepoFileDependencies ${{ env.GRADLE_ARGS }}
 
-      - name: Verify arm64 native toolchain compatibility
-        run: ./gradlew verifyArm64ToolchainCompatibility -PNDK_VERSION=${{ env.NDK_VERSION }}
+      - name: Native ABI matrix gate
+        run: ./gradlew checkNativeAllMatrix ${{ env.GRADLE_ARGS }}
 
   build_debug:
     name: '03 • Build Debug APK'
@@ -402,9 +403,6 @@ jobs:
         ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
         ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
       run: ./gradlew verifyRepoFileDependencies ${{ env.GRADLE_ARGS }}
-
-    - name: Verify arm64 native toolchain compatibility
-      run: ./gradlew verifyArm64ToolchainCompatibility -PNDK_VERSION=${NDK_VERSION}
 
     - name: Validate release version metadata consistency
       run: |
