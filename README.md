@@ -15,6 +15,11 @@ Esta revisão consolida a documentação em três camadas por diretório (propó
 - Referência do runtime: [`VECTRA_CORE.md`](VECTRA_CORE.md)
 - Guia macro de documentação: [`VECTRAS_MEGAPROMPT_DOCS.md`](VECTRAS_MEGAPROMPT_DOCS.md)
 
+## Política de overlays ZIP
+- Arquivos `*.zip` de overlay na raiz são apenas artefatos transitórios de transporte e **não** são fonte de verdade.
+- A fonte oficial de código e documentação é **exclusivamente** a árvore versionada no Git.
+- O CI valida e falha quando detectar overlay ZIP na raiz contendo código-fonte duplicado da árvore ativa.
+
 ## Histórico arquivado (raiz)
 - [`archive/root-history/1.md`](archive/root-history/1.md)
 - [`archive/root-history/ADVANCED_OPTIMIZATIONS.md`](archive/root-history/ADVANCED_OPTIMIZATIONS.md)
