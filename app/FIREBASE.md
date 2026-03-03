@@ -1,61 +1,34 @@
-# Firebase Configuration
+# Backend de Telemetria e Falhas (substituto do Firebase)
 
-This app uses Firebase services (Analytics, Crashlytics, Messaging).
+## Decisão arquitetural
 
-## For Local Development
+O módulo `app/` **não usa mais Firebase** (Analytics, Crashlytics, Messaging).
+A estratégia oficial passa a ser um pipeline autoral local, chamado **Bitstack Local Pipeline (BLP)**,
+com coleta determinística no dispositivo e exportação controlada via artefatos locais.
 
 Para build local, o arquivo `app/google-services.json` é opcional em **debug** (fallback explícito sem Firebase) e obrigatório em variantes **release**.
 
-### Option 1: Use Your Own Firebase Project (Recommended for Development)
+- Evitar acoplamento com serviços externos para build/execução.
+- Permitir operação offline e previsível.
+- Manter trilha técnica para diagnóstico usando componentes já existentes no projeto.
 
-1. Create a Firebase project at https://console.firebase.google.com/
-2. Add your Android app with package name `com.vectras.vm`
-3. Download the `google-services.json` file
-4. Place it in the `app/` directory
+## Como funciona
 
 ### Option 2: Use Placeholder (Apenas para debug/local)
 
-If you don't need Firebase features, you can use this minimal placeholder:
+> Referências de arquitetura operacional e auditoria: `docs/ARCHITECTURE.md`.
 
-```json
-{
-  "project_info": {
-    "project_number": "000000000000",
-    "project_id": "vectras-vm-placeholder",
-    "storage_bucket": "vectras-vm-placeholder.appspot.com"
-  },
-  "client": [
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
-        "android_client_info": {
-          "package_name": "com.vectras.vm"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDummyKeyForBuildPurposesOnly000000"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    }
-  ],
-  "configuration_version": "1"
-}
-```
+## Impacto no build
 
 Salve como `app/google-services.json` para builds locais/debug sem um projeto Firebase real.
 
-**Note**: Firebase features (analytics, crashlytics, messaging) will not work with the placeholder configuration.
+## Migração (Firebase → BLP)
 
-## Produção / Ambiente Real
+- Remover procedimentos de provisionamento Firebase dos guias de onboarding.
+- Manter apenas fluxo de build Android/Gradle padrão.
+- Centralizar rastreabilidade em documentação de arquitetura e operação local.
 
-Ao sair do fallback `minimal placeholder`, siga estes passos objetivos:
+## Checklist rápido
 
 1. Substitua `project_id` e `storage_bucket` do exemplo por valores reais do seu projeto Firebase (não use `vectras-vm-placeholder`).
 2. Use o `google-services.json` real baixado do Firebase Console para o app Android correto.
