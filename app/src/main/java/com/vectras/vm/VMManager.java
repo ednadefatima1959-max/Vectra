@@ -163,7 +163,7 @@ public class VMManager {
         ProcessSupervisor supervisor = SUPERVISORS.get(key);
         if (supervisor == null) {
             VM_STATES.put(key, VmRuntimeState.STOPPED);
-            releaseSlotForKey(key, "unregister_no_supervisor");
+            ProcessBudgetRegistry.releaseByProcess(process, key, ProcessRuntimeOps.safePid(process));
             return;
         }
 
@@ -173,7 +173,7 @@ public class VMManager {
 
         SUPERVISORS.remove(key, supervisor);
         VM_STATES.put(key, VmRuntimeState.STOPPED);
-        releaseSlotForKey(key, "unregister");
+        ProcessBudgetRegistry.releaseByProcess(process, key, ProcessRuntimeOps.safePid(process));
     }
 
     public static synchronized void unregisterVmProcess(String vmId) {
@@ -189,6 +189,21 @@ public class VMManager {
      */
     public static synchronized void registerVmProcess(Context context, String vmId, Process process) {
         if (process == null) return;
+        long processPid = ProcessRuntimeOps.safePid(process);
+        int maxBudget = getMaxSupervisedVmProcesses();
+        ProcessBudgetRegistry.BudgetToken budgetToken = ProcessBudgetRegistry.acquire(
+                "vm_process",
+                "register",
+                resolveBudgetCaller(),
+                vmId,
+                processPid,
+                maxBudget
+        );
+        if (budgetToken == null) {
+            safeTerminateDetachedProcess(process);
+            Log.w(TAG, "registerVmProcess rejected: budget acquire denied (" + maxBudget + ") vmId=" + vmId);
+            return;
+        }
         String key = normalizeVmLifecycleId(vmId);
 
         if ("unknown".equals(key)) {
@@ -208,6 +223,7 @@ public class VMManager {
         if (current != null && current.isBoundTo(process) && current.isProcessAlive()) {
             VM_STATES.put(key, VmRuntimeState.RUNNING);
             VmFlowTracker.mark(context, key, VmFlowState.RUNNING, "process_already_bound", "run");
+            ProcessBudgetRegistry.release(budgetToken, key, processPid);
             return;
         }
 
@@ -215,6 +231,7 @@ public class VMManager {
             if (current != null && current.isProcessAlive()) {
                 safeTerminateDetachedProcess(process);
                 Log.w(TAG, "registerVmProcess rejected: vm lifecycle busy for key=" + key + " state=" + state);
+                ProcessBudgetRegistry.release(budgetToken, key, processPid);
                 return;
             }
             VM_STATES.put(key, VmRuntimeState.STOPPED);
@@ -227,6 +244,7 @@ public class VMManager {
             if (previous.isBoundTo(process) && previous.isProcessAlive()) {
                 SUPERVISORS.put(key, previous);
                 VM_STATES.put(key, VmRuntimeState.RUNNING);
+                ProcessBudgetRegistry.release(budgetToken, key, processPid);
                 return;
             }
             previous.stopGracefully(false);
@@ -236,6 +254,7 @@ public class VMManager {
             VM_STATES.put(key, VmRuntimeState.STOPPED);
             safeTerminateDetachedProcess(process);
             Log.w(TAG, "registerVmProcess rejected: active supervisor cap reached (" + getMaxSupervisedVmProcesses() + ")");
+            ProcessBudgetRegistry.release(budgetToken, key, processPid);
             return;
         }
 
@@ -259,12 +278,14 @@ public class VMManager {
             SUPERVISORS.put(key, supervisor);
             SUPERVISOR_SLOTS.put(key, slot);
             VM_STATES.put(key, VmRuntimeState.RUNNING);
+            ProcessBudgetRegistry.bind(budgetToken, process, key, processPid);
             VmFlowTracker.mark(context, key, VmFlowState.RUNNING, "process_bound", "run");
             spawnProcessExitWatcher(key, supervisor, process);
         } catch (RuntimeException registerError) {
             VM_STATES.put(key, VmRuntimeState.STOPPED);
             ProcessBudgetRegistry.get().releaseSlot(slot, "register_exception");
             safeTerminateDetachedProcess(process);
+            ProcessBudgetRegistry.release(budgetToken, key, processPid);
             String errorMessage = "registerVmProcess recoverable failure: key=" + key
                 + " vmId=" + vmId
                 + " message=" + registerError.getMessage();
@@ -295,7 +316,24 @@ public class VMManager {
         }
         SUPERVISORS.remove(key, supervisor);
         VM_STATES.put(key, VmRuntimeState.STOPPED);
-        releaseSlotForKey(key, "process_exit");
+        ProcessBudgetRegistry.releaseByProcess(process, key, ProcessRuntimeOps.safePid(process));
+    }
+
+    private static String resolveBudgetCaller() {
+        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+        if (stack == null || stack.length == 0) {
+            return "unknown_caller";
+        }
+        for (StackTraceElement frame : stack) {
+            if (frame == null) continue;
+            String className = frame.getClassName();
+            if (className == null) continue;
+            if (className.startsWith("java.lang.Thread")) continue;
+            if (className.equals(VMManager.class.getName())) continue;
+            if (className.equals(ProcessBudgetRegistry.class.getName())) continue;
+            return className + "#" + frame.getMethodName();
+        }
+        return "unknown_caller";
     }
 
     private static void pruneInactiveSupervisors() {
