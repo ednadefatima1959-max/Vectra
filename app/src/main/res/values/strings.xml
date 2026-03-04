@@ -931,7 +931,7 @@
     <!-- ========================== STORAGE PERMISSION EXPLANATION STRINGS ========================== -->
     <string name="storage_permission_title">Storage Access Required</string>
     <string name="storage_permission_explanation_android13">Vectras VM needs access to your files to import and manage virtual machine disk images, ISO files, and ROM configurations. On Android 13+, you\'ll be asked to grant specific media permissions.</string>
-    <string name="storage_permission_explanation_android11">Vectras VM needs \"All Files Access\" permission to manage virtual machine files stored in shared storage. This is required for importing large disk images and ISO files.</string>
+    <string name="storage_permission_explanation_android11">Vectras VM uses Android scoped storage on Android 11+. To access user folders outside the app sandbox, choose a folder with the system file picker (SAF).</string>
     <string name="storage_permission_explanation_legacy">Vectras VM needs storage permission to read and write virtual machine files, including disk images and ISO files.</string>
     <string name="termux_storage_permission_explanation_saf">Android 10+ requires selecting a shared storage folder. Choose "Internal storage" (or equivalent) and tap "Use this folder".</string>
     <string name="termux_storage_permission_explanation_legacy">Android 9 and below require the legacy storage permission to create ~/storage links.</string>

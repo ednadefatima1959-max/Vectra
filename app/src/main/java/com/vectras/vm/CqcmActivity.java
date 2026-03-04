@@ -1,16 +1,12 @@
 package com.vectras.vm;
 
-import android.Manifest;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -33,16 +29,7 @@ public class CqcmActivity extends AppCompatActivity {
             UIUtils.setOnApplyWindowInsetsListener(findViewById(R.id.main));
 
             Button buttonallow = findViewById(R.id.buttonallow);
-            buttonallow.setOnClickListener(v -> {
-                if (shouldShowRequestPermissionRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                    intent.setData(Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                    Toast.makeText(getApplicationContext(), getResources().getString(R.string.find_and_allow_access_to_storage_in_settings), Toast.LENGTH_LONG).show();
-                } else {
-                    ActivityCompat.requestPermissions(CqcmActivity.this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1000);
-                }
-            });
+            buttonallow.setOnClickListener(v -> PermissionUtils.requestStoragePermission(CqcmActivity.this));
         }
     }
 

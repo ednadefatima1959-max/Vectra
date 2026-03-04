@@ -7,6 +7,7 @@ import android.content.UriPermission;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.provider.Settings;
 import android.widget.Toast;
 
@@ -51,6 +52,37 @@ public class PermissionUtils {
         requestLegacyStoragePermission(activity);
     }
 
+
+    public static boolean isAllFilesAccessGranted() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return true;
+        }
+        return Environment.isExternalStorageManager();
+    }
+
+    public static void openAllFilesAccessSettings(Activity activity) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            requestLegacyStoragePermission(activity);
+            return;
+        }
+
+        Intent appSettingsIntent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+        appSettingsIntent.setData(Uri.parse("package:" + activity.getPackageName()));
+        if (appSettingsIntent.resolveActivity(activity.getPackageManager()) != null) {
+            activity.startActivity(appSettingsIntent);
+            return;
+        }
+
+        Intent fallbackIntent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+        if (fallbackIntent.resolveActivity(activity.getPackageManager()) != null) {
+            activity.startActivity(fallbackIntent);
+            return;
+        }
+
+        Intent detailsIntent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        detailsIntent.setData(Uri.parse("package:" + activity.getPackageName()));
+        activity.startActivity(detailsIntent);
+    }
     public static void requestStoragePermission(Activity activity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             Toast.makeText(activity, R.string.storage_permission_explanation_android11, Toast.LENGTH_LONG).show();
