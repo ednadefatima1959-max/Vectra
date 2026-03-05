@@ -19,6 +19,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.Toast;
+import android.content.pm.PackageManager;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
@@ -155,11 +156,13 @@ public class SetupWizard2Activity extends AppCompatActivity {
     private final ActivityResultLauncher<Uri> storagePermissionLauncher =
             PermissionUtils.registerOpenDocumentTreeLauncher(this, uri -> {
                 if (uri != null) {
+                    MainSettingsManager.setOnboardingPermStorageSaf(this, MainSettingsManager.ONBOARDING_PERMISSION_GRANTED);
                     Toast.makeText(this, getString(R.string.done), Toast.LENGTH_SHORT).show();
                     if (currentStep == STEP_REQUEST_PERMISSION) {
                         extractSystemFiles();
                     }
                 } else {
+                    MainSettingsManager.setOnboardingPermStorageSaf(this, MainSettingsManager.ONBOARDING_PERMISSION_SKIPPED);
                     UIUtils.toastShort(this, getString(R.string.storage_permission_explanation_android11));
                 }
             });
@@ -193,8 +196,23 @@ public class SetupWizard2Activity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         restoreSetupSnapshot();
+        if (MainSettingsManager.getOnboardingPermissionsReviewEnabled(this)) {
+            MainSettingsManager.reevaluateOnboardingPermissionsSnapshot(this);
+        }
         if (currentStep == 1 && PermissionUtils.storagepermission(this, false)) {
             extractSystemFiles();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == PermissionUtils.REQUEST_LEGACY_STORAGE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                MainSettingsManager.setOnboardingPermStorageSaf(this, MainSettingsManager.ONBOARDING_PERMISSION_GRANTED);
+            } else {
+                MainSettingsManager.setOnboardingPermStorageSaf(this, MainSettingsManager.ONBOARDING_PERMISSION_FAILED);
+            }
         }
     }
 
@@ -277,6 +295,16 @@ public class SetupWizard2Activity extends AppCompatActivity {
 
         //Final steps
         bindingFinalSteps.tvLater.setOnClickListener(v -> uiControllerFinalSteps(currentStep + 1));
+        if (MainSettingsManager.getOnboardingPermissionsReviewEnabled(this)) {
+            bindingFinalSteps.tvReviewPermissions.setVisibility(View.VISIBLE);
+            bindingFinalSteps.tvReviewPermissions.setOnClickListener(v -> {
+                MainSettingsManager.reevaluateOnboardingPermissionsSnapshot(this);
+                UIUtils.toastShort(this, MainSettingsManager.getOnboardingPermissionsSnapshotSummary(
+                        MainSettingsManager.getOnboardingPermissionsSnapshot(this)));
+            });
+        } else {
+            bindingFinalSteps.tvReviewPermissions.setVisibility(View.GONE);
+        }
 
         bindingFinalSteps.btnContinue.setOnClickListener(v -> {
             if (currentStep == STEP_PATERON) {
