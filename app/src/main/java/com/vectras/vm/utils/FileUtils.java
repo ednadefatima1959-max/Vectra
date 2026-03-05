@@ -88,7 +88,7 @@ public class FileUtils {
 				final String type = split[0];
 
 				String fullPath = getPathFromExtSD(split);
-				if (fullPath != "") {
+				if (!TextUtils.isEmpty(fullPath)) {
 					return fullPath;
 				} else {
 					return null;
@@ -283,7 +283,7 @@ public class FileUtils {
 			return fullPath;
 		}
 
-		return fullPath;
+		return "";
 	}
 
 	private static String getDriveFilePath(Context context, Uri uri) {
