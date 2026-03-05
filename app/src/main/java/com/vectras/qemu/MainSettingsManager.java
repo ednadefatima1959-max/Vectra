@@ -1098,6 +1098,30 @@ public class MainSettingsManager extends AppCompatActivity
         edit.apply();
     }
 
+    public static void setSetupInitialBenchmarkOptIn(Context context, boolean enabled) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences.Editor edit = prefs.edit();
+        edit.putBoolean("setupInitialBenchmarkOptIn", enabled);
+        edit.apply();
+    }
+
+    public static boolean getSetupInitialBenchmarkOptIn(Context context) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        return prefs.getBoolean("setupInitialBenchmarkOptIn", false);
+    }
+
+    public static void setSetupInitialBenchmarkLast(Context context, String summary) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences.Editor edit = prefs.edit();
+        edit.putString("setupInitialBenchmarkLast", summary);
+        edit.apply();
+    }
+
+    public static String getSetupInitialBenchmarkLast(Context context) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        return prefs.getString("setupInitialBenchmarkLast", "");
+    }
+
     public static void setDontShowAgainJoinBetaUpdateChannelDialog(Context context, Boolean _boolean) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor edit = prefs.edit();

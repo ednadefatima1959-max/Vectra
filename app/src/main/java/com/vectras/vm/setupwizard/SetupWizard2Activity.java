@@ -5,6 +5,7 @@ import static android.content.Intent.ACTION_VIEW;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
@@ -26,6 +27,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.preference.PreferenceManager;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -34,6 +36,8 @@ import com.vectras.qemu.MainSettingsManager;
 import com.vectras.vm.AppConfig;
 import com.vectras.vm.R;
 import com.vectras.vm.VMManager;
+import com.vectras.vm.benchmark.BenchmarkActivity;
+import com.vectras.vm.benchmark.BenchmarkManager;
 import com.vectras.vm.core.ProcessLaunch;
 import com.vectras.vm.core.ProcessRuntimeOps;
 import com.vectras.vm.core.ProotCommandBuilder;
@@ -44,6 +48,7 @@ import com.vectras.vm.databinding.ListViewBinding;
 import com.vectras.vm.databinding.SetupQemuDoneBinding;
 import com.vectras.vm.databinding.SimpleLayoutListViewWithCheckBinding;
 import com.vectras.vm.main.MainActivity;
+import com.vectras.vm.tools.ProfessionalToolsActivity;
 import com.vectras.vm.utils.DeviceUtils;
 import com.vectras.vm.utils.DialogUtils;
 import com.vectras.vm.utils.FileUtils;
@@ -60,6 +65,7 @@ import com.vectras.vterm.Terminal;
 import com.vectras.vterm.TerminalBottomSheetDialog;
 
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
@@ -87,6 +93,10 @@ public class SetupWizard2Activity extends AppCompatActivity {
     private static final Pattern SHA256_PATTERN = Pattern.compile("^[A-Fa-f0-9]{64}$");
     private static final int MAX_LOG_BUFFER_CHARS = 64 * 1024;
     private static final String BOOTSTRAP_SIGNATURE_PUBLIC_KEY_PEM = "";
+    private static final long SETUP_SMOKE_TIMEOUT_MS = 6000L;
+    private static final String PREF_SETUP_INITIAL_BENCHMARK_OPT_IN = "setupInitialBenchmarkOptIn";
+    private static final String PREF_SETUP_PROFILE = "setupProfile";
+    private static final String SETUP_PROFILE_DEBUGGER = "debugger";
 
     private enum SetupSource {
         REMOTE,
@@ -150,6 +160,7 @@ public class SetupWizard2Activity extends AppCompatActivity {
     String activeSetupTimestamp = "";
     String lastProotSelfCheckBlock = "";
     boolean rollbackAvailable = false;
+    boolean initialBenchmarkOptIn = false;
     final ArrayList<HashMap<String, String>> mirrorList = new ArrayList<>();
     ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ActivityResultLauncher<Uri> storagePermissionLauncher =
@@ -245,6 +256,13 @@ public class SetupWizard2Activity extends AppCompatActivity {
         });
 
         binding.customSetupOption.setOnClickListener(v -> bootstrapFilePicker.launch("*/*"));
+
+        initialBenchmarkOptIn = resolveInitialBenchmarkOptInDefault();
+        binding.swInitialBenchmarkValidation.setChecked(initialBenchmarkOptIn);
+        binding.swInitialBenchmarkValidation.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            initialBenchmarkOptIn = isChecked;
+            MainSettingsManager.setSetupInitialBenchmarkOptIn(this, isChecked);
+        });
 
         binding.selectMirrorOption.setOnClickListener(v -> selectMirror());
 
@@ -1221,13 +1239,90 @@ public class SetupWizard2Activity extends AppCompatActivity {
     private void finalizeSetupSuccess() {
         MainSettingsManager.setStandardSetupVersion(this, AppConfig.standardSetupVersion);
         MainSettingsManager.setsetUpWithManualSetupBefore(this, isCustomSetupMode);
+        MainSettingsManager.setSetupInitialBenchmarkOptIn(this, initialBenchmarkOptIn);
         clearSetupSnapshot();
+        if (initialBenchmarkOptIn) {
+            runInitialBenchmarkValidation();
+        }
         uiController(STEP_PATERON);
         if (isSystemUpdateMode) {
             uiControllerFinalSteps(STEP_FINISH);
         } else {
             uiControllerFinalSteps(STEP_PATERON);
         }
+    }
+
+    private boolean resolveInitialBenchmarkOptInDefault() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        if (prefs.contains(PREF_SETUP_INITIAL_BENCHMARK_OPT_IN)) {
+            return prefs.getBoolean(PREF_SETUP_INITIAL_BENCHMARK_OPT_IN, false);
+        }
+        String profile = prefs.getString(PREF_SETUP_PROFILE, "");
+        if (profile != null && profile.equalsIgnoreCase(SETUP_PROFILE_DEBUGGER)) {
+            return true;
+        }
+        return false;
+    }
+
+    private void runInitialBenchmarkValidation() {
+        executor.execute(() -> {
+            BenchmarkManager benchmarkManager = new BenchmarkManager(this);
+            BenchmarkManager.SmokeBenchmarkResult smoke = benchmarkManager.runSmokeBenchmark(SETUP_SMOKE_TIMEOUT_MS);
+            MainSettingsManager.setSetupInitialBenchmarkLast(this, buildSmokeSummary(smoke));
+            writeSmokeDiagnosticFile(smoke);
+            runOnUiThread(() -> {
+                if (!smoke.success) {
+                    showInitialBenchmarkFailureDialog(smoke);
+                } else {
+                    UIUtils.toastShort(this, getString(R.string.setup_initial_benchmark_ok_toast));
+                }
+            });
+        });
+    }
+
+    private String buildSmokeSummary(BenchmarkManager.SmokeBenchmarkResult smoke) {
+        return "success=" + smoke.success
+                + ";durationMs=" + smoke.durationMs
+                + ";integerOpsPerSec=" + smoke.integerOpsPerSec
+                + ";memoryTouchMBps=" + smoke.memoryTouchMBps
+                + ";freeMemoryMb=" + smoke.freeMemoryMb
+                + ";abiCpuMismatch=" + smoke.abiCpuMismatch
+                + ";message=" + smoke.message;
+    }
+
+    private void writeSmokeDiagnosticFile(BenchmarkManager.SmokeBenchmarkResult smoke) {
+        java.io.File out = new java.io.File(getFilesDir(), "setup_initial_benchmark.txt");
+        try (FileWriter writer = new FileWriter(out, false)) {
+            writer.write("timestamp=" + Instant.now().toString() + "\n");
+            writer.write(buildSmokeSummary(smoke) + "\n");
+        } catch (IOException e) {
+            Log.w(TAG, "Unable to persist setup initial benchmark diagnostic", e);
+        }
+    }
+
+    private void showInitialBenchmarkFailureDialog(BenchmarkManager.SmokeBenchmarkResult smoke) {
+        StringBuilder details = new StringBuilder();
+        details.append(getString(R.string.setup_initial_benchmark_failure_body)).append("\n\n")
+                .append("- ").append(getString(R.string.setup_initial_benchmark_recommend_permissions)).append("\n")
+                .append("- ").append(getString(R.string.setup_initial_benchmark_recommend_power)).append("\n")
+                .append("- ").append(getString(R.string.setup_initial_benchmark_recommend_storage)).append("\n")
+                .append("- ").append(getString(R.string.setup_initial_benchmark_recommend_abi)).append("\n\n")
+                .append("durationMs=").append(smoke.durationMs).append("\n")
+                .append("integerOpsPerSec=").append(smoke.integerOpsPerSec).append("\n")
+                .append("memoryTouchMBps=").append(smoke.memoryTouchMBps).append("\n")
+                .append("freeMemoryMb=").append(smoke.freeMemoryMb).append("\n")
+                .append("abiCpuMismatch=").append(smoke.abiCpuMismatch).append("\n")
+                .append("message=").append(smoke.message);
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.setup_initial_benchmark_failure_title)
+                .setMessage(details.toString())
+                .setNegativeButton(R.string.professional_tools, (dialog, which) ->
+                        startActivity(new Intent(this, ProfessionalToolsActivity.class)))
+                .setNeutralButton(R.string.benchmark, (dialog, which) ->
+                        startActivity(new Intent(this, BenchmarkActivity.class)))
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
     }
 
     private void advanceSetupProgress(int targetPercent) {

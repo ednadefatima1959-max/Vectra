@@ -361,6 +361,22 @@
                             android:text="@string/cpu_not_support_64" />
                     </LinearLayout>
 
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/sw_initial_benchmark_validation"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        android:text="@string/setup_initial_benchmark_optin"
+                        android:checked="false" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:text="@string/setup_initial_benchmark_optin_note"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="12sp" />
+
                 </LinearLayout>
             </androidx.core.widget.NestedScrollView>
 
