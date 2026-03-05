@@ -3,8 +3,7 @@
 #include "rmr_ll_tuning.h"
 
 #include <limits.h>
-#include <stdio.h>
-#include <string.h>
+#include "zero_compat.h"
 
 static uint32_t clamp_u32(uint32_t v, uint32_t lo, uint32_t hi) {
   if (v < lo) return lo;

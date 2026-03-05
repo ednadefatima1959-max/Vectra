@@ -1,9 +1,7 @@
 #include <jni.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include "zero_compat.h"
 #include <pthread.h>
-#include <stdio.h>
 #include <stdatomic.h>
 #include <time.h>
 #include "rmr_unified_kernel.h"

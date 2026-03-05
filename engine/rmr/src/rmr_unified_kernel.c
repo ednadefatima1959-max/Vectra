@@ -7,15 +7,7 @@
 #include "rmr_policy_kernel.h"
 #endif
 
-/* JNI build uses bionic malloc; baremetal uses bump allocator */
-#if defined(RMR_JNI_BUILD) && RMR_JNI_BUILD
-#  include <stdlib.h>
-#  include <string.h>
-#  define rmr_malloc(sz) malloc(sz)
-#  define rmr_free(p)   free(p)
-#else
-#  include "rmr_baremetal_compat.h"
-#endif
+#include "zero_compat.h"
 
 typedef enum {
   RMR_LEGACY_STATE_NEW = 0,

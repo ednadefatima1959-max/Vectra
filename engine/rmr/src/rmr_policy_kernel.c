@@ -1,12 +1,5 @@
 #include "rmr_policy_kernel.h"
-#if defined(RMR_JNI_BUILD) && RMR_JNI_BUILD
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#else
-#include "rmr_baremetal_compat.h" /* baremetal stdlib substitute */
-#endif
+#include "zero_compat.h"
 #include "rmr_corelib.h"
 #include "rmr_hw_detect.h"
 #include "rmr_ll_ops.h"

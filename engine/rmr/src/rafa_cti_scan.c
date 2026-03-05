@@ -2,9 +2,7 @@
 #include <inttypes.h>
 #include <math.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "zero_compat.h"
 #include <time.h>
 
 #include "rmr_hw_detect.h"

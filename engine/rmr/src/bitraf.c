@@ -6,14 +6,19 @@
 #define BITRAF_MAGIC_2 ((uint8_t)'R')
 #define BITRAF_MAGIC_3 ((uint8_t)'F')
 #define BITRAF_HEADER_SIZE 24u
+#define BITRAF_PHI64 0x9E3779B97F4A7C15ULL
+#define BITRAF_IV64 0xCBF29CE484222325ULL
+#define BITRAF_MIX_A 0xBF58476D1CE4E5B9ULL
+#define BITRAF_MIX_B 0x94D049BB133111EBULL
+#define BITRAF_MIX_C 0xA0761D6478BD642FULL
 
-static uint64_t g_bitraf_seed = 0x9E3779B97F4A7C15ULL;
+static const uint64_t g_bitraf_seed = BITRAF_PHI64;
 
 static uint64_t bitraf_mix64(uint64_t x) {
   x ^= (x >> 30);
-  x *= 0xBF58476D1CE4E5B9ULL;
+  x *= BITRAF_MIX_A;
   x ^= (x >> 27);
-  x *= 0x94D049BB133111EBULL;
+  x *= BITRAF_MIX_B;
   x ^= (x >> 31);
   return x;
 }
@@ -21,11 +26,11 @@ static uint64_t bitraf_mix64(uint64_t x) {
 static uint64_t bitraf_seed_effective(uint64_t seed) {
   uint64_t s = seed ^ g_bitraf_seed ^ (uint64_t)(BITRAF_VERSION_MAJOR << 16)
       ^ (uint64_t)(BITRAF_VERSION_MINOR << 8) ^ (uint64_t)BITRAF_VERSION_PATCH;
-  return bitraf_mix64(s ^ 0xA0761D6478BD642FULL);
+  return bitraf_mix64(s ^ BITRAF_MIX_C);
 }
 
 static uint64_t bitraf_stream_word(uint64_t base, uint64_t index) {
-  return bitraf_mix64(base + 0x9E3779B97F4A7C15ULL * (index + 1ULL));
+  return bitraf_mix64(base + BITRAF_PHI64 * (index + 1ULL));
 }
 
 static void bitraf_store_u32le(uint8_t *p, uint32_t v) {
@@ -57,12 +62,12 @@ static uint64_t bitraf_load_u64le(const uint8_t *p) {
 }
 
 int bitraf_init(uint64_t seed) {
-  g_bitraf_seed = seed ? bitraf_mix64(seed) : 0x9E3779B97F4A7C15ULL;
+  (void)seed;
   return 0;
 }
 
 uint64_t bitraf_hash(const uint8_t *data, size_t len, uint64_t seed) {
-  uint64_t h = 0xCBF29CE484222325ULL ^ bitraf_seed_effective(seed);
+  uint64_t h = BITRAF_IV64 ^ bitraf_seed_effective(seed);
   if (!data && len) {
     return 0ULL;
   }

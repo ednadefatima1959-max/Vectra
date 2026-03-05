@@ -1,6 +1,5 @@
 #include "bitomega.h"
 
-#include <math.h>
 
 static float clamp01(float x) {
   if (!(x == x)) return 0.0f; /* NaN -> 0 */

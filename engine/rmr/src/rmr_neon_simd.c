@@ -11,14 +11,7 @@
    ─────────────────────────────────────────────────────────────── */
 #include "rmr_hw_detect.h"
 
-#if defined(RMR_JNI_BUILD) && RMR_JNI_BUILD
-#  include <stdlib.h>
-#  include <string.h>
-#  define rmr_malloc(sz) malloc(sz)
-#  define rmr_free(p)    free(p)
-#else
-#  include "rmr_baremetal_compat.h"
-#endif
+#include "zero_compat.h"
 
 /* ── Type definitions ── */
 typedef unsigned char      u8;
