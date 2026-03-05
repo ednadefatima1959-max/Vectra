@@ -111,6 +111,7 @@ jobs:
     timeout-minutes: 30
     outputs:
       has_signing_secrets: ${{ steps.release_mode.outputs.has_signing_secrets }}
+      has_telegram_secrets: ${{ steps.release_mode.outputs.has_telegram_secrets }}
 
     steps:
       - uses: actions/checkout@v4
@@ -191,6 +192,13 @@ jobs:
             echo "has_signing_secrets=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_signing_secrets=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [[ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" \
+            && ( -n "${{ secrets.TELEGRAM_CHAT_ID }}" || -n "${{ secrets.TELEGRAM_CHAT_ID_VEC }}" ) ]]; then
+            echo "has_telegram_secrets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_telegram_secrets=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Validate release version metadata consistency
@@ -669,7 +677,7 @@ jobs:
         path: ${{ steps.release_artifact.outputs.path }}
 
     - name: Stage Release APKs for Telegram upload
-      if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload_telegram == 'true' && github.event.inputs.build_release == 'true' && secrets.TELEGRAM_BOT_TOKEN != '' && (secrets.TELEGRAM_CHAT_ID != '' || secrets.TELEGRAM_CHAT_ID_VEC != '') }}
+      if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload_telegram == 'true' && github.event.inputs.build_release == 'true' && needs.preflight.outputs.has_telegram_secrets == 'true' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -683,7 +691,7 @@ jobs:
         cp app/build/outputs/apk/release/*.apk artifacts/release/
 
     - name: Upload to Telegram
-      if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload_telegram == 'true' && github.event.inputs.build_release == 'true' && secrets.TELEGRAM_BOT_TOKEN != '' && (secrets.TELEGRAM_CHAT_ID != '' || secrets.TELEGRAM_CHAT_ID_VEC != '') }}
+      if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload_telegram == 'true' && github.event.inputs.build_release == 'true' && needs.preflight.outputs.has_telegram_secrets == 'true' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -700,9 +708,7 @@ jobs:
           exit 1
         fi
 
-        caption="Done! Note that this is a version that is automatically built when there are changes in the GitHub repository, not the official version. Please only install it if you really want to see what is new.
-Explore beta releases here: https://github.com/AnBui2004/Vectras-VM-Emu-Android/releases
-Run ID: ${GITHUB_RUN_ID}"
+        caption="Done! Note that this is a version that is automatically built when there are changes in the GitHub repository, not the official version. Please only install it if you really want to see what is new.\nExplore beta releases here: https://github.com/AnBui2004/Vectras-VM-Emu-Android/releases\nRun ID: ${GITHUB_RUN_ID}"
 
         for file in "${release_apks[@]}"; do
           if [[ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]]; then
