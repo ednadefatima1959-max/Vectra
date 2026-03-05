@@ -536,6 +536,10 @@ public class FileUtils {
 			try {
 				String mode = resolveContentOpenMode(path, backendMode);
 				ParcelFileDescriptor pfd = context.getContentResolver().openFileDescriptor(Uri.parse(path), mode);
+				if (pfd == null) {
+					Log.e(TAG, "Content resolver returned null ParcelFileDescriptor for URI: " + path);
+					return 0;
+				}
 				fd = pfd.getFd();
 				registerFd(fd, pfd);
 			} catch (final FileNotFoundException e) {
@@ -546,6 +550,10 @@ public class FileUtils {
 						Toast.makeText(context, "Error: " + e, Toast.LENGTH_SHORT).show();
 					}
 				});
+			} catch (SecurityException | NullPointerException e) {
+				Log.e(TAG, "Failed to access content URI safely: " + path, e);
+			} catch (Exception e) {
+				Log.e(TAG, "Unexpected failure while opening content URI: " + path, e);
 			}
 		} else {
 			try {

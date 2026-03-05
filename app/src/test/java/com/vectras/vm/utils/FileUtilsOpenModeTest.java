@@ -3,6 +3,7 @@ package com.vectras.vm.utils;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -14,8 +15,10 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
+import android.util.Log;
 
 import org.junit.Test;
+import org.robolectric.shadows.ShadowLog;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -111,6 +114,38 @@ public class FileUtilsOpenModeTest {
         verify(resolver, times(2)).openFileDescriptor(uri, "rw");
 
         pfd.close();
+    }
+
+    @Test
+    public void getFd_contentResolverReturnsNull_shouldReturnZeroAndNotRegisterFd() throws Exception {
+        Context context = mock(Context.class);
+        ContentResolver resolver = mock(ContentResolver.class);
+        when(context.getContentResolver()).thenReturn(resolver);
+
+        Uri uri = Uri.parse("content://disk-null-pfd.qcow2");
+        when(resolver.openFileDescriptor(uri, "rw")).thenReturn(null);
+
+        FileUtils.fds.clear();
+
+        ShadowLog.clear();
+        int fd = FileUtils.get_fd(context, uri.toString(), "rw");
+
+        assertEquals(0, fd);
+        assertTrue(FileUtils.fds.isEmpty());
+        verify(resolver, times(1)).openFileDescriptor(uri, "rw");
+
+        ShadowLog.LogItem errorLog = null;
+        for (ShadowLog.LogItem item : ShadowLog.getLogsForTag(FileUtils.TAG)) {
+            if (item != null
+                    && item.type == Log.ERROR
+                    && item.msg != null
+                    && item.msg.contains("returned null ParcelFileDescriptor")) {
+                errorLog = item;
+                break;
+            }
+        }
+
+        assertNotNull(errorLog);
     }
 
     @Test
