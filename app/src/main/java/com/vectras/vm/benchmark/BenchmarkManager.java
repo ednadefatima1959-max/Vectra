@@ -9,6 +9,7 @@ import android.os.Process;
 import com.vectras.vm.core.BareMetalProfile;
 import com.vectras.vm.core.ExecutionPolicyCenter;
 import com.vectras.vm.core.ExecutionGovernance;
+import com.vectras.vm.core.HardwareProfileBridge;
 import com.vectras.vm.core.NativeFastPath;
 
 import java.io.BufferedReader;
@@ -674,7 +675,16 @@ public class BenchmarkManager {
             stripe = Math.min(32768, stripe << 1);
         }
 
-        return new TuningProfile(mode, stripe, uiProfile.threadPriority, uiProfile.warmupDelayMs, uiProfile.label);
+        int hardwareScale = HardwareProfileBridge.benchmarkStripeScale(context);
+        if (hardwareScale > 1) {
+            stripe = Math.min(65536, stripe * hardwareScale);
+        } else if (hardwareScale == 0) {
+            stripe = Math.max(512, stripe >> 1);
+        }
+        int warmupDelay = Math.max(uiProfile.warmupDelayMs, HardwareProfileBridge.benchmarkWarmupMs(context));
+        String label = uiProfile.label + " | hw=" + HardwareProfileBridge.getEffectiveAbiHint(context);
+
+        return new TuningProfile(mode, stripe, uiProfile.threadPriority, warmupDelay, label);
     }
     
     /**

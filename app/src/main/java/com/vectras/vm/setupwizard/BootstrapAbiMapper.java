@@ -16,7 +16,21 @@ final class BootstrapAbiMapper {
     }
 
     static List<String> resolveCandidates(String[] deviceAbis) {
+        return resolveCandidates(deviceAbis, null);
+    }
+
+    static List<String> resolveCandidates(String[] deviceAbis, String preferredAbi) {
         LinkedHashSet<String> ordered = new LinkedHashSet<>();
+        if (preferredAbi != null) {
+            String preferredNormalized = normalizeAbi(preferredAbi);
+            addCandidate(ordered, preferredNormalized);
+            String[] preferredFallbacks = ABI_FALLBACKS.get(preferredNormalized);
+            if (preferredFallbacks != null) {
+                for (String fallback : preferredFallbacks) {
+                    addCandidate(ordered, fallback);
+                }
+            }
+        }
         if (deviceAbis != null) {
             for (String abi : deviceAbis) {
                 if (abi == null) {

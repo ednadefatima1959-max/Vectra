@@ -15,6 +15,7 @@ import com.vectras.vm.VMManager;
 import com.vectras.vm.core.ProotCommandBuilder;
 import com.vectras.vm.core.ProcessLaunch;
 import com.vectras.vm.core.ProcessRuntimeOps;
+import com.vectras.vm.core.HardwareProfileBridge;
 import com.vectras.vm.utils.DeviceUtils;
 import com.vectras.vm.utils.DialogUtils;
 import com.vectras.vm.utils.FileUtils;
@@ -874,7 +875,7 @@ public class SetupFeatureCore {
             return false;
         }
         Log.i(TAG, BOOTSTRAP_LOG_PREFIX + " ABI_SELECTED candidates="
-                + BootstrapAbiMapper.resolveCandidates(Build.SUPPORTED_ABIS)
+                + BootstrapAbiMapper.resolveCandidates(Build.SUPPORTED_ABIS, HardwareProfileBridge.getEffectiveAbiHint(context))
                 + " selected=" + selectedAssetHolder[0]
                 + " assetPath=" + assetPath);
 
@@ -1054,7 +1055,7 @@ public class SetupFeatureCore {
 
 
     private static String resolveAssetPath(Context context, String fromAsset, String[] selectedAssetHolder) {
-        List<String> candidates = BootstrapAbiMapper.resolveCandidates(Build.SUPPORTED_ABIS);
+        List<String> candidates = BootstrapAbiMapper.resolveCandidates(Build.SUPPORTED_ABIS, HardwareProfileBridge.getEffectiveAbiHint(context));
         for (String abi : candidates) {
             String assetPath = fromAsset + "/" + abi + ".tar";
             try (InputStream ignored = context.getAssets().open(assetPath)) {

@@ -47,6 +47,7 @@ import com.vectras.vm.R;
 import com.vectras.vm.WebViewActivity;
 import com.vectras.vm.benchmark.BenchmarkActivity;
 import com.vectras.vm.core.LogcatRuntime;
+import com.vectras.vm.core.HardwareProfileBridge;
 import com.vectras.vm.core.VmFlowTracker;
 import com.vectras.vm.databinding.ActivityMainBinding;
 import com.vectras.vm.databinding.ActivityMainContentBinding;
@@ -805,6 +806,8 @@ public class MainActivity extends AppCompatActivity implements RomStoreFragment.
                 + " hit=" + hitRatePercent
                 + " mono(native/audit)=" + nativeMonoMs + "/" + snapshot.auditLastMonoMillis
                 + " drift=" + drift;
-        binding.tvVmFlowState.setText("VM Flow: " + snapshot.state.name() + " (" + snapshot.vmId + ") [" + interop + "]\n" + metrics);
+        HardwareProfileBridge.Snapshot hardware = HardwareProfileBridge.captureAndPersist(this, false);
+        binding.tvVmFlowState.setText("VM Flow: " + snapshot.state.name() + " (" + snapshot.vmId + ") [" + interop + "]\n"
+                + metrics + "\n" + hardware.debuggerSummary());
     }
 }

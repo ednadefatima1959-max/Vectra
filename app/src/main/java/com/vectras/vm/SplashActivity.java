@@ -15,6 +15,7 @@ import androidx.preference.PreferenceManager;
 import com.vectras.qemu.MainSettingsManager;
 import com.vectras.qemu.utils.FileInstaller;
 import com.vectras.vm.crashtracker.LastCrashActivity;
+import com.vectras.vm.core.HardwareProfileBridge;
 import com.vectras.vm.main.MainActivity;
 import com.vectras.vm.setupwizard.SetupFeatureCore;
 import com.vectras.vm.setupwizard.SetupWizard2Activity;
@@ -44,6 +45,7 @@ public class SplashActivity extends AppCompatActivity implements Runnable {
         UIUtils.setOnApplyWindowInsetsListener(findViewById(R.id.main));
 
         setupFolders();
+        HardwareProfileBridge.captureAndPersist(this, false);
 
         splashHandler.postDelayed(this, 1000);
         MainSettingsManager.setOrientationSetting(this, 1);

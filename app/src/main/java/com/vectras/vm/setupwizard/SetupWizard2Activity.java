@@ -46,6 +46,7 @@ import com.vectras.vm.VMManager;
 import com.vectras.vm.benchmark.BenchmarkActivity;
 import com.vectras.vm.benchmark.BenchmarkManager;
 import com.vectras.vm.core.ProcessLaunch;
+import com.vectras.vm.core.HardwareProfileBridge;
 import com.vectras.vm.core.ProcessRuntimeOps;
 import com.vectras.vm.core.ProotCommandBuilder;
 import com.vectras.vm.network.RequestNetwork;
@@ -271,9 +272,8 @@ public class SetupWizard2Activity extends AppCompatActivity {
 
         ListUtils.setupMirrorListForListmap(mirrorList);
         applySelectedMirror(MainSettingsManager.getSelectedMirror(this));
-        setupProfileMode = MainSettingsManager.getSetupProfileMode(this);
-        setupProfileSelectionRequired = !MainSettingsManager.isSetupProfileFirstSelectionDone(this);
-        updateSetupProfileUi();
+        HardwareProfileBridge.Snapshot hardwareSnapshot = HardwareProfileBridge.captureAndPersist(this, false);
+        Log.i(TAG, "Hardware snapshot: " + hardwareSnapshot.debuggerSummary());
 
         String persistedBootstrapLink = MainSettingsManager.getLastSetupBootstrapUrl(this);
         if (isBootstrapLinkValid(persistedBootstrapLink)) {
@@ -281,6 +281,9 @@ public class SetupWizard2Activity extends AppCompatActivity {
             bootstrapExpectedSha256 = "";
             bootstrapExpectedSignature = "";
             downloadBootstrapsCommand = buildBootstrapDownloadCommand(bootstrapFileLink, false);
+            if (!HardwareProfileBridge.isAdvancedFeaturesEnabled(this)) {
+                downloadBootstrapsCommand = buildBootstrapDownloadCommand(bootstrapFileLink, true);
+            }
         }
 
         bindingFinalSteps.main.setVisibility(View.GONE);
@@ -1067,7 +1070,7 @@ public class SetupWizard2Activity extends AppCompatActivity {
     private boolean prepareBundledBootstrapArchive() {
         String selectedAssetPath = null;
         String selectedAbi = null;
-        for (String abiCandidate : BootstrapAbiMapper.resolveCandidates(Build.SUPPORTED_ABIS)) {
+        for (String abiCandidate : BootstrapAbiMapper.resolveCandidates(Build.SUPPORTED_ABIS, HardwareProfileBridge.getEffectiveAbiHint(this))) {
             String candidatePath = "alpine19/" + abiCandidate + ".tar";
             try (InputStream ignored = getAssets().open(candidatePath)) {
                 selectedAssetPath = candidatePath;
@@ -1079,7 +1082,7 @@ public class SetupWizard2Activity extends AppCompatActivity {
 
         if (selectedAssetPath == null) {
             Log.e(TAG, "PROOT_BOOTSTRAP ABI_RESOLUTION_FAIL bundled candidates="
-                    + BootstrapAbiMapper.resolveCandidates(Build.SUPPORTED_ABIS));
+                    + BootstrapAbiMapper.resolveCandidates(Build.SUPPORTED_ABIS, HardwareProfileBridge.getEffectiveAbiHint(this)));
             return false;
         }
 
@@ -1790,11 +1793,9 @@ public class SetupWizard2Activity extends AppCompatActivity {
                 action = getString(R.string.setup_action_rollback);
             }
         }
-        binding.tvInstallRecommendedAction.setText(action);
-        boolean debuggerMode = setupProfileMode == SetupProfileMode.DEBUGGER;
-        binding.btnRollbackSetup.setEnabled(debuggerMode && rollbackAvailable);
-        binding.btnRollbackSetup.setVisibility(debuggerMode ? View.VISIBLE : View.GONE);
-        binding.btnExportDiagnostic.setVisibility(debuggerMode ? View.VISIBLE : View.GONE);
+        HardwareProfileBridge.Snapshot snapshot = HardwareProfileBridge.captureAndPersist(this, false);
+        binding.tvInstallRecommendedAction.setText(action + " | " + snapshot.wizardSummary());
+        binding.btnRollbackSetup.setEnabled(rollbackAvailable);
     }
 
     private String normalizeSetupError(String raw) {
@@ -2068,7 +2069,7 @@ public class SetupWizard2Activity extends AppCompatActivity {
         String architectureKey = "";
         Object architectureConfig = null;
         ArrayList<String> attemptedKeys = new ArrayList<>();
-        for (String abiCandidate : BootstrapAbiMapper.resolveCandidates(Build.SUPPORTED_ABIS)) {
+        for (String abiCandidate : BootstrapAbiMapper.resolveCandidates(Build.SUPPORTED_ABIS, HardwareProfileBridge.getEffectiveAbiHint(this))) {
             String metadataKey = BootstrapAbiMapper.architectureMetadataKey(abiCandidate);
             attemptedKeys.add(metadataKey);
             Object candidateConfig = bootstrapMap.get(metadataKey);
