@@ -34,9 +34,9 @@ android {
                     // -mcpu complementa o baseline de -march sem substituí-lo.
                     arm64CppFlags += "-mcpu=${nativeMcpu}"
                 }
-                def commonCppFlags = ["-O3", "-ffast-math", "-fno-exceptions", "-fno-rtti", "-DRMR_JNI_BUILD=1"]
+                def commonCppFlags = ["-O3", "-fno-exceptions", "-fno-rtti", "-DRMR_JNI_BUILD=1"]
                 cppFlags commonCppFlags.join(" ")
-                cFlags "-O3 -ffast-math -DRMR_JNI_BUILD=1"
+                cFlags "-O3 -DRMR_JNI_BUILD=1"
                 arguments "-DRMR_ENABLE_POLICY_MODULE=${rmrEnablePolicyModule}",
                           "-DRMR_ENABLE_BITRAF_MODULE=${rmrEnableBitrafModule}",
                           "-DVECTRA_ARM64_CPP_FLAGS=${arm64CppFlags.join(' ')}"
@@ -176,7 +176,13 @@ tasks.register("validateFirebaseReleaseConfig") {
     description = "Falha builds release quando google-services.json está ausente ou com project_id placeholder."
 
     doLast {
+        def allowPlaceholderFirebase = providers.gradleProperty("ALLOW_PLACEHOLDER_FIREBASE_FOR_RELEASE").orElse("false").get().toBoolean()
+
         if (!firebaseConfigFile.exists()) {
+            if (allowPlaceholderFirebase) {
+                logger.lifecycle("[validateFirebaseReleaseConfig] google-services.json ausente, mas ALLOW_PLACEHOLDER_FIREBASE_FOR_RELEASE=true habilitado para validação interna.")
+                return
+            }
             throw new GradleException("google-services.json ausente para variant release. Injete o arquivo real via secret/base64 no CI ou use fallback apenas para debug. Veja app/FIREBASE.md.")
         }
 
@@ -189,10 +195,14 @@ tasks.register("validateFirebaseReleaseConfig") {
 
         def projectId = (firebaseConfig?.project_info?.project_id ?: "").toString().trim()
         if (!projectId) {
+            if (allowPlaceholderFirebase) {
+                logger.lifecycle("[validateFirebaseReleaseConfig] project_id vazio aceito via ALLOW_PLACEHOLDER_FIREBASE_FOR_RELEASE=true para validação interna.")
+                return
+            }
             throw new GradleException("google-services.json sem project_info.project_id para variant release.")
         }
 
-        if (projectId.toLowerCase().contains("placeholder")) {
+        if (projectId.toLowerCase().contains("placeholder") && !allowPlaceholderFirebase) {
             throw new GradleException("Build release bloqueado: project_id contém 'placeholder' (${projectId}). Injete o google-services.json de produção via segredo de pipeline.")
         }
 

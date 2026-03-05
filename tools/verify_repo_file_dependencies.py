@@ -27,6 +27,10 @@ ROOT_FILE_CALL_RE = re.compile(r"rootProject\.file\((['\"])(.+?)\1\)")
 PROJECT_INCLUDE_RE = re.compile(r"include\s+(.+)")
 PROJECT_TOKEN_RE = re.compile(r"['\"](:[^'\"]+)['\"]")
 
+OPTIONAL_LOCAL_REFS = {
+    "local.properties",
+}
+
 
 def normalize_project_path(project_token: str) -> Path:
     # ':shell-loader:stub' -> 'shell-loader/stub'
@@ -68,6 +72,8 @@ def verify_gradle_files() -> tuple[list[str], list[str]]:
 
         for ref, from_root in collect_references(text):
             if "*" in ref:
+                continue
+            if ref in OPTIONAL_LOCAL_REFS:
                 continue
             base_dir = ROOT if from_root else gradle_file.parent
             target = (base_dir / ref).resolve()

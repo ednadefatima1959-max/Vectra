@@ -85,8 +85,8 @@ def validateMinApiAbiCompatibility() {
         throw new GradleException("APP_ABI_POLICY=arm64-only exige SUPPORTED_ABIS=arm64-v8a (atual: ${supportedAbis}).")
     }
 
-    if (appAbiPolicy == 'with-32bit' && !supportedAbis.any { it in ['armeabi-v7a', 'x86'] }) {
-        throw new GradleException("APP_ABI_POLICY=with-32bit exige ao menos uma ABI 32-bit em SUPPORTED_ABIS (atual: ${supportedAbis}).")
+    if (appAbiPolicy == 'with-32bit' && !supportedAbis.contains('armeabi-v7a')) {
+        throw new GradleException("APP_ABI_POLICY=with-32bit exige ABI 32-bit oficial armeabi-v7a em SUPPORTED_ABIS (atual: ${supportedAbis}).")
     }
 
     def requiredMinApi = supportedAbis.collect { abiMinApiRequirements[it] }.max()
@@ -121,6 +121,7 @@ gradle.taskGraph.whenReady { graph ->
 
     if (hasAndroidPackagingTask) {
         validateMinApiAbiCompatibility()
+        validateAndroidSdkPackages()
     }
 
     if (graph.allTasks.any { it.name.toLowerCase().contains('release') }) {
@@ -144,6 +145,55 @@ def validateArm64ToolchainCompatibility() {
     }
     println "NDK_VERSION=${ndkVersion} validated for arm64-v8a toolchain flags (-march=armv8-a)."
 }
+
+
+def resolveAndroidSdkRootDir() {
+    def localPropertiesFile = rootProject.file('local.properties')
+    if (localPropertiesFile.exists()) {
+        def localProps = new Properties()
+        localPropertiesFile.withInputStream { localProps.load(it) }
+        def sdkDir = localProps.getProperty('sdk.dir')
+        if (sdkDir) {
+            return file(sdkDir)
+        }
+    }
+
+    def envSdk = System.getenv('ANDROID_HOME') ?: System.getenv('ANDROID_SDK_ROOT')
+    if (envSdk) {
+        return file(envSdk)
+    }
+    return null
+}
+
+def validateAndroidSdkPackages() {
+    def sdkRoot = resolveAndroidSdkRootDir()
+    if (sdkRoot == null || !sdkRoot.exists()) {
+        throw new GradleException("Android SDK não localizado. Defina sdk.dir em local.properties ou ANDROID_HOME/ANDROID_SDK_ROOT antes de executar builds Android.")
+    }
+
+    def requiredEntries = [
+        "platforms/android-${compileApi}",
+        "build-tools/${toolsVersion}",
+        "ndk/${ndkVersion}",
+        "cmake/${cmakeVersion}"
+    ]
+
+    def missingEntries = requiredEntries.findAll { rel -> !new File(sdkRoot, rel).exists() }
+    if (!missingEntries.isEmpty()) {
+        throw new GradleException("Android SDK incompleto em ${sdkRoot}. Componentes ausentes: ${missingEntries}. Instale via sdkmanager.")
+    }
+
+    println "Android SDK validado: root=${sdkRoot}, compileApi=${compileApi}, build-tools=${toolsVersion}, ndk=${ndkVersion}, cmake=${cmakeVersion}."
+}
+
+tasks.register("verifyAndroidSdkPackages") {
+    group = "verification"
+    description = "Valida sdk.dir/ANDROID_HOME e pacotes SDK/NDK/CMake requeridos pelo baseline"
+    doLast {
+        validateAndroidSdkPackages()
+    }
+}
+
 
 tasks.register("verifyArm64ToolchainCompatibility") {
     group = "verification"

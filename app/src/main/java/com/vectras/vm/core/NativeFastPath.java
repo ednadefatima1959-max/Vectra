@@ -1,5 +1,7 @@
 package com.vectras.vm.core;
 
+import android.util.Log;
+
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -12,6 +14,8 @@ public final class NativeFastPath {
     private static final int NATIVE_OK_MAGIC = 0x56414343;
     private static final boolean NATIVE_AVAILABLE;
     private static final boolean ARENA_AVAILABLE;
+    private static final int NATIVE_INIT_STATUS;
+    private static final String NATIVE_INIT_ERROR;
 
     private static final int HW_CONTRACT_SIGNATURE = 0;
     private static final int HW_CONTRACT_POINTER_BITS = 1;
@@ -81,15 +85,29 @@ public final class NativeFastPath {
     private static final HardwareProfile BOOT_PROFILE;
 
     static {
-        boolean loaded;
+        boolean loaded = false;
+        int nativeInitStatus = Integer.MIN_VALUE;
+        String nativeInitError = "";
+
         try {
             System.loadLibrary("vectra_core_accel");
-            loaded = (nativeInit() == NATIVE_OK_MAGIC);
-        } catch (Throwable ignored) {
-            loaded = false;
+            nativeInitStatus = nativeInit();
+            loaded = (nativeInitStatus == NATIVE_OK_MAGIC);
+            if (!loaded) {
+                nativeInitError = "nativeInit status=0x" + Integer.toHexString(nativeInitStatus);
+            }
+        } catch (Throwable t) {
+            nativeInitError = t.getClass().getSimpleName() + ": " + (t.getMessage() == null ? "" : t.getMessage());
         }
+
+        if (!loaded) {
+            Log.e("NativeFastPath", "Native accel desativado; fallback Java ativo. " + nativeInitError);
+        }
+
         NATIVE_AVAILABLE = loaded;
         ARENA_AVAILABLE = loaded;
+        NATIVE_INIT_STATUS = nativeInitStatus;
+        NATIVE_INIT_ERROR = nativeInitError;
         BOOT_PROFILE = readNativeHardwareProfile();
     }
 
@@ -104,6 +122,15 @@ public final class NativeFastPath {
     public static boolean isArenaAvailable() {
         return ARENA_AVAILABLE;
     }
+
+    public static int getNativeInitStatus() {
+        return NATIVE_INIT_STATUS;
+    }
+
+    public static String getNativeInitError() {
+        return NATIVE_INIT_ERROR;
+    }
+
 
     static HardwareProfile getHardwareProfile() {
         return BOOT_PROFILE;
