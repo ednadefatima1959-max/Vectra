@@ -1,26 +1,8 @@
-use crate::{arg_or_empty, AnchorAddr, DeterministicOp, Output};
+use crate::{arg_or_empty, parse_anchor_addr, DeterministicOp, Output};
 
 pub(crate) struct AnchorOp;
 
 pub(crate) static ANCHOR_OP: AnchorOp = AnchorOp;
-
-fn parse_anchor_addr(raw: &str) -> AnchorAddr {
-    let mut parts = raw.split(':');
-    let dev = parts
-        .next()
-        .and_then(|v| v.trim().parse::<u16>().ok())
-        .unwrap_or(0);
-    let block = parts
-        .next()
-        .and_then(|v| v.trim().parse::<u64>().ok())
-        .unwrap_or(0);
-    let page = parts
-        .next()
-        .and_then(|v| v.trim().parse::<u16>().ok())
-        .unwrap_or(0);
-
-    AnchorAddr { dev, block, page }
-}
 
 impl DeterministicOp for AnchorOp {
     fn canonize(&self, args: &[String]) -> Vec<String> {

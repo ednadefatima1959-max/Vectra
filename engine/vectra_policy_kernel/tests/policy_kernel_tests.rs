@@ -444,6 +444,27 @@ fn seq_stays_consistent_through_checkpoint_and_rollback() {
 }
 
 #[test]
+fn anchor_mark_rejects_conflicting_args_and_output() {
+    let mut kernel = PolicyKernel::new();
+    let err = kernel
+        .apply_log_entry(LogEntry {
+            seq: 0,
+            op: Op::AnchorMark,
+            args: vec!["1:2:3".to_string()],
+            output: Output::Anchor(AnchorAddr {
+                dev: 1,
+                block: 2,
+                page: 4,
+            }),
+        })
+        .expect_err("must reject mismatched anchor output");
+
+    assert!(err
+        .to_string()
+        .contains("policy_violation=anchor args/output mismatch"));
+}
+
+#[test]
 fn plugin_registry_is_deterministic_for_same_input() {
     let plugins = ["trim_ws", "len", "replace_char", "focus", "anchor"];
     let args = vec!["  alpha  ".to_string(), "a".to_string(), "z".to_string()];
