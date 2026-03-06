@@ -176,8 +176,15 @@ typedef struct {
   uint64_t route_tag;
   uint32_t bitomega_state;
   uint32_t bitomega_dir;
+  uint32_t bitomega_operational_state;
   uint32_t bitomega_invariant_ok;
   uint32_t bitomega_fallback_safe;
+  float bitomega_coherence;
+  float bitomega_entropy;
+  float bitomega_ctx_coherence_in;
+  float bitomega_ctx_entropy_in;
+  float bitomega_ctx_noise_in;
+  float bitomega_ctx_load;
 } rmr_jni_route_output_t;
 
 int rmr_jni_kernel_init(rmr_jni_kernel_state_t *state, uint32_t seed);

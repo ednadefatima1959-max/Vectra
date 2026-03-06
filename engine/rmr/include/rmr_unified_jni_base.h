@@ -44,6 +44,10 @@ _Static_assert(RMR_UK_ERR_STATE == RMR_KERNEL_ERR_STATE,
 
 #define RMR_UK_MAX_SLOTS 1024u
 
+#define RMR_UK_BITOMEGA_OP_ISOLATED 0u
+#define RMR_UK_BITOMEGA_OP_ACTIVE 1u
+#define RMR_UK_BITOMEGA_OP_SAFE_FALLBACK 2u
+
 typedef struct {
   /* signature = stable architecture code compatible with NativeFastPath.ARCH_*. */
   uint32_t signature;
@@ -126,6 +130,8 @@ typedef struct {
   uint32_t stage_counter;
   uint64_t last_route_tag;
   bitomega_node_t bitomega_node;
+  bitomega_ctx_t bitomega_ctx;
+  uint32_t bitomega_operational_state;
   uint32_t bitomega_invariant_ok;
   uint32_t bitomega_fallback_safe;
   RmR_UnifiedCapabilities caps;

@@ -41,7 +41,7 @@ static int append_transition_csv(FILE *fp,
 int main(void) {
   const bitomega_case_t cases[] = {
       {
-          "FLOW_TO_LOCK",
+          "FLOW→LOCK",
           BITOMEGA_FLOW,
           BITOMEGA_DIR_FORWARD,
           0.92f,
@@ -51,7 +51,7 @@ int main(void) {
           BITOMEGA_DIR_RECURSE,
       },
       {
-          "NOISE_TO_VOID",
+          "NOISE→VOID",
           BITOMEGA_NOISE,
           BITOMEGA_DIR_NONE,
           0.20f,
@@ -113,6 +113,20 @@ int main(void) {
               bitomega_dir_name(node.dir));
       fclose(csv);
       return 6;
+    }
+
+    if (cases[i].start_state == BITOMEGA_VOID) {
+      bitomega_node_t replay = {
+          cases[i].start_state,
+          cases[i].start_dir,
+          cases[i].start_coh,
+          cases[i].start_ent,
+      };
+      if (bitomega_transition(&replay, &cases[i].ctx) != BITOMEGA_OK || replay.state != node.state || replay.dir != node.dir) {
+        fprintf(stderr, "bitomega_smoketest: deterministic recovery replay mismatch for %s\n", cases[i].name);
+        fclose(csv);
+        return 8;
+      }
     }
 
     if (!append_transition_csv(csv, cases[i].name, cases[i].start_state, &cases[i].ctx, node.state, node.dir)) {

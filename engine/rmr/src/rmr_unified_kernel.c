@@ -384,6 +384,8 @@ int RmR_UnifiedKernel_Init(RmR_UnifiedKernel *kernel, const RmR_UnifiedConfig *c
   kernel->bitomega_node.dir = BITOMEGA_DIR_NONE;
   kernel->bitomega_node.coherence = 0.5f;
   kernel->bitomega_node.entropy = 0.5f;
+  kernel->bitomega_ctx = bitomega_ctx_default((uint64_t)kernel->seed);
+  kernel->bitomega_operational_state = RMR_UK_BITOMEGA_OP_ISOLATED;
   kernel->bitomega_invariant_ok = 1u;
   kernel->bitomega_fallback_safe = 0u;
   kernel->initialized = 1u;
@@ -423,18 +425,21 @@ int RmR_UnifiedKernel_Ingest(RmR_UnifiedKernel *kernel, const uint8_t *data, siz
 
   ctx = bitomega_ctx_default((uint64_t)kernel->seed ^ (uint64_t)kernel->stage_counter ^ (uint64_t)kernel->crc32c);
   ctx.entropy_in = bitomega_norm01((float)kernel->entropy / 1000.0f);
-  ctx.noise_in = bitomega_norm01((float)((kernel->crc32c >> 8u) & 0xFFu) / 255.0f);
   ctx.load = bitomega_norm01((float)(len & 0xFFFFu) / 65535.0f);
-  ctx.coherence_in = bitomega_norm01(1.0f - ((ctx.entropy_in + ctx.load) * 0.5f));
+  ctx.coherence_in = bitomega_norm01(((1.0f - ctx.entropy_in) * 0.58f) + ((1.0f - ctx.load) * 0.42f));
+  ctx.noise_in = bitomega_norm01(1.0f - ctx.coherence_in);
 
-  bo_rc = bitomega_transition(&kernel->bitomega_node, &ctx);
+  kernel->bitomega_ctx = ctx;
+  bo_rc = bitomega_transition(&kernel->bitomega_node, &kernel->bitomega_ctx);
   if (bo_rc != BITOMEGA_OK) {
     kernel->bitomega_node.state = BITOMEGA_ZERO;
     kernel->bitomega_node.dir = BITOMEGA_DIR_NONE;
     kernel->bitomega_node.coherence = 0.5f;
     kernel->bitomega_node.entropy = 0.5f;
+    kernel->bitomega_operational_state = RMR_UK_BITOMEGA_OP_SAFE_FALLBACK;
     kernel->bitomega_fallback_safe = 1u;
   } else {
+    kernel->bitomega_operational_state = RMR_UK_BITOMEGA_OP_ACTIVE;
     kernel->bitomega_fallback_safe = 0u;
   }
   kernel->bitomega_invariant_ok = bitomega_invariant_ok(&kernel->bitomega_node) ? 1u : 0u;
@@ -443,6 +448,7 @@ int RmR_UnifiedKernel_Ingest(RmR_UnifiedKernel *kernel, const uint8_t *data, siz
     kernel->bitomega_node.dir = BITOMEGA_DIR_NONE;
     kernel->bitomega_node.coherence = bitomega_norm01(kernel->bitomega_node.coherence);
     kernel->bitomega_node.entropy = bitomega_norm01(kernel->bitomega_node.entropy);
+    kernel->bitomega_operational_state = RMR_UK_BITOMEGA_OP_SAFE_FALLBACK;
     kernel->bitomega_invariant_ok = 1u;
     kernel->bitomega_fallback_safe = 1u;
   }
@@ -661,12 +667,14 @@ int RmR_UnifiedKernel_Verify(RmR_UnifiedKernel *kernel,
   out->computed_crc32c = RmR_CRC32C(data, len);
   out->verify_ok = (out->computed_crc32c == expected_crc32c) ? 1u : 0u;
   kernel->bitomega_invariant_ok = bitomega_invariant_ok(&kernel->bitomega_node) ? 1u : 0u;
+  kernel->bitomega_operational_state = RMR_UK_BITOMEGA_OP_ACTIVE;
   kernel->bitomega_fallback_safe = 0u;
   if (!kernel->bitomega_invariant_ok) {
     kernel->bitomega_node.state = BITOMEGA_ZERO;
     kernel->bitomega_node.dir = BITOMEGA_DIR_NONE;
     kernel->bitomega_node.coherence = bitomega_norm01(kernel->bitomega_node.coherence);
     kernel->bitomega_node.entropy = bitomega_norm01(kernel->bitomega_node.entropy);
+    kernel->bitomega_operational_state = RMR_UK_BITOMEGA_OP_SAFE_FALLBACK;
     kernel->bitomega_invariant_ok = 1u;
     kernel->bitomega_fallback_safe = 1u;
     out->verify_ok = 0u;
@@ -1041,8 +1049,15 @@ int rmr_jni_kernel_route(rmr_jni_kernel_state_t *state, const rmr_jni_route_inpu
   out->route_tag = route.route_tag;
   out->bitomega_state = (uint32_t)state->bitomega_node.state;
   out->bitomega_dir = (uint32_t)state->bitomega_node.dir;
+  out->bitomega_operational_state = state->bitomega_operational_state;
   out->bitomega_invariant_ok = state->bitomega_invariant_ok;
   out->bitomega_fallback_safe = state->bitomega_fallback_safe;
+  out->bitomega_coherence = state->bitomega_node.coherence;
+  out->bitomega_entropy = state->bitomega_node.entropy;
+  out->bitomega_ctx_coherence_in = state->bitomega_ctx.coherence_in;
+  out->bitomega_ctx_entropy_in = state->bitomega_ctx.entropy_in;
+  out->bitomega_ctx_noise_in = state->bitomega_ctx.noise_in;
+  out->bitomega_ctx_load = state->bitomega_ctx.load;
   return RMR_KERNEL_OK;
 }
 
