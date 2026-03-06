@@ -1,4 +1,5 @@
 #include "rmr_qemu_bridge.h"
+#include "rmr_unified_jni_base.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -66,6 +67,64 @@ int main(void) {
 
   failed += expect(RmR_QmpTelemetry_Parse("{\"return\":{\"cpus\":999999999999}}", &tele) == 0, "parse cpus overflow clamp");
   failed += expect(tele.vcpu_count == 0xFFFFFFFFu, "cpus overflow clamps to u32 max");
+
+  {
+    RmR_UnifiedKernel kernel;
+    RmR_UnifiedConfig cfg;
+    RmR_UnifiedProcessState process;
+    RmR_UnifiedRouteState route_ref;
+    RmR_UnifiedRouteState route_run;
+    uint32_t i;
+
+    memset(&kernel, 0, sizeof(kernel));
+    cfg.seed = 0xC0FFEE11u;
+    cfg.arena_bytes = 1024u * 1024u;
+    failed += expect(RmR_UnifiedKernel_Init(&kernel, &cfg) == 0, "unified init");
+    failed += expect(RmR_UnifiedKernel_Process(&kernel,
+                                               9912312u,
+                                               664433u,
+                                               998877u,
+                                               123456u,
+                                               789012u,
+                                               21,
+                                               -7,
+                                               5,
+                                               34,
+                                               &process) == 0,
+                     "unified process");
+    failed += expect(RmR_UnifiedKernel_Route(&kernel, &process, &route_ref) == 0, "unified first route");
+
+    for (i = 0u; i < 16u; ++i) {
+      RmR_UnifiedKernel replay;
+      memset(&replay, 0, sizeof(replay));
+      failed += expect(RmR_UnifiedKernel_Init(&replay, &cfg) == 0, "unified replay init");
+      failed += expect(RmR_UnifiedKernel_Process(&replay,
+                                                 9912312u,
+                                                 664433u,
+                                                 998877u,
+                                                 123456u,
+                                                 789012u,
+                                                 21,
+                                                 -7,
+                                                 5,
+                                                 34,
+                                                 &process) == 0,
+                       "unified replay process");
+      failed += expect(RmR_UnifiedKernel_Route(&replay, &process, &route_run) == 0, "unified replay route");
+      failed += expect(route_run.route_id == route_ref.route_id, "route id stable");
+      failed += expect(route_run.route_tag == route_ref.route_tag, "route tag stable");
+      failed += expect(route_run.toroidal.u == route_ref.toroidal.u, "toroidal u stable");
+      failed += expect(route_run.toroidal.v == route_ref.toroidal.v, "toroidal v stable");
+      failed += expect(route_run.toroidal.psi == route_ref.toroidal.psi, "toroidal psi stable");
+      failed += expect(route_run.toroidal.chi == route_ref.toroidal.chi, "toroidal chi stable");
+      failed += expect(route_run.toroidal.rho == route_ref.toroidal.rho, "toroidal rho stable");
+      failed += expect(route_run.toroidal.delta == route_ref.toroidal.delta, "toroidal delta stable");
+      failed += expect(route_run.toroidal.sigma == route_ref.toroidal.sigma, "toroidal sigma stable");
+      failed += expect(RmR_UnifiedKernel_Shutdown(&replay) == 0, "unified replay shutdown");
+    }
+
+    failed += expect(RmR_UnifiedKernel_Shutdown(&kernel) == 0, "unified shutdown");
+  }
 
   if (failed != 0) {
     fprintf(stderr, "rmr_qemu_bridge_selftest FAILED (%d)\n", failed);

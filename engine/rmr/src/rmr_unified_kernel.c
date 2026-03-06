@@ -31,6 +31,67 @@ static int rmr_legacy_is_ready(const rmr_legacy_kernel_t *kernel) {
   return kernel && kernel->lifecycle == RMR_LEGACY_STATE_READY;
 }
 
+
+static uint64_t rmr_rotl64(uint64_t x, uint32_t n) {
+  uint32_t s = n & 63u;
+  if (s == 0u) return x;
+  return (x << s) | (x >> ((64u - s) & 63u));
+}
+
+static uint32_t rmr_toroidal_fold_u32(uint64_t x) {
+  x ^= x >> 33u;
+  x *= 0xFF51AFD7ED558CCDu;
+  x ^= x >> 33u;
+  x *= 0xC4CEB9FE1A85EC53u;
+  x ^= x >> 33u;
+  return (uint32_t)(x & 0xFFFFFFFFu);
+}
+
+RmR_ToroidalAddr7D RmR_Toroidal_Map(uint32_t seed,
+                                    uint64_t payload_hash,
+                                    uint32_t entropy,
+                                    uint32_t stage_counter,
+                                    uint32_t cpu_pressure,
+                                    uint32_t storage_pressure,
+                                    uint32_t io_pressure,
+                                    int64_t matrix_determinant) {
+  RmR_ToroidalAddr7D out;
+  uint64_t base = ((uint64_t)seed << 32u) ^ payload_hash ^ ((uint64_t)entropy << 1u) ^ ((uint64_t)stage_counter << 17u);
+  uint64_t mix0 = base ^ ((uint64_t)cpu_pressure << 9u) ^ ((uint64_t)storage_pressure << 21u) ^ ((uint64_t)io_pressure << 37u);
+  uint64_t mix1 = ((uint64_t)matrix_determinant) ^ rmr_rotl64(base, 11u) ^ 0x9E3779B97F4A7C15u;
+
+  out.u = rmr_toroidal_fold_u32(mix0 ^ rmr_rotl64(mix1, 7u));
+  out.v = rmr_toroidal_fold_u32(mix1 ^ rmr_rotl64(mix0, 13u));
+  out.psi = rmr_toroidal_fold_u32((mix0 + mix1) ^ rmr_rotl64(base, 19u));
+  out.chi = rmr_toroidal_fold_u32((mix0 * 0xD6E8FEB86659FD93u) ^ rmr_rotl64(mix1, 23u));
+  out.rho = rmr_toroidal_fold_u32((mix1 * 0xA24BAED4963EE407u) ^ rmr_rotl64(mix0, 29u));
+  out.delta = rmr_toroidal_fold_u32((mix0 ^ (mix1 >> 1u)) * 0x9FB21C651E98DF25u);
+  out.sigma = rmr_toroidal_fold_u32((mix1 ^ (mix0 >> 3u)) * 0xC2B2AE3D27D4EB4Fu);
+  return out;
+}
+
+static uint64_t rmr_toroidal_route_tag(const RmR_ToroidalAddr7D *t) {
+  uint64_t tag = 0xD1B54A32D192ED03u;
+  tag ^= (uint64_t)t->u * 0x9E3779B185EBCA87u;
+  tag = rmr_rotl64(tag, 11u);
+  tag ^= (uint64_t)t->v * 0xC2B2AE3D27D4EB4Fu;
+  tag = rmr_rotl64(tag, 17u);
+  tag ^= (uint64_t)t->psi * 0x165667B19E3779F9u;
+  tag = rmr_rotl64(tag, 23u);
+  tag ^= (uint64_t)t->chi * 0x85EBCA77C2B2AE63u;
+  tag = rmr_rotl64(tag, 31u);
+  tag ^= (uint64_t)t->rho * 0x27D4EB2F165667C5u;
+  tag = rmr_rotl64(tag, 37u);
+  tag ^= (uint64_t)t->delta * 0x94D049BB133111EBu;
+  tag = rmr_rotl64(tag, 43u);
+  tag ^= (uint64_t)t->sigma * 0x2545F4914F6CDD1Du;
+  tag *= 0x9E3779B97F4A7C15u;
+  tag ^= tag >> 33u;
+  tag *= 0xC2B2AE3D27D4EB4Fu;
+  tag ^= tag >> 29u;
+  return tag;
+}
+
 static void rmr_legacy_capabilities_from_hw(const RmR_HW_Info *hw,
                                              rmr_legacy_capabilities_t *caps) {
   caps->arch = hw->arch;
@@ -495,8 +556,23 @@ int RmR_UnifiedKernel_Route(RmR_UnifiedKernel *kernel,
   uint32_t disk_sig;
   uint32_t l4_sig;
   uint32_t global_sig;
+  RmR_ToroidalAddr7D toroidal;
+  uint64_t toroidal_tag;
   uint32_t route = RMR_ROUTE_DISK;
+  uint32_t tor_cpu_bias;
+  uint32_t tor_ram_bias;
+  uint32_t tor_disk_bias;
   if (!kernel || !process || !out || !kernel->initialized) return RMR_KERNEL_ERR_ARG;
+
+  toroidal = RmR_Toroidal_Map(kernel->seed,
+                              kernel->last_route_tag ^ ((uint64_t)kernel->crc32c << 32u),
+                              kernel->entropy,
+                              kernel->stage_counter + 1u,
+                              process->cpu_pressure,
+                              process->storage_pressure,
+                              process->io_pressure,
+                              process->matrix_determinant);
+  toroidal_tag = rmr_toroidal_route_tag(&toroidal);
 
   cpu_score = (process->cpu_pressure * 5u) + ((process->storage_pressure * 3u) >> 1u) +
               ((uint32_t)process->matrix_determinant & 0x3FFu);
@@ -508,7 +584,16 @@ int RmR_UnifiedKernel_Route(RmR_UnifiedKernel *kernel,
                ((kernel->caps.feature_mask & 1u) ? 3u : 1u)) +
               (((uint32_t)process->matrix_determinant >> 6u) & 0x7FFu));
 
+  tor_cpu_bias = (uint32_t)((toroidal_tag >> 0u) & 0x3FFu) ^ (toroidal.u & 0x1FFu);
+  tor_ram_bias = (uint32_t)((toroidal_tag >> 10u) & 0x3FFu) ^ (toroidal.v & 0x1FFu);
+  tor_disk_bias = (uint32_t)((toroidal_tag >> 20u) & 0x3FFu) ^ (toroidal.sigma & 0x1FFu);
+  cpu_score += tor_cpu_bias;
+  ram_score += tor_ram_bias;
+  disk_score += tor_disk_bias;
+  l4_score ^= ((uint32_t)(toroidal_tag >> 32u) & 0x7FFu) ^ (toroidal.delta & 0x7FFu);
+
   global_score = cpu_score ^ (ram_score << 1u) ^ (disk_score << 2u) ^ (l4_score << 3u) ^ kernel->caps.signature;
+  global_score ^= (uint32_t)toroidal_tag ^ toroidal.chi;
   cpu_score ^= (global_score & 0x1FFu);
   ram_score ^= ((global_score >> 9u) & 0x1FFu);
   disk_score ^= ((global_score >> 18u) & 0x1FFu);
@@ -523,14 +608,16 @@ int RmR_UnifiedKernel_Route(RmR_UnifiedKernel *kernel,
     route = RMR_ROUTE_RAM;
   }
 
-  cpu_sig = cpu_score ^ (process->cpu_pressure << 8u) ^ (kernel->caps.reg_signature_0 & 0x00FFFFFFu);
-  ram_sig = ram_score ^ (process->storage_pressure << 8u) ^ (kernel->caps.reg_signature_1 & 0x00FFFFFFu);
-  disk_sig = disk_score ^ (process->io_pressure << 8u) ^ (kernel->caps.reg_signature_2 & 0x00FFFFFFu);
-  l4_sig = l4_score ^ ((uint32_t)process->matrix_determinant) ^ (kernel->caps.feature_mask << 3u);
+  cpu_sig = cpu_score ^ (process->cpu_pressure << 8u) ^ (kernel->caps.reg_signature_0 & 0x00FFFFFFu) ^ toroidal.u;
+  ram_sig = ram_score ^ (process->storage_pressure << 8u) ^ (kernel->caps.reg_signature_1 & 0x00FFFFFFu) ^ toroidal.v;
+  disk_sig = disk_score ^ (process->io_pressure << 8u) ^ (kernel->caps.reg_signature_2 & 0x00FFFFFFu) ^ toroidal.sigma;
+  l4_sig = l4_score ^ ((uint32_t)process->matrix_determinant) ^ (kernel->caps.feature_mask << 3u) ^ toroidal.rho;
   global_sig = cpu_sig ^ (ram_sig << 1u) ^ (disk_sig << 2u) ^ (l4_sig << 3u) ^ route ^ kernel->crc32c;
+  global_sig ^= toroidal.psi ^ toroidal.delta ^ toroidal.chi;
 
   out->route_id = route;
-  out->route_tag = ((uint64_t)cpu_sig << 48u) ^ ((uint64_t)ram_sig << 32u) ^
+  out->toroidal = toroidal;
+  out->route_tag = toroidal_tag ^ ((uint64_t)cpu_sig << 48u) ^ ((uint64_t)ram_sig << 32u) ^
                    ((uint64_t)disk_sig << 16u) ^ (uint64_t)l4_sig;
   out->route_tag ^= ((uint64_t)global_sig << 1u) ^ (uint64_t)(route & 0xFFFFu);
   kernel->last_route_tag = out->route_tag;
@@ -569,7 +656,7 @@ int RmR_UnifiedKernel_Audit(RmR_UnifiedKernel *kernel,
                             RmR_UnifiedAuditState *out) {
   RmR_ZiprafInput zipraf_in;
   RmR_ZiprafOutput zipraf_out;
-  uint8_t payload[40];
+  uint8_t payload[68];
   uint32_t p = 0u;
 #define RMR_ZIPRAF_PUSH_U32(x)                    \
   do {                                            \
@@ -584,6 +671,11 @@ int RmR_UnifiedKernel_Audit(RmR_UnifiedKernel *kernel,
   out->audit_signature = ((uint64_t)ingest->crc32c << 32) ^ (uint64_t)ingest->entropy ^
                          (uint64_t)process->matrix_determinant ^ route->route_tag ^
                          ((uint64_t)verify->computed_crc32c << 1) ^ (uint64_t)verify->verify_ok;
+  out->toroidal = route->toroidal;
+  out->audit_signature ^= ((uint64_t)out->toroidal.u << 1u) ^ ((uint64_t)out->toroidal.v << 3u) ^
+                          ((uint64_t)out->toroidal.psi << 5u) ^ ((uint64_t)out->toroidal.chi << 7u) ^
+                          ((uint64_t)out->toroidal.rho << 11u) ^ ((uint64_t)out->toroidal.delta << 13u) ^
+                          ((uint64_t)out->toroidal.sigma << 17u);
 
   RMR_ZIPRAF_PUSH_U32(ingest->crc32c);
   RMR_ZIPRAF_PUSH_U32(ingest->entropy);
@@ -595,6 +687,13 @@ int RmR_UnifiedKernel_Audit(RmR_UnifiedKernel *kernel,
   RMR_ZIPRAF_PUSH_U32((uint32_t)(process->matrix_determinant >> 32u));
   RMR_ZIPRAF_PUSH_U32((uint32_t)route->route_tag);
   RMR_ZIPRAF_PUSH_U32((uint32_t)(route->route_tag >> 32u));
+  RMR_ZIPRAF_PUSH_U32(route->toroidal.u);
+  RMR_ZIPRAF_PUSH_U32(route->toroidal.v);
+  RMR_ZIPRAF_PUSH_U32(route->toroidal.psi);
+  RMR_ZIPRAF_PUSH_U32(route->toroidal.chi);
+  RMR_ZIPRAF_PUSH_U32(route->toroidal.rho);
+  RMR_ZIPRAF_PUSH_U32(route->toroidal.delta);
+  RMR_ZIPRAF_PUSH_U32(route->toroidal.sigma);
 
   zipraf_in.seed = kernel->seed ^ verify->computed_crc32c;
   zipraf_in.trajectory_id = kernel->stage_counter + 1u;
