@@ -439,70 +439,63 @@ static int rmr_unified_collect_active_sorted(const RmR_UnifiedKernel *kernel,
                                              uint32_t *active_count,
                                              uint32_t *free_slot) {
   uint32_t i;
-  uint32_t count = 0u;
-  uint32_t first_free = RMR_UK_MAX_SLOTS;
-  if (!kernel || !sorted_slots || !active_count || !free_slot) return RMR_KERNEL_ERR_ARG;
+  uint32_t slot = RMR_UK_MAX_SLOTS;
+  uint32_t best_offset = UINT32_MAX;
+  if (!kernel || !out_handle || !kernel->initialized || bytes == 0u) return RMR_KERNEL_ERR_ARG;
 
   for (i = 0; i < RMR_UK_MAX_SLOTS; ++i) {
-    if (kernel->slots[i].in_use) {
-      uint32_t j;
-      if (count >= RMR_UK_MAX_SLOTS) return RMR_KERNEL_ERR_STATE;
-      sorted_slots[count] = i;
-      j = count;
-      while (j > 0u && kernel->slots[sorted_slots[j - 1u]].offset > kernel->slots[sorted_slots[j]].offset) {
-        uint32_t swap = sorted_slots[j - 1u];
-        sorted_slots[j - 1u] = sorted_slots[j];
-        sorted_slots[j] = swap;
-        --j;
-      }
-      count += 1u;
-    } else if (first_free == RMR_UK_MAX_SLOTS) {
-      first_free = i;
-    }
+    if (!kernel->slots[i].in_use && slot == RMR_UK_MAX_SLOTS) slot = i;
   }
-
-  *active_count = count;
-  *free_slot = first_free;
-  return RMR_UK_OK;
-}
-
-int RmR_UnifiedKernel_ArenaAlloc(RmR_UnifiedKernel *kernel, uint32_t bytes, uint32_t *out_handle) {
-  uint32_t i;
-  uint32_t sorted_slots[RMR_UK_MAX_SLOTS];
-  uint32_t active_count;
-  uint32_t slot;
-  uint32_t alloc_offset = 0u;
-  uint32_t prev_end = 0u;
-  int rc;
-  if (!kernel || !out_handle || !kernel->initialized || bytes == 0u) return RMR_KERNEL_ERR_ARG;
-  rc = rmr_unified_collect_active_sorted(kernel, sorted_slots, &active_count, &slot);
-  if (rc != RMR_UK_OK) return rc;
 
   if (slot == RMR_UK_MAX_SLOTS) return RMR_KERNEL_ERR_STATE;
 
-  for (i = 0; i < active_count; ++i) {
-    const RmR_UnifiedArenaSlot *active = &kernel->slots[sorted_slots[i]];
-    uint32_t active_end;
+  for (i = 0; i < RMR_UK_MAX_SLOTS; ++i) {
+    uint32_t candidate_offset;
+    uint32_t j;
+    int overlap;
 
-    if (active->size > UINT32_MAX - active->offset) return RMR_KERNEL_ERR_STATE;
-    active_end = active->offset + active->size;
+    if (i == 0u) {
+      candidate_offset = 0u;
+    } else {
+      if (!kernel->slots[i - 1u].in_use) continue;
+      if (kernel->slots[i - 1u].size > UINT32_MAX - kernel->slots[i - 1u].offset) return RMR_KERNEL_ERR_STATE;
+      candidate_offset = kernel->slots[i - 1u].offset + kernel->slots[i - 1u].size;
+    }
 
-    if (active_end > kernel->arena_capacity || active->offset < prev_end) return RMR_KERNEL_ERR_STATE;
+    if (candidate_offset > kernel->arena_capacity || bytes > kernel->arena_capacity - candidate_offset) {
+      continue;
+    }
 
-    if (bytes <= active->offset - prev_end) {
-      alloc_offset = prev_end;
-      break;
+    overlap = 0;
+    for (j = 0; j < RMR_UK_MAX_SLOTS; ++j) {
+      uint32_t used_offset;
+      uint32_t used_end;
+      uint32_t candidate_end;
+      if (!kernel->slots[j].in_use) continue;
+      if (kernel->slots[j].size > UINT32_MAX - kernel->slots[j].offset) return RMR_KERNEL_ERR_STATE;
+
+      used_offset = kernel->slots[j].offset;
+      used_end = used_offset + kernel->slots[j].size;
+      if (bytes > UINT32_MAX - candidate_offset) return RMR_KERNEL_ERR_STATE;
+      candidate_end = candidate_offset + bytes;
+
+      if (!(candidate_end <= used_offset || candidate_offset >= used_end)) {
+        overlap = 1;
+        break;
+      }
+    }
+
+    if (!overlap && candidate_offset < best_offset) {
+      best_offset = candidate_offset;
+      if (best_offset == 0u) break;
     }
 
     prev_end = active_end;
   }
 
-  if (i == active_count) {
-    if (prev_end > kernel->arena_capacity || bytes > kernel->arena_capacity - prev_end) return RMR_KERNEL_ERR_STATE;
-    alloc_offset = prev_end;
-  }
+  if (best_offset == UINT32_MAX) return RMR_KERNEL_ERR_STATE;
 
-  kernel->slots[slot].offset = alloc_offset;
+  kernel->slots[slot].offset = best_offset;
   kernel->slots[slot].size = bytes;
   kernel->slots[slot].generation += 1u;
   kernel->slots[slot].in_use = 1u;
