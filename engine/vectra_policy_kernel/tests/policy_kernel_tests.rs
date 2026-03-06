@@ -293,7 +293,7 @@ fn rollback_is_idempotent() {
         .apply_log_entry(LogEntry {
             seq: 1,
             op: Op::AnchorMark,
-            args: vec!["A1".to_string()],
+            args: vec!["1:1:1".to_string()],
             output: Output::Anchor(AnchorAddr {
                 dev: 1,
                 block: 1,
@@ -340,7 +340,7 @@ fn log_replay_is_reproducible() {
         LogEntry {
             seq: 1,
             op: Op::AnchorMark,
-            args: vec!["A".to_string()],
+            args: vec!["1:10:1".to_string()],
             output: Output::Anchor(AnchorAddr {
                 dev: 1,
                 block: 10,
@@ -350,7 +350,7 @@ fn log_replay_is_reproducible() {
         LogEntry {
             seq: 2,
             op: Op::AnchorMark,
-            args: vec!["B".to_string()],
+            args: vec!["1:11:1".to_string()],
             output: Output::Anchor(AnchorAddr {
                 dev: 1,
                 block: 11,
@@ -397,7 +397,7 @@ fn seq_stays_consistent_through_checkpoint_and_rollback() {
         .apply_log_entry(LogEntry {
             seq: 1,
             op: Op::AnchorMark,
-            args: vec!["B1".to_string()],
+            args: vec!["2:1:1".to_string()],
             output: Output::Anchor(AnchorAddr {
                 dev: 2,
                 block: 1,
@@ -416,7 +416,7 @@ fn seq_stays_consistent_through_checkpoint_and_rollback() {
         .apply_log_entry(LogEntry {
             seq: 1,
             op: Op::AnchorMark,
-            args: vec!["B2".to_string()],
+            args: vec!["2:2:1".to_string()],
             output: Output::Anchor(AnchorAddr {
                 dev: 2,
                 block: 2,
@@ -430,7 +430,7 @@ fn seq_stays_consistent_through_checkpoint_and_rollback() {
         .apply_log_entry(LogEntry {
             seq: 5,
             op: Op::AnchorMark,
-            args: vec!["bad".to_string()],
+            args: vec!["9:9:9".to_string()],
             output: Output::Anchor(AnchorAddr {
                 dev: 9,
                 block: 9,
