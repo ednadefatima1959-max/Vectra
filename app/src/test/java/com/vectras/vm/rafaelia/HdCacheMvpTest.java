@@ -283,6 +283,31 @@ public class HdCacheMvpTest {
         assertNull(cache.getL3().get(k1));
     }
 
+    @Test
+    public void l1234CacheMaintainsL4BudgetAndPromotesBackToL1() throws IOException {
+        HdCacheMvp.L1234Cache cache = new HdCacheMvp.L1234Cache(10, 10, 10, 20);
+        try {
+            HdCacheMvp.EventKey k1 = new HdCacheMvp.EventKey("layer", "a");
+            HdCacheMvp.EventKey k2 = new HdCacheMvp.EventKey("layer", "b");
+            HdCacheMvp.EventKey k3 = new HdCacheMvp.EventKey("layer", "c");
+            HdCacheMvp.EventKey k4 = new HdCacheMvp.EventKey("layer", "d");
+
+            cache.putHot(k1, new byte[10]);
+            cache.putHot(k2, new byte[10]);
+            cache.putHot(k3, new byte[10]);
+            cache.putHot(k4, new byte[10]);
+
+            assertNotNull(cache.getL4().get(k1));
+            assertTrue(cache.getL4().getUsed() <= cache.getL4().getBudget());
+
+            byte[] promoted = cache.get(k1);
+            assertNotNull(promoted);
+            assertNotNull(cache.getL1().get(k1));
+        } finally {
+            cache.close();
+        }
+    }
+
     // ========== HarmonicScheduler Tests ==========
     
     @Test
