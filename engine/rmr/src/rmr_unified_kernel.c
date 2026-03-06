@@ -3,6 +3,7 @@
 #include "bitraf.h"
 #include "rmr_corelib.h"
 #include "rmr_hw_detect.h"
+#include "rmr_zipraf_core.h"
 #if defined(RMR_ENABLE_POLICY_MODULE) && RMR_ENABLE_POLICY_MODULE
 #include "rmr_policy_kernel.h"
 #endif
@@ -338,12 +339,50 @@ int RmR_UnifiedKernel_Process(RmR_UnifiedKernel *kernel,
                               int64_t m10,
                               int64_t m11,
                               RmR_UnifiedProcessState *out) {
+  RmR_ZiprafInput zipraf_in;
+  RmR_ZiprafOutput zipraf_out;
+  uint8_t payload[72];
+  uint32_t p = 0u;
+#define RMR_ZIPRAF_PUSH_U64(x)                    \
+  do {                                            \
+    uint64_t _v = (uint64_t)(x);                  \
+    payload[p++] = (uint8_t)(_v & 0xFFu);         \
+    payload[p++] = (uint8_t)((_v >> 8u) & 0xFFu); \
+    payload[p++] = (uint8_t)((_v >> 16u) & 0xFFu);\
+    payload[p++] = (uint8_t)((_v >> 24u) & 0xFFu);\
+    payload[p++] = (uint8_t)((_v >> 32u) & 0xFFu);\
+    payload[p++] = (uint8_t)((_v >> 40u) & 0xFFu);\
+    payload[p++] = (uint8_t)((_v >> 48u) & 0xFFu);\
+    payload[p++] = (uint8_t)((_v >> 56u) & 0xFFu); \
+  } while (0)
+
   if (!kernel || !out || !kernel->initialized) return RMR_KERNEL_ERR_ARG;
   out->cpu_pressure = (uint32_t)((cpu_cycles >> 10u) & 0xFFFFu);
   out->storage_pressure = (uint32_t)(((storage_read_bytes + storage_write_bytes) >> 10u) & 0xFFFFu);
   out->io_pressure = (uint32_t)(((input_bytes + output_bytes) >> 10u) & 0xFFFFu);
   out->matrix_determinant = (m00 * m11) - (m01 * m10);
+
+  RMR_ZIPRAF_PUSH_U64(cpu_cycles);
+  RMR_ZIPRAF_PUSH_U64(storage_read_bytes);
+  RMR_ZIPRAF_PUSH_U64(storage_write_bytes);
+  RMR_ZIPRAF_PUSH_U64(input_bytes);
+  RMR_ZIPRAF_PUSH_U64(output_bytes);
+  RMR_ZIPRAF_PUSH_U64((uint64_t)m00);
+  RMR_ZIPRAF_PUSH_U64((uint64_t)m01);
+  RMR_ZIPRAF_PUSH_U64((uint64_t)m10);
+  RMR_ZIPRAF_PUSH_U64((uint64_t)m11);
+
+  zipraf_in.seed = kernel->seed;
+  zipraf_in.trajectory_id = kernel->stage_counter + 1u;
+  zipraf_in.invariant_mask = 0x0000FFFFu;
+  zipraf_in.payload_ptr = payload;
+  zipraf_in.payload_len = sizeof(payload);
+  if (RmR_Zipraf_Execute(&zipraf_in, &zipraf_out) == 0) {
+    kernel->last_route_tag = zipraf_out.route_tag;
+  }
+
   kernel->stage_counter += 1u;
+#undef RMR_ZIPRAF_PUSH_U64
   return RMR_UK_OK;
 }
 
@@ -382,11 +421,46 @@ int RmR_UnifiedKernel_Audit(RmR_UnifiedKernel *kernel,
                             const RmR_UnifiedRouteState *route,
                             const RmR_UnifiedVerifyState *verify,
                             RmR_UnifiedAuditState *out) {
+  RmR_ZiprafInput zipraf_in;
+  RmR_ZiprafOutput zipraf_out;
+  uint8_t payload[40];
+  uint32_t p = 0u;
+#define RMR_ZIPRAF_PUSH_U32(x)                    \
+  do {                                            \
+    uint32_t _v = (uint32_t)(x);                  \
+    payload[p++] = (uint8_t)(_v & 0xFFu);         \
+    payload[p++] = (uint8_t)((_v >> 8u) & 0xFFu); \
+    payload[p++] = (uint8_t)((_v >> 16u) & 0xFFu);\
+    payload[p++] = (uint8_t)((_v >> 24u) & 0xFFu); \
+  } while (0)
+
   if (!kernel || !ingest || !process || !route || !verify || !out || !kernel->initialized) return RMR_KERNEL_ERR_ARG;
   out->audit_signature = ((uint64_t)ingest->crc32c << 32) ^ (uint64_t)ingest->entropy ^
                          (uint64_t)process->matrix_determinant ^ route->route_tag ^
                          ((uint64_t)verify->computed_crc32c << 1) ^ (uint64_t)verify->verify_ok;
+
+  RMR_ZIPRAF_PUSH_U32(ingest->crc32c);
+  RMR_ZIPRAF_PUSH_U32(ingest->entropy);
+  RMR_ZIPRAF_PUSH_U32(ingest->stage_counter);
+  RMR_ZIPRAF_PUSH_U32(process->cpu_pressure);
+  RMR_ZIPRAF_PUSH_U32(process->storage_pressure);
+  RMR_ZIPRAF_PUSH_U32(process->io_pressure);
+  RMR_ZIPRAF_PUSH_U32((uint32_t)process->matrix_determinant);
+  RMR_ZIPRAF_PUSH_U32((uint32_t)(process->matrix_determinant >> 32u));
+  RMR_ZIPRAF_PUSH_U32((uint32_t)route->route_tag);
+  RMR_ZIPRAF_PUSH_U32((uint32_t)(route->route_tag >> 32u));
+
+  zipraf_in.seed = kernel->seed ^ verify->computed_crc32c;
+  zipraf_in.trajectory_id = kernel->stage_counter + 1u;
+  zipraf_in.invariant_mask = verify->verify_ok ? 0x0000FFFFu : 0xFFFF0000u;
+  zipraf_in.payload_ptr = payload;
+  zipraf_in.payload_len = sizeof(payload);
+  if (RmR_Zipraf_Execute(&zipraf_in, &zipraf_out) == 0) {
+    out->audit_signature ^= zipraf_out.route_tag ^ zipraf_out.bitraf_hash ^ (uint64_t)zipraf_out.det_signature;
+  }
+
   kernel->stage_counter += 1u;
+#undef RMR_ZIPRAF_PUSH_U32
   return RMR_UK_OK;
 }
 
