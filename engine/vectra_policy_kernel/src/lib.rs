@@ -99,6 +99,24 @@ fn build_canon(op_code: &str, canonical_args: &[String], anchor: Option<AnchorAd
     format!("{op_code}|{}|{anchor_repr}", canonical_args.join("\u{1F}"))
 }
 
+pub(crate) fn parse_anchor_addr(raw: &str) -> AnchorAddr {
+    let mut parts = raw.split(':');
+    let dev = parts
+        .next()
+        .and_then(|v| v.trim().parse::<u16>().ok())
+        .unwrap_or(0);
+    let block = parts
+        .next()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(0);
+    let page = parts
+        .next()
+        .and_then(|v| v.trim().parse::<u16>().ok())
+        .unwrap_or(0);
+
+    AnchorAddr { dev, block, page }
+}
+
 pub fn canonize(op: Op, args: &[String], anchor: Option<AnchorAddr>) -> Key {
     let plugin = resolve_op(op);
     let op_code = op_code_for(op);
@@ -463,6 +481,15 @@ impl PolicyKernel {
     ) -> Result<(), KernelError> {
         if strict_seq && entry.seq != self.seq {
             return Err(KernelError::PolicyViolation("log sequence mismatch"));
+        }
+
+        if entry.op == Op::AnchorMark {
+            if let Output::Anchor(output_anchor) = &entry.output {
+                let expected_anchor = parse_anchor_addr(arg_or_empty(&entry.args, 0));
+                if *output_anchor != expected_anchor {
+                    return Err(KernelError::PolicyViolation("anchor args/output mismatch"));
+                }
+            }
         }
 
         let replay_anchor = match &entry.output {
