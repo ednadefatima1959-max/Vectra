@@ -101,6 +101,7 @@ fn build_canon(op_code: &str, canonical_args: &[String], anchor: Option<AnchorAd
 
 pub fn canonize(op: Op, args: &[String], anchor: Option<AnchorAddr>) -> Key {
     let plugin = resolve_op(op);
+    let op_code = op_code_for(op);
     let canonical_args = plugin.canonize(args);
     let canon = build_canon(op_code, &canonical_args, anchor);
     Key {
