@@ -1089,7 +1089,7 @@ CPU1 %3$d%% · CPUm %4$d%% · MEM %5$d%% · IO %6$d%% · INT %7$d%% · EMU %8$d%
     <string name="pro_tools_estimated_time_item_placeholder">—</string>
     <string name="pro_tools_estimated_time_item_format">~%1$ds</string>
     <string name="pro_tools_stat_placeholder">—</string>
-    <string name="pro_tools_confidence_placeholder">95%%: —</string>
+    <string name="pro_tools_confidence_placeholder">95%: —</string>
     <string name="pro_tools_confidence_template">%1$d%%: %2$s</string>
     <string name="pro_tools_reproducibility_template">%1$.1f%%</string>
 
