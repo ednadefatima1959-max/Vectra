@@ -78,8 +78,19 @@ typedef struct {
 } RmR_UnifiedProcessState;
 
 typedef struct {
+  uint32_t u;
+  uint32_t v;
+  uint32_t psi;
+  uint32_t chi;
+  uint32_t rho;
+  uint32_t delta;
+  uint32_t sigma;
+} RmR_ToroidalAddr7D;
+
+typedef struct {
   uint32_t route_id;
   uint64_t route_tag;
+  RmR_ToroidalAddr7D toroidal;
 } RmR_UnifiedRouteState;
 
 typedef struct {
@@ -95,6 +106,7 @@ typedef struct {
 
 typedef struct {
   uint64_t audit_signature;
+  RmR_ToroidalAddr7D toroidal;
 } RmR_UnifiedAuditState;
 
 typedef struct {
@@ -136,6 +148,14 @@ int RmR_UnifiedKernel_Process(RmR_UnifiedKernel *kernel,
 int RmR_UnifiedKernel_Route(RmR_UnifiedKernel *kernel,
                             const RmR_UnifiedProcessState *process,
                             RmR_UnifiedRouteState *out);
+RmR_ToroidalAddr7D RmR_Toroidal_Map(uint32_t seed,
+                                    uint64_t payload_hash,
+                                    uint32_t entropy,
+                                    uint32_t stage_counter,
+                                    uint32_t cpu_pressure,
+                                    uint32_t storage_pressure,
+                                    uint32_t io_pressure,
+                                    int64_t matrix_determinant);
 int RmR_UnifiedKernel_Verify(RmR_UnifiedKernel *kernel,
                              const uint8_t *data,
                              size_t len,
