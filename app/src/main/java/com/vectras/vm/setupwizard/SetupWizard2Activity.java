@@ -241,18 +241,23 @@ public class SetupWizard2Activity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == PermissionUtils.REQUEST_LEGACY_STORAGE) {
-            boolean granted = PermissionUtils.storagepermission(this, false);
-            MainSettingsManager.setOnboardingPermStorageSaf(this,
-                    granted ? MainSettingsManager.ONBOARDING_PERMISSION_GRANTED : MainSettingsManager.ONBOARDING_PERMISSION_FAILED);
-            if (granted) {
-                firstRunPermissionOrchestrator.markGranted(FirstRunPermissionOrchestrator.Capability.STORAGE_SAF);
-            } else {
-                firstRunPermissionOrchestrator.markFailed(FirstRunPermissionOrchestrator.Capability.STORAGE_SAF);
-            }
-            renderEssentialPermissionUi();
-            continueAfterEssentialPermissionResolution();
+        if (requestCode != PermissionUtils.REQUEST_LEGACY_STORAGE) {
+            return;
         }
+
+        boolean granted = PermissionUtils.storagepermission(this, false);
+        MainSettingsManager.setOnboardingPermStorageSaf(this,
+                granted ? MainSettingsManager.ONBOARDING_PERMISSION_GRANTED : MainSettingsManager.ONBOARDING_PERMISSION_FAILED);
+
+        FirstRunPermissionOrchestrator.Capability capability = FirstRunPermissionOrchestrator.Capability.STORAGE_SAF;
+        if (granted) {
+            firstRunPermissionOrchestrator.markGranted(capability);
+        } else {
+            firstRunPermissionOrchestrator.markFailed(capability);
+        }
+
+        renderEssentialPermissionUi();
+        continueAfterEssentialPermissionResolution();
     }
 
     private void initialize() {
