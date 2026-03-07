@@ -47,6 +47,37 @@ static uint32_t rmr_toroidal_fold_u32(uint64_t x) {
   return (uint32_t)(x & 0xFFFFFFFFu);
 }
 
+static uint32_t rmr_gcd_u32(uint32_t a, uint32_t b) {
+  while (b != 0u) {
+    uint32_t t = a % b;
+    a = b;
+    b = t;
+  }
+  return a;
+}
+
+static int rmr_lcm_u32_checked(uint32_t a, uint32_t b, uint32_t *out_lcm) {
+  uint32_t gcd;
+  uint64_t scaled;
+  if (!out_lcm) return RMR_KERNEL_ERR_ARG;
+  if (a == 0u || b == 0u) {
+    *out_lcm = 0u;
+    return RMR_KERNEL_ERR_ARG;
+  }
+  gcd = rmr_gcd_u32(a, b);
+  if (gcd == 0u) {
+    *out_lcm = 0u;
+    return RMR_KERNEL_ERR_ARG;
+  }
+  scaled = ((uint64_t)(a / gcd)) * (uint64_t)b;
+  if (scaled > 0xFFFFFFFFu) {
+    *out_lcm = 0u;
+    return RMR_KERNEL_ERR_STATE;
+  }
+  *out_lcm = (uint32_t)scaled;
+  return RMR_UK_OK;
+}
+
 RmR_ToroidalAddr7D RmR_Toroidal_Map(uint32_t seed,
                                     uint64_t payload_hash,
                                     uint32_t entropy,
@@ -68,6 +99,75 @@ RmR_ToroidalAddr7D RmR_Toroidal_Map(uint32_t seed,
   out.delta = rmr_toroidal_fold_u32((mix0 ^ (mix1 >> 1u)) * 0x9FB21C651E98DF25u);
   out.sigma = rmr_toroidal_fold_u32((mix1 ^ (mix0 >> 3u)) * 0xC2B2AE3D27D4EB4Fu);
   return out;
+}
+
+int RmR_Toroidal_MapThetaLcm(uint32_t n_ring_a,
+                             uint32_t n_ring_b,
+                             uint64_t input_scalar,
+                             RmR_ToroidalAddr7D *out,
+                             uint32_t *out_period,
+                             uint32_t *out_theta_index) {
+  uint32_t period;
+  uint32_t theta_index;
+  uint64_t mix0;
+  uint64_t mix1;
+  int rc;
+  if (!out) return RMR_KERNEL_ERR_ARG;
+
+  rc = rmr_lcm_u32_checked(n_ring_a, n_ring_b, &period);
+  if (rc != RMR_UK_OK || period == 0u) {
+    out->u = 0u;
+    out->v = 0u;
+    out->psi = 0u;
+    out->chi = 0u;
+    out->rho = 0u;
+    out->delta = 0u;
+    out->sigma = 0u;
+    if (out_period) *out_period = 0u;
+    if (out_theta_index) *out_theta_index = 0u;
+    return rc;
+  }
+
+  theta_index = (uint32_t)(input_scalar % (uint64_t)period);
+  mix0 = input_scalar ^ ((uint64_t)period << 17u) ^ ((uint64_t)n_ring_a << 33u) ^ ((uint64_t)n_ring_b << 49u);
+  mix1 = ((uint64_t)theta_index << 32u) ^ (uint64_t)period ^ rmr_rotl64(input_scalar, (theta_index & 31u));
+
+  out->u = theta_index;
+  out->v = (uint32_t)(((uint64_t)theta_index * (uint64_t)n_ring_a + (uint64_t)n_ring_b) % (uint64_t)period);
+  out->psi = rmr_toroidal_fold_u32(mix0 ^ rmr_rotl64(mix1, 7u));
+  out->chi = rmr_toroidal_fold_u32(mix1 ^ rmr_rotl64(mix0, 13u));
+  out->rho = rmr_toroidal_fold_u32((mix0 + mix1) ^ rmr_rotl64((uint64_t)period, 19u));
+  out->delta = rmr_toroidal_fold_u32((mix0 ^ ((uint64_t)theta_index << 1u)) * 0x9FB21C651E98DF25u);
+  out->sigma = rmr_toroidal_fold_u32((mix1 ^ ((uint64_t)period << 3u)) * 0xC2B2AE3D27D4EB4Fu);
+
+  if (out_period) *out_period = period;
+  if (out_theta_index) *out_theta_index = theta_index;
+  return RMR_UK_OK;
+}
+
+static int rmr_toroidal_map_from_mode(uint32_t seed,
+                                      uint64_t payload_hash,
+                                      uint32_t entropy,
+                                      uint32_t stage_counter,
+                                      uint32_t cpu_pressure,
+                                      uint32_t storage_pressure,
+                                      uint32_t io_pressure,
+                                      int64_t matrix_determinant,
+                                      const RmR_UnifiedToroidalMode *mode,
+                                      RmR_ToroidalAddr7D *out) {
+  if (!out) return RMR_KERNEL_ERR_ARG;
+  if (mode && mode->mode == RMR_TOROIDAL_ADDR_MODE_THETA_LCM) {
+    return RmR_Toroidal_MapThetaLcm(mode->n_ring_a, mode->n_ring_b, mode->input_scalar, out, NULL, NULL);
+  }
+  *out = RmR_Toroidal_Map(seed,
+                          payload_hash,
+                          entropy,
+                          stage_counter,
+                          cpu_pressure,
+                          storage_pressure,
+                          io_pressure,
+                          matrix_determinant);
+  return RMR_UK_OK;
 }
 
 static uint64_t rmr_toroidal_route_tag(const RmR_ToroidalAddr7D *t) {
@@ -579,6 +679,13 @@ int RmR_UnifiedKernel_Process(RmR_UnifiedKernel *kernel,
 int RmR_UnifiedKernel_Route(RmR_UnifiedKernel *kernel,
                             const RmR_UnifiedProcessState *process,
                             RmR_UnifiedRouteState *out) {
+  return RmR_UnifiedKernel_RouteEx(kernel, process, NULL, out);
+}
+
+int RmR_UnifiedKernel_RouteEx(RmR_UnifiedKernel *kernel,
+                              const RmR_UnifiedProcessState *process,
+                              const RmR_UnifiedToroidalMode *toroidal_mode,
+                              RmR_UnifiedRouteState *out) {
   uint32_t cpu_score;
   uint32_t ram_score;
   uint32_t disk_score;
@@ -597,14 +704,18 @@ int RmR_UnifiedKernel_Route(RmR_UnifiedKernel *kernel,
   uint32_t tor_disk_bias;
   if (!kernel || !process || !out || !kernel->initialized) return RMR_KERNEL_ERR_ARG;
 
-  toroidal = RmR_Toroidal_Map(kernel->seed,
-                              kernel->last_route_tag ^ ((uint64_t)kernel->crc32c << 32u),
-                              kernel->entropy,
-                              kernel->stage_counter + 1u,
-                              process->cpu_pressure,
-                              process->storage_pressure,
-                              process->io_pressure,
-                              process->matrix_determinant);
+  if (rmr_toroidal_map_from_mode(kernel->seed,
+                                 kernel->last_route_tag ^ ((uint64_t)kernel->crc32c << 32u),
+                                 kernel->entropy,
+                                 kernel->stage_counter + 1u,
+                                 process->cpu_pressure,
+                                 process->storage_pressure,
+                                 process->io_pressure,
+                                 process->matrix_determinant,
+                                 toroidal_mode,
+                                 &toroidal) != RMR_UK_OK) {
+    return RMR_KERNEL_ERR_ARG;
+  }
   toroidal_tag = rmr_toroidal_route_tag(&toroidal);
 
   cpu_score = (process->cpu_pressure * 5u) + ((process->storage_pressure * 3u) >> 1u) +
@@ -939,4 +1050,3 @@ int RmR_UnifiedKernel_ArenaWrite(RmR_UnifiedKernel *kernel,
   rmr_mem_copy(kernel->arena_base + (kernel->slots[slot].offset + offset), src, len);
   return RMR_UK_OK;
 }
-

@@ -99,6 +99,16 @@ typedef struct {
   RmR_ToroidalAddr7D toroidal;
 } RmR_UnifiedRouteState;
 
+#define RMR_TOROIDAL_ADDR_MODE_LEGACY 0u
+#define RMR_TOROIDAL_ADDR_MODE_THETA_LCM 1u
+
+typedef struct {
+  uint32_t mode;
+  uint32_t n_ring_a;
+  uint32_t n_ring_b;
+  uint64_t input_scalar;
+} RmR_UnifiedToroidalMode;
+
 typedef struct {
   uint32_t computed_crc32c;
   uint32_t verify_ok;
@@ -159,6 +169,10 @@ int RmR_UnifiedKernel_Process(RmR_UnifiedKernel *kernel,
 int RmR_UnifiedKernel_Route(RmR_UnifiedKernel *kernel,
                             const RmR_UnifiedProcessState *process,
                             RmR_UnifiedRouteState *out);
+int RmR_UnifiedKernel_RouteEx(RmR_UnifiedKernel *kernel,
+                              const RmR_UnifiedProcessState *process,
+                              const RmR_UnifiedToroidalMode *toroidal_mode,
+                              RmR_UnifiedRouteState *out);
 RmR_ToroidalAddr7D RmR_Toroidal_Map(uint32_t seed,
                                     uint64_t payload_hash,
                                     uint32_t entropy,
@@ -167,6 +181,12 @@ RmR_ToroidalAddr7D RmR_Toroidal_Map(uint32_t seed,
                                     uint32_t storage_pressure,
                                     uint32_t io_pressure,
                                     int64_t matrix_determinant);
+int RmR_Toroidal_MapThetaLcm(uint32_t n_ring_a,
+                             uint32_t n_ring_b,
+                             uint64_t input_scalar,
+                             RmR_ToroidalAddr7D *out,
+                             uint32_t *out_period,
+                             uint32_t *out_theta_index);
 int RmR_UnifiedKernel_Verify(RmR_UnifiedKernel *kernel,
                              const uint8_t *data,
                              size_t len,
