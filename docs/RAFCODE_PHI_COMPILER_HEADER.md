@@ -74,3 +74,9 @@ Este cabeçalho existe para impedir desvio de direção técnica:
 - Meta operacional: permitir bootstrap de teste em PC/cell/server.
 - Plataformas de execução da casca: Linux, Android/Termux, macOS, BSD, Raspberry Pi e Windows com toolchain compatível.
 - Regra mantida: build/execução como casca; núcleo semântico preservado em C→ASM.
+
+
+## 10) Gate de regressão e CI baremetal
+- Regressão local obrigatória: `tools/baremetal/rafcode_phi/test_regression_crc32c.sh`.
+- Escopo do gate: tabela de tokens por arquitetura (AArch64/x86_64/RISC-V64), CRC32C determinístico e layout fixo `.bin`.
+- CI dedicado: `.github/workflows/rafcode-phi-baremetal-ci.yml`.
