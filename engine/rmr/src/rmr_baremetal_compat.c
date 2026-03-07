@@ -15,3 +15,17 @@ void rmr_baremetal_arena_reset(void) {
 uint32_t rmr_baremetal_arena_used(void) {
     return rmr_arena_ptr;
 }
+
+
+#ifdef RMR_USE_ISORF_ALLOCATOR
+RmR_ISOraf_Store g_isorf_store;
+RmR_ISOraf_Page g_isorf_pages[65536u];
+uint64_t g_isorf_data[262144u];
+
+void rmr_isorf_allocator_init(void) {
+    RmR_ISOraf_Init(&g_isorf_store,
+                    g_isorf_pages, 65536u,
+                    g_isorf_data, 262144u,
+                    4096u);
+}
+#endif

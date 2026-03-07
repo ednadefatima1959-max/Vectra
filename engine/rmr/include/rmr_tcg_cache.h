@@ -28,6 +28,7 @@ typedef struct {
   u64 total_misses;
   RmR_ISOraf_Page pages[RMR_TCG_CACHE_MAX_BLOCKS];
   u64 data_words[1048576u];
+  u8 host_block_scratch[RMR_TCG_HOST_BLOCK_MAX];
 } RmR_TCGCache;
 
 void RmR_TCGCache_Init(RmR_TCGCache *cache);

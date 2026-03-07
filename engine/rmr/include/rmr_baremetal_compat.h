@@ -204,17 +204,11 @@ extern uint32_t rmr_arena_ptr;
 #ifdef RMR_USE_ISORF_ALLOCATOR
 #include "rmr_isorf.h"
 
-static RmR_ISOraf_Store g_isorf_store;
-static RmR_ISOraf_Page g_isorf_pages[65536u];
-static uint64_t g_isorf_data[262144u];
+extern RmR_ISOraf_Store g_isorf_store;
+extern RmR_ISOraf_Page g_isorf_pages[65536u];
+extern uint64_t g_isorf_data[262144u];
 
-static inline void rmr_isorf_allocator_init(void) {
-    RmR_ISOraf_Init(&g_isorf_store,
-                    g_isorf_pages, 65536u,
-                    g_isorf_data, 262144u,
-                    4096u);
-}
-
+void rmr_isorf_allocator_init(void);
 static inline void* rmr_vpage_alloc(uint64_t virtual_addr) {
     RmR_ISOraf_SetBit(&g_isorf_store, virtual_addr, 1u);
     return (void*)(uintptr_t)virtual_addr;
