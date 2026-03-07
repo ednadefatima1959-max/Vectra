@@ -26,6 +26,7 @@ typedef struct {
 
 RmR_AttractorClass RmR_Attractor_Classify(RmR_AttractorState *st, double entropy, u32 miss_score);
 bitomega_state_t RmR_Attractor_ToBitOmega(RmR_AttractorClass cls);
+u8 RmR_Attractor_RetentionBias(RmR_AttractorClass cls);
 
 #ifdef __cplusplus
 }

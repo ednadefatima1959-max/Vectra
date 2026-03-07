@@ -53,3 +53,15 @@ bitomega_state_t RmR_Attractor_ToBitOmega(RmR_AttractorClass cls) {
     default: return BITOMEGA_ZERO;
   }
 }
+
+u8 RmR_Attractor_RetentionBias(RmR_AttractorClass cls) {
+  switch (cls) {
+    case RMR_ATTR_SOURCE: return 96u;
+    case RMR_ATTR_SPIRAL: return 80u;
+    case RMR_ATTR_LEMNISC: return 64u;
+    case RMR_ATTR_STRANGE: return 48u;
+    case RMR_ATTR_LIMIT: return 32u;
+    case RMR_ATTR_TOROID: return 16u;
+    default: return 0u;
+  }
+}
