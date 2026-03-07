@@ -22,6 +22,7 @@ int rmr_jni_kernel_init(rmr_jni_kernel_state_t *state, uint32_t seed) {
   RmR_UnifiedConfig config;
   if (!state) return RMR_KERNEL_ERR_ARG;
   config.seed = seed;
+  config.arena_ptr = NULL;
   config.arena_bytes = 64u * 1024u * 1024u;
   return RmR_UnifiedKernel_Init(state, &config);
 }
