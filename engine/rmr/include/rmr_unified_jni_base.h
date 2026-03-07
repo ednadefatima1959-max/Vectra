@@ -73,6 +73,7 @@ typedef struct {
 
 typedef struct {
   uint32_t seed;
+  uint8_t *arena_ptr;
   uint32_t arena_bytes;
 } RmR_UnifiedConfig;
 
@@ -147,6 +148,7 @@ typedef struct {
   RmR_UnifiedCapabilities caps;
   uint8_t *arena_base;
   uint32_t arena_capacity;
+  uint32_t arena_is_external;
   RmR_UnifiedArenaSlot slots[RMR_UK_MAX_SLOTS];
 } RmR_UnifiedKernel;
 

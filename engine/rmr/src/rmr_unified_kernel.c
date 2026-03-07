@@ -36,36 +36,20 @@ static int rmr_legacy_is_ready(const rmr_legacy_kernel_t *kernel) {
   return kernel && kernel->lifecycle == RMR_LEGACY_STATE_READY;
 }
 
-static int rmr_legacy_pool_acquire_slot(uint32_t *out_index) {
-  uint32_t i;
-  if (!out_index) return 0;
-  for (i = 0u; i < RMR_LEGACY_KERNEL_POOL_CAPACITY; ++i) {
-    if (!g_rmr_legacy_kernel_pool_in_use[i]) {
-      g_rmr_legacy_kernel_pool_in_use[i] = 1u;
-      *out_index = i;
-      return 1;
-    }
-  }
-  return 0;
-}
+#define RMR_UNIFIED_ARENA_MIN_BYTES 4096u
+#if defined(RMR_ARENA_SIZE)
+#define RMR_UNIFIED_FALLBACK_ARENA_BYTES ((uint32_t)RMR_ARENA_SIZE)
+#else
+#define RMR_UNIFIED_FALLBACK_ARENA_BYTES (64u * 1024u * 1024u)
+#endif
 
-static int rmr_legacy_pool_index_from_ptr(const rmr_legacy_kernel_t *kernel, uint32_t *out_index) {
-  uint32_t i;
-  if (!kernel || !out_index) return 0;
-  for (i = 0u; i < RMR_LEGACY_KERNEL_POOL_CAPACITY; ++i) {
-    if (&g_rmr_legacy_kernel_pool[i] == kernel) {
-      *out_index = i;
-      return 1;
-    }
-  }
-  return 0;
-}
-
-static void rmr_legacy_pool_release_slot(uint32_t index) {
-  if (index >= RMR_LEGACY_KERNEL_POOL_CAPACITY) return;
-  rmr_mem_set(&g_rmr_legacy_kernel_pool[index], 0u, sizeof(g_rmr_legacy_kernel_pool[index]));
-  g_rmr_legacy_kernel_pool_in_use[index] = 0u;
-}
+#if defined(RMR_ARENA_SIZE)
+extern uint8_t rmr_arena[RMR_ARENA_SIZE];
+#define RMR_UNIFIED_FALLBACK_ARENA_PTR rmr_arena
+#else
+static __attribute__((aligned(64))) uint8_t rmr_unified_fallback_arena[RMR_UNIFIED_FALLBACK_ARENA_BYTES];
+#define RMR_UNIFIED_FALLBACK_ARENA_PTR rmr_unified_fallback_arena
+#endif
 
 
 static uint64_t rmr_rotl64(uint64_t x, uint32_t n) {
@@ -510,9 +494,24 @@ int RmR_UnifiedKernel_Detect(RmR_UnifiedCapabilities *out) {
 }
 
 int RmR_UnifiedKernel_Init(RmR_UnifiedKernel *kernel, const RmR_UnifiedConfig *config) {
+  uint8_t *arena_base;
   uint32_t arena_bytes;
   if (!kernel || !config) return RMR_KERNEL_ERR_ARG;
   if (kernel->initialized) return RMR_KERNEL_ERR_STATE;
+
+  if (config->arena_ptr && config->arena_bytes < RMR_UNIFIED_ARENA_MIN_BYTES) return RMR_KERNEL_ERR_ARG;
+  if (!config->arena_ptr && config->arena_bytes != 0u && config->arena_bytes < RMR_UNIFIED_ARENA_MIN_BYTES) {
+    return RMR_KERNEL_ERR_ARG;
+  }
+
+  if (config->arena_ptr) {
+    arena_base = config->arena_ptr;
+    arena_bytes = config->arena_bytes;
+  } else {
+    arena_base = RMR_UNIFIED_FALLBACK_ARENA_PTR;
+    arena_bytes = config->arena_bytes ? config->arena_bytes : RMR_UNIFIED_FALLBACK_ARENA_BYTES;
+    if (arena_bytes > RMR_UNIFIED_FALLBACK_ARENA_BYTES) return RMR_KERNEL_ERR_STATE;
+  }
 
   rmr_mem_set(kernel, 0u, sizeof(*kernel));
   kernel->seed = config->seed;
@@ -528,22 +527,21 @@ int RmR_UnifiedKernel_Init(RmR_UnifiedKernel *kernel, const RmR_UnifiedConfig *c
   kernel->bitomega_fallback_safe = 0u;
   kernel->initialized = 1u;
 
-  if (RmR_UnifiedKernel_Detect(&kernel->caps) != RMR_UK_OK) return RMR_KERNEL_ERR_STATE;
-
-  arena_bytes = config->arena_bytes ? config->arena_bytes : (64u * 1024u * 1024u);
-  kernel->arena_base = (uint8_t *)rmr_malloc((size_t)arena_bytes);
-  if (!kernel->arena_base) {
+  if (RmR_UnifiedKernel_Detect(&kernel->caps) != RMR_UK_OK) {
     rmr_mem_set(kernel, 0u, sizeof(*kernel));
     return RMR_KERNEL_ERR_STATE;
   }
+
+  kernel->arena_base = arena_base;
   kernel->arena_capacity = arena_bytes;
+  kernel->arena_is_external = 1u;
   return RMR_UK_OK;
 }
 
 int RmR_UnifiedKernel_Shutdown(RmR_UnifiedKernel *kernel) {
   if (!kernel) return RMR_KERNEL_ERR_ARG;
   if (!kernel->initialized) return RMR_KERNEL_ERR_STATE;
-  if (kernel->arena_base) rmr_free(kernel->arena_base);
+  if (kernel->arena_base && !kernel->arena_is_external) rmr_free(kernel->arena_base);
   rmr_mem_set(kernel, 0u, sizeof(*kernel));
   return RMR_UK_OK;
 }
