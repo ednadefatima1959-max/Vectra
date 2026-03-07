@@ -86,6 +86,8 @@ int rmr_jni_kernel_process(rmr_jni_kernel_state_t *state, int32_t a, int32_t b, 
 int rmr_jni_kernel_route(rmr_jni_kernel_state_t *state, const rmr_jni_route_input_t *in, rmr_jni_route_output_t *out) {
   RmR_UnifiedProcessState process;
   RmR_UnifiedRouteState route;
+  RmR_UnifiedToroidalMode toroidal_mode;
+  RmR_UnifiedToroidalMode *toroidal_mode_ptr = NULL;
   int rc;
   if (!state || !in || !out) return RMR_KERNEL_ERR_ARG;
   rc = RmR_UnifiedKernel_Process(state,
@@ -100,7 +102,14 @@ int rmr_jni_kernel_route(rmr_jni_kernel_state_t *state, const rmr_jni_route_inpu
                                  in->m11,
                                  &process);
   if (rc != RMR_UK_OK) return rc;
-  rc = RmR_UnifiedKernel_Route(state, &process, &route);
+  if (in->toroidal_mode == RMR_TOROIDAL_ADDR_MODE_THETA_LCM) {
+    toroidal_mode.mode = RMR_TOROIDAL_ADDR_MODE_THETA_LCM;
+    toroidal_mode.n_ring_a = in->toroidal_n_ring_a;
+    toroidal_mode.n_ring_b = in->toroidal_n_ring_b;
+    toroidal_mode.input_scalar = in->toroidal_input_scalar;
+    toroidal_mode_ptr = &toroidal_mode;
+  }
+  rc = RmR_UnifiedKernel_RouteEx(state, &process, toroidal_mode_ptr, &route);
   if (rc != RMR_UK_OK) return rc;
   out->route = route.route_id;
   out->matrix_determinant = process.matrix_determinant;

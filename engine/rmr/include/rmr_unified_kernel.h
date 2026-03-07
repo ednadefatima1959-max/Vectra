@@ -165,6 +165,10 @@ typedef struct {
   int64_t m01;
   int64_t m10;
   int64_t m11;
+  uint32_t toroidal_mode;
+  uint32_t toroidal_n_ring_a;
+  uint32_t toroidal_n_ring_b;
+  uint64_t toroidal_input_scalar;
 } rmr_jni_route_input_t;
 
 typedef struct {
