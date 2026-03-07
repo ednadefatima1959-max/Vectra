@@ -53,6 +53,7 @@ All values below are defaults from `gradle.properties` and can be overridden wit
 | Gradle runtime JVM | `gradle.java.runtime.version` / `GRADLE_JAVA_RUNTIME_VERSION` | 17 | 17 | `gradle.max.runtime.java.version` (default 21) |
 
 Strictness control by pipeline context:
+- A validação de bootstrap (`verifyBootstrapAssets`) e a validação final (`verifyGradleRuntimeJvm` + gates de API/ABI) compartilham a mesma política de `buildStrict` (warning em modo local, bloqueante em CI/release).
 - `-PbuildStrict=false` (default): local/debug mode; validations emit warnings where allowed.
 - `-PbuildStrict=true`: official CI/release mode; validations are blocking.
 
