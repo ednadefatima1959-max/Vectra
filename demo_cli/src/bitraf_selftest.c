@@ -21,7 +21,8 @@ int main(void) {
   };
   uint8_t frame[256];
   uint8_t frame_flip[256];
-  uint8_t out[256];
+  uint8_t out_good[256];
+  uint8_t out_bad[256];
   uint64_t seed = 0x123456789ABCDEF0ULL;
 
   enum { PAGE_COUNT = 8, DATA_WORDS = 8 * 64 };
@@ -32,22 +33,22 @@ int main(void) {
 
   bitraf_init(seed);
   size_t frame_len = bitraf_compress(payload, sizeof(payload), frame, sizeof(frame), seed);
-  size_t plain_len = bitraf_reconstruct(frame, frame_len, out, sizeof(out), seed);
-  uint64_t h = bitraf_hash(out, plain_len, seed);
+  size_t plain_len = bitraf_reconstruct(frame, frame_len, out_good, sizeof(out_good), seed);
+  uint64_t h = bitraf_hash(out_good, plain_len, seed);
 
   bitraf_diag d0;
-  size_t plain_len_ex = bitraf_reconstruct_ex(frame, frame_len, out, sizeof(out), seed,
+  size_t plain_len_ex = bitraf_reconstruct_ex(frame, frame_len, out_good, sizeof(out_good), seed,
                                               BITRAF_RECON_MODE_STRICT, &d0);
 
   memcpy(frame_flip, frame, frame_len);
   frame_flip[24u + 8u + 5u] ^= 0x01u;
 
   bitraf_diag d1;
-  size_t strict_len = bitraf_reconstruct_ex(frame_flip, frame_len, out, sizeof(out), seed,
+  size_t strict_len = bitraf_reconstruct_ex(frame_flip, frame_len, out_bad, sizeof(out_bad), seed,
                                             BITRAF_RECON_MODE_STRICT, &d1);
 
   bitraf_diag d2;
-  size_t report_len = bitraf_reconstruct_ex(frame_flip, frame_len, out, sizeof(out), seed,
+  size_t report_len = bitraf_reconstruct_ex(frame_flip, frame_len, out_bad, sizeof(out_bad), seed,
                                             BITRAF_RECON_MODE_REPORT, &d2);
 
   RmR_ISOraf_Init(&st, pages, PAGE_COUNT, words, DATA_WORDS, 2048u);
@@ -57,8 +58,8 @@ int main(void) {
 
   int ok = (frame_len > 0u) & (plain_len == sizeof(payload))
       & (plain_len_ex == sizeof(payload))
-      & equal_buf(payload, out, sizeof(payload))
-      & bitraf_verify(out, plain_len, h, seed)
+      & equal_buf(payload, out_good, sizeof(payload))
+      & bitraf_verify(out_good, plain_len, h, seed)
       & (strict_len == 0u)
       & (d1.status == BITRAF_RECON_STATUS_CHUNK)
       & (d1.error_offset == 0u)

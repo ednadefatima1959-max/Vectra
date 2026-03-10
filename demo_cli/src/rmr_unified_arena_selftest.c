@@ -38,13 +38,13 @@ static int expect_offset(const RmR_UnifiedKernel *kernel, uint32_t handle, uint3
 int main(void) {
   RmR_UnifiedKernel kernel;
   RmR_UnifiedConfig cfg;
-  uint32_t h0, h1, h2, h3, h4, h5, h6, h7, h8;
+  uint32_t h0, h1, h2, h3, h4, h5, h6, h7, h8, h9;
   uint8_t src_a[200];
   uint8_t src_b[128];
   uint32_t checksum = 0u;
   uint32_t i;
   cfg.seed = 0x1234ABCDu;
-  cfg.arena_bytes = 640u;
+  cfg.arena_bytes = 4096u;
   if (!expect_ok(RmR_UnifiedKernel_Init(&kernel, &cfg), "init")) return 1;
   if (!expect_ok(RmR_UnifiedKernel_ArenaAlloc(&kernel, 64u, &h0), "alloc h0")) return 1;
   if (!expect_ok(RmR_UnifiedKernel_ArenaAlloc(&kernel, 128u, &h1), "alloc h1")) return 1;
@@ -84,6 +84,8 @@ int main(void) {
   }
   if (!expect_ok(RmR_UnifiedKernel_ArenaAlloc(&kernel, 80u, &h7), "alloc h7 near-full")) return 1;
   if (!expect_offset(&kernel, h7, 544u, "h7 append after packed reuse")) return 1;
+  if (!expect_ok(RmR_UnifiedKernel_ArenaAlloc(&kernel, 3472u, &h9), "alloc h9 tail fill")) return 1;
+  if (!expect_offset(&kernel, h9, 624u, "h9 tail fill offset")) return 1;
   if (!expect_ok(RmR_UnifiedKernel_ArenaFree(&kernel, h5), "free h5 200-gap")) return 1;
   if (RmR_UnifiedKernel_ArenaAlloc(&kernel, 220u, &h8) == RMR_UK_OK) {
     printf("FAIL alloc 220 should fail (no sufficient contiguous gap)\n");
@@ -97,6 +99,7 @@ int main(void) {
   if (!expect_ok(RmR_UnifiedKernel_ArenaFree(&kernel, h6), "prep free h6")) return 1;
   if (!expect_ok(RmR_UnifiedKernel_ArenaFree(&kernel, h7), "prep free h7")) return 1;
   if (!expect_ok(RmR_UnifiedKernel_ArenaFree(&kernel, h8), "prep free h8")) return 1;
+  if (!expect_ok(RmR_UnifiedKernel_ArenaFree(&kernel, h9), "prep free h9")) return 1;
   for (i = 0; i < 1500u; ++i) {
     uint32_t a, b, c;
     uint32_t sz_a = 24u + ((i * 37u) % 73u);
@@ -136,34 +139,44 @@ int main(void) {
       uint64_t storage_w = 12000u + ((uint64_t)strat * 173u);
       uint64_t io_in = 9000u + ((uint64_t)strat * 53u);
       uint64_t io_out = 12000u + ((uint64_t)strat * 29u);
-      if (!expect_ok(RmR_UnifiedKernel_Process(&kernel,
-                                               cpu_cycles,
-                                               storage_r,
-                                               storage_w,
-                                               io_in,
-                                               io_out,
-                                               (int64_t)(11 + strat),
-                                               (int64_t)(3 + (strat & 7u)),
-                                               (int64_t)(5 + (strat & 3u)),
-                                               (int64_t)(13 + (strat & 15u)),
-                                               &proc_a), "layered process A")) {
-        return 1;
+      {
+        RmR_UnifiedKernel kernel_a;
+        if (!expect_ok(RmR_UnifiedKernel_Init(&kernel_a, &cfg), "layered init A")) return 1;
+        if (!expect_ok(RmR_UnifiedKernel_Process(&kernel_a,
+                                                 cpu_cycles,
+                                                 storage_r,
+                                                 storage_w,
+                                                 io_in,
+                                                 io_out,
+                                                 (int64_t)(11 + strat),
+                                                 (int64_t)(3 + (strat & 7u)),
+                                                 (int64_t)(5 + (strat & 3u)),
+                                                 (int64_t)(13 + (strat & 15u)),
+                                                 &proc_a), "layered process A")) {
+          return 1;
+        }
+        if (!expect_ok(RmR_UnifiedKernel_Route(&kernel_a, &proc_a, &route_a), "layered route A")) return 1;
+        if (!expect_ok(RmR_UnifiedKernel_Shutdown(&kernel_a), "layered shutdown A")) return 1;
       }
-      if (!expect_ok(RmR_UnifiedKernel_Route(&kernel, &proc_a, &route_a), "layered route A")) return 1;
-      if (!expect_ok(RmR_UnifiedKernel_Process(&kernel,
-                                               cpu_cycles,
-                                               storage_r,
-                                               storage_w,
-                                               io_in,
-                                               io_out,
-                                               (int64_t)(11 + strat),
-                                               (int64_t)(3 + (strat & 7u)),
-                                               (int64_t)(5 + (strat & 3u)),
-                                               (int64_t)(13 + (strat & 15u)),
-                                               &proc_b), "layered process B")) {
-        return 1;
+      {
+        RmR_UnifiedKernel kernel_b;
+        if (!expect_ok(RmR_UnifiedKernel_Init(&kernel_b, &cfg), "layered init B")) return 1;
+        if (!expect_ok(RmR_UnifiedKernel_Process(&kernel_b,
+                                                 cpu_cycles,
+                                                 storage_r,
+                                                 storage_w,
+                                                 io_in,
+                                                 io_out,
+                                                 (int64_t)(11 + strat),
+                                                 (int64_t)(3 + (strat & 7u)),
+                                                 (int64_t)(5 + (strat & 3u)),
+                                                 (int64_t)(13 + (strat & 15u)),
+                                                 &proc_b), "layered process B")) {
+          return 1;
+        }
+        if (!expect_ok(RmR_UnifiedKernel_Route(&kernel_b, &proc_b, &route_b), "layered route B")) return 1;
+        if (!expect_ok(RmR_UnifiedKernel_Shutdown(&kernel_b), "layered shutdown B")) return 1;
       }
-      if (!expect_ok(RmR_UnifiedKernel_Route(&kernel, &proc_b, &route_b), "layered route B")) return 1;
       if (proc_a.cpu_pressure != proc_b.cpu_pressure ||
           proc_a.storage_pressure != proc_b.storage_pressure ||
           proc_a.io_pressure != proc_b.io_pressure ||
