@@ -1016,7 +1016,7 @@
     <string name="pro_tools_summary_categories">Category Performance:</string>
     <string name="pro_tools_summary_methodologies">Methodologies Applied: %s</string>
     <string name="pro_tools_summary_reproducibility">Reproducibility Assessment: %s</string>
-    <string name="pro_tools_grade_scientific_justification">SCIENTIFIC-GRADE: All 6 categories measured with >95%% reproducibility and 4+ methodology standards. Suitable for peer-reviewed publications and expert testimony.</string>
+    <string name="pro_tools_grade_scientific_justification">SCIENTIFIC-GRADE: All 6 categories measured with >95% reproducibility and 4+ methodology standards. Suitable for peer-reviewed publications and expert testimony.</string>
     <string name="pro_tools_grade_academic_justification">ACADEMIC-GRADE: 5+ categories measured with >85%% reproducibility and 3+ methodology standards. Suitable for research reports and university submissions.</string>
     <string name="pro_tools_grade_industry_justification">INDUSTRY-GRADE: 3+ categories measured with >70%% reproducibility and 2+ methodology standards. Suitable for engineering benchmarks and technical documentation.</string>
     <string name="pro_tools_grade_informal_justification">INFORMAL engineering-grade. Additional metrics, methodologies, or reproducibility improvements are recommended to achieve formal validation.</string>
