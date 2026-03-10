@@ -105,11 +105,11 @@ public class TermuxFileReceiverActivity extends Activity {
             try (Cursor c = getContentResolver().query(uri, projection, null, null, null)) {
                 if (c != null && c.moveToFirst()) {
                     final int fileNameColumnId = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                    if (fileNameColumnId >= 0) attachmentFileName = c.getString(fileNameColumnId);
+                    if (fileNameColumnId >= 0) attachmentFileName = sanitizeAttachmentName(c.getString(fileNameColumnId));
                 }
             }
 
-            if (attachmentFileName == null) attachmentFileName = subjectFromIntent;
+            if (attachmentFileName == null) attachmentFileName = sanitizeAttachmentName(subjectFromIntent);
 
             in = getContentResolver().openInputStream(uri);
             if (in == null) {
@@ -201,7 +201,22 @@ public class TermuxFileReceiverActivity extends Activity {
                 return null;
             }
 
-            final File outFile = new File(receiveDir, attachmentFileName);
+            final String sanitizedName = sanitizeAttachmentName(attachmentFileName);
+            if (sanitizedName == null) {
+                showErrorDialogAndQuit("Invalid file name received.");
+                return null;
+            }
+
+            final File outFile = new File(receiveDir, sanitizedName);
+            final File receiveCanonical = receiveDir.getCanonicalFile();
+            final File outCanonical = outFile.getCanonicalFile();
+            final String receivePath = receiveCanonical.getPath();
+            final String outPath = outCanonical.getPath();
+            if (!outPath.startsWith(receivePath + File.separator)) {
+                showErrorDialogAndQuit("Refusing to save outside receive directory.");
+                return null;
+            }
+
             try (FileOutputStream f = new FileOutputStream(outFile)) {
                 byte[] buffer = new byte[4096];
                 int readBytes;
@@ -215,6 +230,20 @@ public class TermuxFileReceiverActivity extends Activity {
             Log.e("termux", "Error saving file", e);
             return null;
         }
+    }
+
+    static String sanitizeAttachmentName(String raw) {
+        if (raw == null) return null;
+
+        String sanitized = raw.replace('/', '_').replace('\\', '_').trim();
+        if (sanitized.isEmpty() || ".".equals(sanitized) || "..".equals(sanitized)) return null;
+
+        for (int i = 0; i < sanitized.length(); i++) {
+            char c = sanitized.charAt(i);
+            if (c == 0 || Character.isISOControl(c) || "<>:\"|?*".indexOf(c) >= 0) return null;
+        }
+
+        return sanitized;
     }
 
     void handleUrlAndFinish(final String url) {
