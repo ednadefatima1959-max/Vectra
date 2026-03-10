@@ -67,6 +67,10 @@ endif()
 #     list(APPEND VECTRA_CASM_SOURCES ${VECTRA_ENGINE_ASM_RISCV64_SOURCES})
 # endif()
 
+set(VECTRA_ENGINE_SOURCES
+    ${RMR_CORE_COMMON_SOURCES}
+    ${RMR_EXTENDED_MODULE_SOURCES})
+
 add_library(vectra_core_accel SHARED
     vectra_core_accel.c
     lowlevel_bridge.c
