@@ -846,7 +846,15 @@ public class SetupWizard2Activity extends AppCompatActivity {
                 LibraryChecker.PackageManagerType managerType = LibraryChecker.detectPackageManagerType(this);
                 String requiredPackages = resolveRequiredPackages(managerType);
                 String updateCommand = resolveUpdateCommand(managerType);
-                String installCommand = LibraryChecker.buildInstallCommand(managerType, requiredPackages);
+                List<String> requiredPackageList = new ArrayList<>();
+                if (requiredPackages != null) {
+                    for (String pkg : requiredPackages.trim().split("\\s+")) {
+                        if (!pkg.isEmpty()) {
+                            requiredPackageList.add(pkg);
+                        }
+                    }
+                }
+                String installCommand = LibraryChecker.buildInstallCommand(managerType, requiredPackageList);
 
             //   # PackageManagerType packageManagerType = detectPackageManagerType();
            //   #  String updateCommand = resolveUpdateCommand(packageManagerType);

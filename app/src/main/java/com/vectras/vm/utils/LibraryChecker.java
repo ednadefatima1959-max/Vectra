@@ -18,6 +18,7 @@ import java.util.regex.Pattern;
 
 public class LibraryChecker {
     public enum PackageManagerType { APK, PKG, APT, UNKNOWN }
+    private static final Pattern SAFE_PACKAGE_PATTERN = Pattern.compile("^[a-z0-9+._-]+$");
 
     private final Context context;
 
@@ -74,7 +75,7 @@ public class LibraryChecker {
                     if (managerType == PackageManagerType.APK) {
                         installCommand = buildApkInstallCommand(missingLibraries);
                     } else {
-                        installCommand = buildInstallCommand(managerType, String.join(" ", missingLibraries));
+                        installCommand = buildInstallCommand(managerType, missingLibraries);
                     }
                     new Terminal(context).executeShellCommand(installCommand, true, true, activity);
                 })
@@ -156,26 +157,50 @@ public class LibraryChecker {
         return detectPackageManagerType(context);
     }
 
-    public static String buildInstallCommand(Context context, String packages) {
+    public static String buildInstallCommand(Context context, List<String> packages) {
         return buildInstallCommand(detectPackageManagerType(context), packages);
     }
 
-    public static String buildInstallCommand(PackageManagerType managerType, String packages) {
-        String sanitizedPackages = packages == null ? "" : packages.trim();
+    public static String buildInstallCommand(PackageManagerType managerType, List<String> packages) {
+        List<String> sanitizedPackages = sanitizeRequestedPackages(packages, managerType);
         if (sanitizedPackages.isEmpty()) {
             return "echo 'No packages requested for installation'";
         }
+        StringBuilder packageArgs = new StringBuilder();
+        for (String pkg : sanitizedPackages) {
+            if (packageArgs.length() > 0) {
+                packageArgs.append(' ');
+            }
+            packageArgs.append(shellSingleQuote(pkg));
+        }
+
         switch (managerType) {
             case PKG:
-                return "pkg install -y " + sanitizedPackages;
+                return "pkg install -y " + packageArgs;
             case APT:
-                return "apt-get install -y " + sanitizedPackages;
+                return "apt-get install -y " + packageArgs;
             case APK:
-                return "apk add " + sanitizedPackages;
+                return "apk add " + packageArgs;
             case UNKNOWN:
             default:
-                return "apk add " + sanitizedPackages;
+                return "apk add " + packageArgs;
         }
+    }
+
+    private static List<String> sanitizeRequestedPackages(List<String> packages, PackageManagerType managerType) {
+        List<String> sanitizedPackages = new ArrayList<>();
+        if (packages == null) {
+            return sanitizedPackages;
+        }
+
+        for (String pkg : packages) {
+            String normalizedPkg = normalizeComparablePackageName(pkg, managerType);
+            if (normalizedPkg.isEmpty() || !SAFE_PACKAGE_PATTERN.matcher(normalizedPkg).matches()) {
+                continue;
+            }
+            sanitizedPackages.add(normalizedPkg);
+        }
+        return sanitizedPackages;
     }
 
     private static String[] resolveRequiredLibraries(PackageManagerType managerType) {
@@ -361,7 +386,7 @@ public class LibraryChecker {
                 .setCancelable(false)
                 .setPositiveButton("Install", (dialog, which) -> {
                     PackageManagerType managerType = detectPackageManagerType();
-                    String installCommand = buildInstallCommand(managerType, packageName);
+                    String installCommand = buildInstallCommand(managerType, java.util.Collections.singletonList(packageName));
                     new Terminal(context).executeShellCommand(installCommand, true, true, activity);
                 })
                 .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())

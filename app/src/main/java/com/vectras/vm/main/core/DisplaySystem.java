@@ -86,7 +86,7 @@ public class DisplaySystem {
                         R.drawable.desktop_24px,
                         true,
                         () -> {
-                            String installCommand = LibraryChecker.buildInstallCommand(context, necessaryPackage);
+                            String installCommand = LibraryChecker.buildInstallCommand(context, java.util.Collections.singletonList(necessaryPackage));
                             new Terminal(context).executeShellCommand(installCommand, true, true, context.getString(R.string.just_a_moment), context);
                         },
                         null,
