@@ -140,6 +140,29 @@ endif()
 add_library(rmr STATIC ${RMR_SOURCES})
 rmr_apply_common_flags(rmr)
 
+set(RMR_REQUIRED_SYMBOLS
+  RmR_MathFabric_AutodetectPlan
+  RmR_MathFabric_VectorMix
+)
+
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/verify_librmr_symbols.stamp
+  COMMAND ${CMAKE_SOURCE_DIR}/tools/verify_librmr_symbols.sh
+          $<TARGET_FILE:rmr>
+          ${RMR_REQUIRED_SYMBOLS}
+  COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/verify_librmr_symbols.stamp
+  DEPENDS rmr ${CMAKE_SOURCE_DIR}/tools/verify_librmr_symbols.sh
+  VERBATIM
+)
+
+add_custom_target(verify_librmr_symbols
+  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/verify_librmr_symbols.stamp
+)
+
+add_custom_target(verify_contracts
+  DEPENDS verify_librmr_symbols
+)
+
 add_executable(rafaelia_demo demo_cli/src/main.c)
 target_link_libraries(rafaelia_demo PRIVATE rmr)
 rmr_apply_common_flags(rafaelia_demo)
@@ -278,7 +301,7 @@ endif()
 add_custom_target(run_selftest
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/bench/results
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  DEPENDS ${RMR_RUN_SELFTEST_DEPENDS}
+  DEPENDS verify_contracts ${RMR_RUN_SELFTEST_DEPENDS}
 )
 
 foreach(RMR_SELFTEST_CMD IN LISTS RMR_RUN_SELFTEST_COMMANDS)

@@ -60,8 +60,8 @@ jobs:
           cmake -S . -B build-cmake -G Ninja -DRMR_JNI_BUILD=ON -DRMR_ENABLE_POLICY_MODULE=ON
           cmake --build build-cmake -j"$(nproc)"
 
-      - name: Assert Make/CMake macro parity
-        run: bash tools/ci/assert_make_cmake_build_config.sh
+      - name: Verify link contracts (CMake)
+        run: cmake --build build-cmake --target verify_contracts
 
       - name: Run engine selftests (CMake)
         run: cmake --build build-cmake --target run_selftest

@@ -104,6 +104,9 @@ jobs:
       - name: Run BitΩ smoke test (CMake)
         run: cmake --build build-cmake --target run_bitomega_smoketest
 
+      - name: Verify link contracts (CMake)
+        run: cmake --build build-cmake --target verify_contracts
+
       - name: Run selftests (CMake)
         run: cmake --build build-cmake --target run_selftest
 
