@@ -72,51 +72,27 @@ function(rmr_apply_common_flags target_name)
   target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/engine/rmr/include)
 endfunction()
 
+include(${CMAKE_SOURCE_DIR}/engine/rmr/cmake/rmr_sources.cmake)
+
 set(RMR_SOURCES
-  engine/rmr/src/bitomega.c
-  engine/rmr/src/rmr_baremetal_compat.c
-  engine/rmr/src/rmr_cycles.c
-  engine/rmr/src/rmr_hw_detect.c
-  engine/rmr/src/rmr_bench.c
-  engine/rmr/src/rmr_bench_suite.c
-  engine/rmr/src/rmr_isorf.c
-  engine/rmr/src/rmr_apk_module.c
-  engine/rmr/src/rmr_qemu_bridge.c
-  engine/rmr/src/rmr_math_fabric.c
-  engine/rmr/src/rafaelia_formulas_core.c
-  engine/rmr/src/rmr_corelib.c
-  engine/rmr/src/rmr_ll_ops.c
-  engine/rmr/src/rmr_ll_tuning.c
-  engine/rmr/src/rmr_casm_bridge.c
-  engine/rmr/src/rmr_unified_kernel.c
-  engine/rmr/src/rmr_unified_jni_bridge.c
-  engine/rmr/src/rmr_host_compat.c
-  engine/rmr/src/rmr_zipraf_core.c
-  engine/rmr/src/rmr_lowlevel_portable.c
-  engine/rmr/src/rmr_lowlevel_mix.c
-  engine/rmr/src/rmr_lowlevel_reduce.c
-  engine/rmr/src/rmr_neon_simd.c
+  ${RMR_CORE_COMMON_SOURCES}
+  ${RMR_EXTENDED_MODULE_SOURCES}
 )
 
 if(RMR_ENABLE_POLICY_MODULE)
-  list(APPEND RMR_SOURCES engine/rmr/src/rmr_policy_kernel.c)
+  list(APPEND RMR_SOURCES ${RMR_POLICY_MODULE_SOURCES})
 endif()
 
 set(RMR_HAS_CASM FALSE)
 set(RMR_HAS_NEON_SELFTEST FALSE)
 
 if(RMR_ASM_CORE_EXPERIMENTAL AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND RMR_ASM_CORE_X86_64_VALIDATED)
-  list(APPEND RMR_SOURCES
-    engine/rmr/interop/rmr_lowlevel_x86_64.S
-    engine/rmr/interop/rmr_casm_x86_64.S
-  )
+  list(APPEND RMR_SOURCES ${RMR_CASM_X86_64_SOURCES})
   set(RMR_HAS_CASM TRUE)
 endif()
 
 if(RMR_ASM_CORE_EXPERIMENTAL AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64" AND RMR_ASM_CORE_RISCV64_VALIDATED)
-  list(APPEND RMR_SOURCES
-    engine/rmr/interop/rmr_casm_riscv64.S
-  )
+  list(APPEND RMR_SOURCES ${RMR_CASM_RISCV64_SOURCES})
   set(RMR_HAS_CASM TRUE)
 endif()
 
