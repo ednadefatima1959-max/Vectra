@@ -127,7 +127,9 @@ public final class TerminalEmulator {
     /** DECSET 45 - reverse wraparound mode (DECRAWM). */
     private static final int DECSET_BIT_REVERSE_WRAPAROUND = 1 << 12;
     /** Not really DECSET bit... - http://www.vt100.net/docs/vt510-rm/DECSACE */
-    private static final int DECSET_BIT_RECTANGULAR_CHANGEATTRIBUTE = 1 << 13;
+    private static final int DECSET_BIT_RECTANGULAR_CHANGEATTRIBUTE = 1 << 12;
+    /** DECSET 45 - reverse wrap-around on backspace over wrapped lines. */
+    private static final int DECSET_BIT_REVERSE_WRAPAROUND = 1 << 13;
 
     private String mTitle;
     private final Stack<String> mTitleStack = new Stack<>();
@@ -1086,7 +1088,7 @@ public final class TerminalEmulator {
             case 12: // Control cursor blinking - ignore.
             case 25: // Hide/show cursor - no action needed, renderer will check with isShowingCursor().
             case 40: // Allow 80 => 132 Mode, ignore.
-            case 45: // Reverse wrap-around (XTREVWRAP).
+            case 45: // Reverse wrap-around handled via DECSET bit map.
             case 66: // Application keypad (DECNKM).
                 break;
             case 69: // Left and right margin mode (DECLRMM).
