@@ -4,10 +4,26 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Compatibilidade com variáveis legadas de assinatura
+if [[ -z "${VECTRAS_RELEASE_STORE_FILE:-}" && -n "${VECTRAS_KEYSTORE:-}" ]]; then
+  export VECTRAS_RELEASE_STORE_FILE="$VECTRAS_KEYSTORE"
+fi
+if [[ -z "${VECTRAS_RELEASE_KEY_ALIAS:-}" && -n "${VECTRAS_KEY_ALIAS:-}" ]]; then
+  export VECTRAS_RELEASE_KEY_ALIAS="$VECTRAS_KEY_ALIAS"
+fi
+if [[ -z "${VECTRAS_RELEASE_STORE_PASSWORD:-}" && -n "${VECTRAS_STORE_PASSWORD:-}" ]]; then
+  export VECTRAS_RELEASE_STORE_PASSWORD="$VECTRAS_STORE_PASSWORD"
+fi
+if [[ -z "${VECTRAS_RELEASE_KEY_PASSWORD:-}" && -n "${VECTRAS_KEY_PASSWORD:-}" ]]; then
+  export VECTRAS_RELEASE_KEY_PASSWORD="$VECTRAS_KEY_PASSWORD"
+fi
+
 required_files=(
   "LICENSE"
   "THIRD_PARTY_NOTICES.md"
   "app/build.gradle"
+  "tools/gradle_with_jdk21.sh"
+  "tools/termux-arm64-orchestrator/bootstrap-termux-android15.sh"
 )
 
 for file in "${required_files[@]}"; do
@@ -58,6 +74,21 @@ fi
 
 if [[ -z "${VECTRAS_RELEASE_KEY_ALIAS//[[:space:]]/}" ]]; then
   echo "[compliance] invalid VECTRAS_RELEASE_KEY_ALIAS: alias must be non-empty" >&2
+  exit 1
+fi
+
+if ! rg -n '"ndk;\$\{ANDROID_NDK_VERSION\}"|"ndk;\$ANDROID_NDK_VERSION"' tools/termux-arm64-orchestrator/bootstrap-termux-android15.sh >/dev/null; then
+  echo "[compliance] bootstrap-termux-android15.sh must pin NDK installation via ANDROID_NDK_VERSION" >&2
+  exit 1
+fi
+
+if ! rg -n '"cmake;\$\{ANDROID_CMAKE_VERSION\}"|"cmake;\$ANDROID_CMAKE_VERSION"' tools/termux-arm64-orchestrator/bootstrap-termux-android15.sh >/dev/null; then
+  echo "[compliance] bootstrap-termux-android15.sh must pin CMake installation via ANDROID_CMAKE_VERSION" >&2
+  exit 1
+fi
+
+if ! rg -n 'JDK 21|JDK 17|JAVA_HOME' tools/gradle_with_jdk21.sh >/dev/null; then
+  echo "[compliance] tools/gradle_with_jdk21.sh must enforce local JDK selection (21/17)" >&2
   exit 1
 fi
 
