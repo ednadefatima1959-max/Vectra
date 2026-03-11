@@ -101,6 +101,7 @@ bootstrap_android_env() {
 
 verify_signing() {
   local apk="$1"
+  local verify_rc=0
 
   if [[ ! -f "$apk" ]]; then
     echo "$LOG_PREFIX release APK not found: $apk" >&2
@@ -109,21 +110,39 @@ verify_signing() {
 
   if command -v apksigner >/dev/null 2>&1; then
     log "verificando assinatura com apksigner"
-    apksigner verify --verbose --print-certs "$apk" | tee "$BUILD_SPILL_DIR/apk-signature.txt"
-    if ! rg -n "Verified" "$BUILD_SPILL_DIR/apk-signature.txt" >/dev/null; then
-      echo "$LOG_PREFIX apksigner verification failed" >&2
+    set +e
+    apksigner verify --verbose --print-certs "$apk" 2>&1 | tee "$BUILD_SPILL_DIR/apk-signature.txt"
+    verify_rc=${PIPESTATUS[0]}
+    set -e
+
+    if [[ $verify_rc -ne 0 ]]; then
+      echo "$LOG_PREFIX apksigner verification failed with exit code $verify_rc" >&2
       exit 1
     fi
+
+    if ! rg -n "Verified" "$BUILD_SPILL_DIR/apk-signature.txt" >/dev/null; then
+      warn "apksigner retornou sucesso, mas texto esperado ('Verified') não foi encontrado no log"
+    fi
+
     return
   fi
 
   if command -v jarsigner >/dev/null 2>&1; then
     log "apksigner não encontrado; fallback para jarsigner"
-    jarsigner -verify -verbose -certs "$apk" | tee "$BUILD_SPILL_DIR/apk-signature.txt"
-    if ! rg -n "jar verified" "$BUILD_SPILL_DIR/apk-signature.txt" >/dev/null; then
-      echo "$LOG_PREFIX jarsigner verification failed" >&2
+    set +e
+    jarsigner -verify -verbose -certs "$apk" 2>&1 | tee "$BUILD_SPILL_DIR/apk-signature.txt"
+    verify_rc=${PIPESTATUS[0]}
+    set -e
+
+    if [[ $verify_rc -ne 0 ]]; then
+      echo "$LOG_PREFIX jarsigner verification failed with exit code $verify_rc" >&2
       exit 1
     fi
+
+    if ! rg -n "jar verified" "$BUILD_SPILL_DIR/apk-signature.txt" >/dev/null; then
+      warn "jarsigner retornou sucesso, mas texto esperado ('jar verified') não foi encontrado no log"
+    fi
+
     return
   fi
 
