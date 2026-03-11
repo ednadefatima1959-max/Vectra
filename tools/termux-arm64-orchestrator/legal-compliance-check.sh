@@ -17,12 +17,6 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-check_legal_requirements() {
-  local legal_files=(
-    "LICENSE"
-    "THIRD_PARTY_NOTICES.md"
-  )
-
 if ! rg -n "android\.injected\.signing\.store\.file|VECTRAS_RELEASE_STORE_FILE" app/build.gradle >/dev/null; then
   echo "[compliance] app/build.gradle must support signing store path via android.injected.signing.store.file or VECTRAS_RELEASE_STORE_FILE" >&2
   exit 1
@@ -35,6 +29,35 @@ fi
 
 if ! rg -n "targetSdk\s*=\s*.*targetApi" app/build.gradle >/dev/null; then
   echo "[compliance] targetSdk declaration not found in app/build.gradle" >&2
+  exit 1
+fi
+
+required_signing_vars=(
+  "VECTRAS_RELEASE_STORE_FILE"
+  "VECTRAS_RELEASE_STORE_PASSWORD"
+  "VECTRAS_RELEASE_KEY_ALIAS"
+  "VECTRAS_RELEASE_KEY_PASSWORD"
+)
+
+for var_name in "${required_signing_vars[@]}"; do
+  if [[ -z "${!var_name:-}" ]]; then
+    echo "[compliance] missing required release signing variable: ${var_name}" >&2
+    exit 1
+  fi
+done
+
+if [[ "${VECTRAS_RELEASE_STORE_FILE:0:1}" != "/" ]]; then
+  echo "[compliance] invalid VECTRAS_RELEASE_STORE_FILE: expected absolute path" >&2
+  exit 1
+fi
+
+if [[ ! -f "$VECTRAS_RELEASE_STORE_FILE" ]]; then
+  echo "[compliance] invalid VECTRAS_RELEASE_STORE_FILE: file not found" >&2
+  exit 1
+fi
+
+if [[ -z "${VECTRAS_RELEASE_KEY_ALIAS//[[:space:]]/}" ]]; then
+  echo "[compliance] invalid VECTRAS_RELEASE_KEY_ALIAS: alias must be non-empty" >&2
   exit 1
 fi
 
