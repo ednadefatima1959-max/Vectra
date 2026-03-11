@@ -17,8 +17,8 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.google.android.material.transition.MaterialFadeThrough;
-import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.vectras.vm.AppConfig;
 import com.vectras.vm.network.RequestNetwork;
 import com.vectras.vm.network.RequestNetworkController;

@@ -44,7 +44,9 @@ public class TarUtils {
                 if (!parent.exists()) {
                     parent.mkdirs();
                 }
-                IOUtils.copy(fin, new FileOutputStream(curfile));
+                try (FileOutputStream fos = new FileOutputStream(curfile)) {
+                    IOUtils.copy(fin, fos);
+                }
             }
         }
     }
