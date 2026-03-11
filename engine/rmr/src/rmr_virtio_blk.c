@@ -28,9 +28,9 @@ int RmR_VirtioBlk_Open(RmR_VirtioBlkDev *dev, const char *path, const RmR_HW_Inf
   flags |= O_DIRECT;
 #endif
   rmr_mem_set(dev, 0u, sizeof(*dev));
-  dev->fd = open(path, flags, 0644);
+  dev->fd = open(path, flags);
   if (dev->fd < 0) {
-    dev->fd = open(path, O_RDWR, 0644);
+    dev->fd = open(path, O_RDWR);
     if (dev->fd < 0) return -1;
   }
   dev->sector_size = RMR_VIRTIO_SECTOR_SIZE;

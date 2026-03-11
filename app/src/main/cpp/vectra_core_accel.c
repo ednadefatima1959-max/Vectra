@@ -1,9 +1,15 @@
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <jni.h>
 #include <stdint.h>
-#include "zero_compat.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <time.h>
+#include "zero_compat.h"
 #include "rmr_unified_kernel.h"
 #include "rmr_lowlevel.h"
 #if defined(RMR_ENABLE_POLICY_MODULE)
@@ -495,7 +501,7 @@ JNIEXPORT jstring JNICALL Java_com_vectras_vm_core_NativeLogcatBridge_nativeRead
         if(s->len>0){
             uint32_t copy=s->len;
             if(out+copy+1>=payloadBytes) copy=(uint32_t)(payloadBytes-out-2);
-            memcpy(payload+out,s->text,copy);
+            for(uint32_t j=0; j<copy; j++){ payload[out+j]=s->text[j]; }
             out+=copy;
             payload[out++]='\n';
             count++;
