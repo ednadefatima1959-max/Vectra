@@ -22,6 +22,9 @@ jobs:
       - name: Block firebasestorage links in web assets
         run: bash tools/check_no_firebasestorage_links.sh
 
+      - name: Validate docs reference commit consistency
+        run: bash tools/check_docs_reference_commit.sh
+
       - name: Install host build deps
         run: |
           sudo apt-get update

@@ -114,5 +114,5 @@ O manager integra sinais de hardware e fast-paths sem quebrar fallback:
 ## Metadados
 - Versão do documento: 1.2
 - Última atualização: 2026-03-06
-- Commit de referência: `f16c52a`
+- Commit de referência: `a70a4d9`
 - Domínio de código coberto: Gerenciador de benchmark do app Android e diagnóstico de execução.
