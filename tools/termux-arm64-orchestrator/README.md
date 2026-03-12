@@ -50,9 +50,12 @@ bash tools/termux-arm64-orchestrator/orchestrate-build.sh
 - `ANDROID_CMAKE_VERSION` (default `3.22.1`)
 - `BUILD_SPILL_DIR` (default `.build-spill`)
 - `VECTRAS_RELEASE_STORE_FILE` (obrigatória para release; fallback local privado opcional em `.secrets/vectras-release.jks`, fora do Git)
-- `VECTRAS_RELEASE_STORE_PASSWORD` (default `856856`)
-- `VECTRAS_RELEASE_KEY_ALIAS` (default `vectras`)
-- `VECTRAS_RELEASE_KEY_PASSWORD` (default `856856`)
-- Legadas temporárias (com warning): `VECTRAS_KEYSTORE`, `VECTRAS_STORE_PASSWORD`, `VECTRAS_KEY_ALIAS`, `VECTRAS_KEY_PASSWORD`
+- `VECTRAS_RELEASE_KEY_ALIAS` (obrigatória para release; compatível com legado `VECTRAS_KEY_ALIAS`)
+- `VECTRAS_RELEASE_STORE_PASSWORD` (obrigatória para release; compatível com legado `VECTRAS_STORE_PASSWORD`)
+- `VECTRAS_RELEASE_KEY_PASSWORD` (obrigatória para release; compatível com legado `VECTRAS_KEY_PASSWORD`)
+- `TOOLCHAIN_PACK_DIR` (default `.toolchain-packs`)
+- `ALLOW_NETWORK_TOOLCHAIN=0|1` (quando `0`, exige pack local de cmdline-tools)
+- `ENABLE_FORK_SYNC=0|1` (sincroniza forks externos declarados antes do bootstrap)
+- `ALLOW_NETWORK_FORKS=0|1` (quando `0`, não baixa forks; forks obrigatórios ausentes geram erro)
 - `BOOTSTRAP_ANDROID=0|1`
 - `CI_DRY_RUN=0|1`
