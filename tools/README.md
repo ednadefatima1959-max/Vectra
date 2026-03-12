@@ -14,6 +14,14 @@ Automação de verificação e utilitários operacionais.
 - Fluxo de APK assinado local: [`tools/apk/README.md`](apk/README.md)
 - Contexto global de camadas: [`docs/THREE_LAYER_ANALYSIS.md`](../docs/THREE_LAYER_ANALYSIS.md)
 
+
+## Execução Gradle canônica
+Use sempre o wrapper de ferramentas para comandos Gradle neste repositório:
+
+```bash
+./tools/gradle_with_jdk21.sh <tarefas-ou-opções-gradle>
+```
+
 ## Cadeia de comando (lógica de inspeção)
 ```bash
 find tools -maxdepth 3 -type d | sort
