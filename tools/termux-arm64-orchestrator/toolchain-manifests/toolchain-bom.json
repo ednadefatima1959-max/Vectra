@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0",
+  "generatedBy": "termux-arm64-orchestrator",
+  "components": [
+    {
+      "name": "jdk",
+      "version": "21",
+      "source": "https://packages.termux.dev",
+      "sha256": "termux-package-sha256-not-fixed",
+      "license": "GPL-2.0-only WITH Classpath-exception-2.0"
+    },
+    {
+      "name": "android-sdk-cmdline-tools",
+      "version": "13114758",
+      "source": "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip",
+      "sha256": "7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee",
+      "license": "Android Software Development Kit License Agreement"
+    },
+    {
+      "name": "android-ndk",
+      "version": "27.2.12479018",
+      "source": "https://dl.google.com/android/repository/repository2-1.xml",
+      "sha256": "sdkmanager-managed-artifact-sha256",
+      "license": "Android NDK License"
+    },
+    {
+      "name": "android-cmake",
+      "version": "3.22.1",
+      "source": "https://dl.google.com/android/repository/repository2-1.xml",
+      "sha256": "sdkmanager-managed-artifact-sha256",
+      "license": "BSD-3-Clause"
+    }
+  ]
+}

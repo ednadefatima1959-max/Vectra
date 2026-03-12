@@ -21,7 +21,9 @@ Este módulo é para **build local no terminal**, sem depender de GitHub Actions
 - `c/storage_spill_allocator.c`: cria arquivo de spill (`spill.bin`) para suporte de memória por storage.
 - `bootstrap-termux-android15.sh`: instala/prepara cmdline-tools + SDK + NDK + CMake local (`.android-sdk`) e gera `local.properties`.
 - `orchestrate-build.sh`: orquestrador principal (detecção, spill, bootstrap, build e verificação de assinatura).
-- `legal-compliance-check.sh`: valida pré-requisitos legais e metadados de release + contrato de assinatura por variável.
+- `legal-compliance-check.sh`: valida pré-requisitos legais, manifesto de toolchain (BOM) e metadados de release + contrato de assinatura por variável.
+- `TOOLCHAIN_LICENSES.md`: inventário de licença/origem de JDK/SDK/NDK/CMake usados no fluxo local.
+- `toolchain-manifests/toolchain-bom.json`: BOM de toolchain com versão + origem + hash + licença para gate de conformidade.
 - `run-local-termux-build.sh`: entrypoint único para execução local no terminal.
 
 ## Execução local (recomendada)
