@@ -5,7 +5,11 @@
    Compatível: ARMv8-A AArch64 | QEMU virt | RPi4
    ═══════════════════════════════════════════════════════ */
 
+#ifdef __ARM_FEATURE_CRC32
 .arch armv8-a+crc
+#else
+.arch armv8-a
+#endif
 .text
 
 /* ─── rmr_casm_bridge_marker ──────────────────────────────

@@ -14,13 +14,13 @@
 #endif
 
 #if RMR_ASM_CORE_EXPERIMENTAL && RMR_ASM_CORE_X86_64_VALIDATED && defined(__x86_64__)
-uint32_t rmr_casm_xor_fold32_x86_64(const uint8_t *data, size_t size);
+extern uint32_t rmr_casm_xor_fold32_x86_64(const uint8_t *data, size_t size) __attribute__((weak));
 #define RMR_CASM_HAS_ASM 1
 #elif RMR_ASM_CORE_EXPERIMENTAL && RMR_ASM_CORE_ARM64_VALIDATED && defined(__aarch64__)
-uint32_t rmr_casm_xor_fold32_arm64(const uint8_t *data, size_t size);
+extern uint32_t rmr_casm_xor_fold32_arm64(const uint8_t *data, size_t size) __attribute__((weak));
 #define RMR_CASM_HAS_ASM 1
 #elif RMR_ASM_CORE_EXPERIMENTAL && RMR_ASM_CORE_RISCV64_VALIDATED && defined(__riscv) && (__riscv_xlen == 64)
-uint32_t rmr_casm_xor_fold32_riscv64(const uint8_t *data, size_t size);
+extern uint32_t rmr_casm_xor_fold32_riscv64(const uint8_t *data, size_t size) __attribute__((weak));
 #define RMR_CASM_HAS_ASM 1
 #else
 #define RMR_CASM_HAS_ASM 0
@@ -63,13 +63,21 @@ uint32_t RmR_CASM_XorFold32(const uint8_t *data, size_t size, RmR_CASM_Report *r
 #if RMR_CASM_HAS_ASM
   if (data && size != 0u) {
     #if defined(__x86_64__)
-    checksum = rmr_casm_xor_fold32_x86_64(data, size);
+    if (rmr_casm_xor_fold32_x86_64) {
+      checksum = rmr_casm_xor_fold32_x86_64(data, size);
+      used_asm = 1u;
+    }
 #elif defined(__aarch64__)
-    checksum = rmr_casm_xor_fold32_arm64(data, size);
+    if (rmr_casm_xor_fold32_arm64) {
+      checksum = rmr_casm_xor_fold32_arm64(data, size);
+      used_asm = 1u;
+    }
 #elif defined(__riscv) && (__riscv_xlen == 64)
-    checksum = rmr_casm_xor_fold32_riscv64(data, size);
+    if (rmr_casm_xor_fold32_riscv64) {
+      checksum = rmr_casm_xor_fold32_riscv64(data, size);
+      used_asm = 1u;
+    }
 #endif
-    used_asm = 1u;
   }
 #endif
 
@@ -92,11 +100,11 @@ uint32_t RmR_CASM_XorFold32_Interop(const uint8_t *data, size_t size, uint32_t *
 #if RMR_CASM_HAS_ASM
   if (data && size != 0u) {
     #if defined(__x86_64__)
-    csum_asm = rmr_casm_xor_fold32_x86_64(data, size);
+    if (rmr_casm_xor_fold32_x86_64) csum_asm = rmr_casm_xor_fold32_x86_64(data, size);
 #elif defined(__aarch64__)
-    csum_asm = rmr_casm_xor_fold32_arm64(data, size);
+    if (rmr_casm_xor_fold32_arm64) csum_asm = rmr_casm_xor_fold32_arm64(data, size);
 #elif defined(__riscv) && (__riscv_xlen == 64)
-    csum_asm = rmr_casm_xor_fold32_riscv64(data, size);
+    if (rmr_casm_xor_fold32_riscv64) csum_asm = rmr_casm_xor_fold32_riscv64(data, size);
 #endif
   }
 #endif

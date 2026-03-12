@@ -2,8 +2,7 @@
 #ifndef RMR_BENCH_H
 #define RMR_BENCH_H
 
-typedef unsigned char u8;
-typedef unsigned int u32;
+#include "rmr_types.h"
 
 typedef struct {
   u32 alu;

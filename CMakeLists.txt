@@ -117,6 +117,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarc
   set(RMR_HAS_NEON_SELFTEST TRUE)
 endif()
 
+if(RMR_HAS_CASM)
+  add_compile_definitions(VECTRA_HAS_CASM_MARKER=1)
+else()
+  add_compile_definitions(VECTRA_HAS_CASM_MARKER=0)
+endif()
+
 add_library(rmr STATIC ${RMR_SOURCES})
 rmr_apply_common_flags(rmr)
 
@@ -149,6 +155,7 @@ rmr_apply_common_flags(rafaelia_demo)
 
 add_executable(rmr_bench bench/src/rmr_benchmark_main.c)
 target_link_libraries(rmr_bench PRIVATE rmr)
+target_compile_definitions(rmr_bench PRIVATE RMR_JNI_BUILD=1)
 rmr_apply_common_flags(rmr_bench)
 
 add_executable(bitomega_smoketest demo_cli/src/bitomega_smoketest.c)
@@ -167,7 +174,7 @@ rmr_apply_common_flags(bitraf_static)
 target_link_libraries(rmr PUBLIC bitraf_static)
 
 add_library(bitraf_shared SHARED engine/rmr/src/bitraf.c)
-set_target_properties(bitraf_shared PROPERTIES OUTPUT_NAME bitraf)
+set_target_properties(bitraf_shared PROPERTIES OUTPUT_NAME bitraf_shared)
 rmr_apply_common_flags(bitraf_shared)
 
 add_executable(bitraf_selftest demo_cli/src/bitraf_selftest.c)

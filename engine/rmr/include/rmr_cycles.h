@@ -2,7 +2,7 @@
 #ifndef RMR_CYCLES_H
 #define RMR_CYCLES_H
 
-typedef unsigned long long u64;
+#include "rmr_types.h"
 
 u64 RmR_ReadCycles(void);
 

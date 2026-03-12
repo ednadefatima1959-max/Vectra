@@ -15,7 +15,9 @@ include(${VECTRA_REPO_ROOT}/engine/rmr/sources.cmake)
 
 set(VECTRA_ENGINE_CORE_SOURCES)
 foreach(_src IN LISTS RMR_ENGINE_CORE_SOURCES)
-    list(APPEND VECTRA_ENGINE_CORE_SOURCES ${VECTRA_REPO_ROOT}/${_src})
+    if(NOT _src STREQUAL "engine/rmr/src/rmr_baremetal_compat.c")
+        list(APPEND VECTRA_ENGINE_CORE_SOURCES ${VECTRA_REPO_ROOT}/${_src})
+    endif()
 endforeach()
 
 set(VECTRA_ENGINE_POLICY_SOURCES)
