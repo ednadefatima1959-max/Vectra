@@ -1,15 +1,24 @@
-# Toolchain Licenses (Termux ARM64 Orchestrator)
+# Toolchain licensing map (Termux ARM64 orchestrator)
 
-Este documento centraliza origem e licença dos componentes de toolchain exigidos no bootstrap local.
+Este arquivo mapeia proveniência/licença mínima dos componentes externos consumidos no fluxo de APK.
 
-| Component | Distribution / Package | Source | License |
-| --- | --- | --- | --- |
-| JDK | `openjdk-21` (Termux package) | Termux package repository (`https://packages.termux.dev`) / OpenJDK upstream (`https://openjdk.org`) | GPL-2.0-only WITH Classpath-exception-2.0 |
-| Android SDK (cmdline-tools / platform-tools / build-tools / platforms) | Android SDK packages instalados via `sdkmanager` | Google Android SDK repository (`https://dl.google.com/android/repository/`) | Android Software Development Kit License Agreement |
-| Android NDK | `ndk;27.2.12479018` | Google Android SDK repository (`https://dl.google.com/android/repository/`) | Android NDK License (Android SDK License Agreement + third-party notices distribuídos no NDK) |
-| CMake (Android SDK) | `cmake;3.22.1` | Google Android SDK repository (`https://dl.google.com/android/repository/`) | BSD-3-Clause (upstream CMake) + termos de distribuição do Android SDK |
+## Componentes
+
+- android-cmdline-tools
+  - Origem: https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+  - Licença: Android SDK License
+- android-ndk
+  - Origem: `sdkmanager "ndk;27.2.12479018"`
+  - Licença: Android SDK License
+- android-cmake
+  - Origem: `sdkmanager "cmake;3.22.1"`
+  - Licença: Android SDK License
+- jdk
+  - Origem: JDK local detectado por `tools/gradle_with_jdk21.sh` (major 21/17)
+  - Licença: distribuição do JDK instalado no host (tipicamente GPL-2.0-with-classpath-exception para OpenJDK)
 
 ## Observações
 
-- As versões efetivas de SDK/NDK/CMake podem ser sobrescritas por variáveis de ambiente no bootstrap (`ANDROID_NDK_VERSION`, `ANDROID_CMAKE_VERSION`, etc.).
-- O inventário executável com versão + hash + origem fica em `toolchain-manifests/toolchain-bom.json`.
+- Este repositório não redistribui diretamente binários oficiais de SDK/NDK/CMake/JDK.
+- Integridade de download de cmdline-tools é validada por SHA256 em `bootstrap-termux-android15.sh`.
+- Inventário de componentes também existe em `toolchain-manifests/toolchain-bom.json`.

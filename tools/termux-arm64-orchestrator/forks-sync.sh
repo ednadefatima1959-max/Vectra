@@ -16,9 +16,18 @@ if [[ ! -f "$MANIFEST_FILE" ]]; then
 fi
 
 python - "$ROOT_DIR" "$MANIFEST_FILE" "$ALLOW_NETWORK_FORKS" <<'PY'
-import json, os, sys, urllib.request, tarfile, io
+import io
+import json
+import os
+import shutil
+import sys
+import tarfile
+import tempfile
+import urllib.request
+
 root, manifest_file, allow_network = sys.argv[1:4]
 allow_network = allow_network == "1"
+
 with open(manifest_file, 'r', encoding='utf-8') as f:
     m = json.load(f)
 
@@ -30,6 +39,14 @@ forks = m.get('forks', [])
 if not forks:
     print('[forks-sync] no forks declared; nothing to sync')
     sys.exit(0)
+
+def safe_extract(tf, path):
+    abs_path = os.path.abspath(path)
+    for member in tf.getmembers():
+        target = os.path.abspath(os.path.join(path, member.name))
+        if not target.startswith(abs_path + os.sep):
+            raise RuntimeError(f'unsafe tar path detected: {member.name}')
+    tf.extractall(path)
 
 for item in forks:
     name = item.get('name', '').strip()
@@ -66,25 +83,26 @@ for item in forks:
         print(f'[forks-sync] failed optional fork download {name}: {e}')
         continue
 
-    os.makedirs(dest, exist_ok=True)
-    tf = tarfile.open(fileobj=io.BytesIO(data), mode='r:gz')
-    members = tf.getmembers()
-    top = None
-    for mbr in members:
-        if '/' in mbr.name:
-            top = mbr.name.split('/',1)[0]
-            break
-    tf.extractall(out_root)
-    if top:
-        extracted = os.path.join(out_root, top)
-        if extracted != dest and os.path.isdir(extracted):
-            if os.path.isdir(dest):
-                for entry in os.listdir(dest):
-                    p = os.path.join(dest, entry)
-                    if os.path.isdir(p):
-                        import shutil; shutil.rmtree(p)
-                    else:
-                        os.remove(p)
-            os.replace(extracted, dest)
-    print(f'[forks-sync] synced {name} -> {dest}')
+    tmp_extract = tempfile.mkdtemp(prefix='forksync-', dir=out_root)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
+            safe_extract(tf, tmp_extract)
+
+        roots = [x for x in os.listdir(tmp_extract) if os.path.isdir(os.path.join(tmp_extract, x))]
+        if not roots:
+            raise RuntimeError('downloaded tar has no root folder')
+
+        extracted_root = os.path.join(tmp_extract, roots[0])
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        if os.path.isdir(dest):
+            shutil.rmtree(dest)
+        shutil.move(extracted_root, dest)
+        print(f'[forks-sync] synced {name} -> {dest}')
+    except Exception as e:
+        if required:
+            print(f'[forks-sync] failed required fork sync {name}: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f'[forks-sync] failed optional fork sync {name}: {e}')
+    finally:
+        shutil.rmtree(tmp_extract, ignore_errors=True)
 PY

@@ -20,14 +20,18 @@ Este módulo é para **build local no terminal**, sem depender de GitHub Actions
 - `c/arm64_neon_probe.c`: detector de HWCAP/NEON/ASIMD/SVE em ARM64.
 - `c/host_probe.c`: coleta estruturada de arquitetura/page size/features/permissões de filesystem do host.
 - `c/storage_spill_allocator.c`: cria arquivo de spill (`spill.bin`) para suporte de memória por storage.
-- `bootstrap-termux-android15.sh`: instala/prepara cmdline-tools + SDK + NDK + CMake local (`.android-sdk`) e gera `local.properties`.
-- `toolchain-core/`: submódulo com contratos explícitos para detectar host, resolver toolchain, ativar env e validar pré-requisitos.
+- `bootstrap-termux-android15.sh`: instala/prepara cmdline-tools + SDK + NDK + CMake local (`.android-sdk`) e gera `local.properties` (com suporte a pack local offline-first em `.toolchain-packs`).
 - `orchestrate-build.sh`: orquestrador principal (detecção, spill, bootstrap, build e verificação de assinatura).
 - `legal-compliance-check.sh`: valida pré-requisitos legais, manifesto de toolchain (BOM) e metadados de release + contrato de assinatura por variável.
 - `TOOLCHAIN_LICENSES.md`: inventário de licença/origem de JDK/SDK/NDK/CMake usados no fluxo local.
 - `toolchain-manifests/toolchain-bom.json`: BOM de toolchain com versão + origem + hash + licença para gate de conformidade.
 - `run-local-termux-build.sh`: entrypoint único para execução local no terminal.
-- `TOOLCHAIN_CORE.md`: documentação da API de integração do submódulo `toolchain-core`.
+- `TOOLCHAIN_CORE.md`: contrato interno dos módulos de toolchain reutilizáveis.
+- `TOOLCHAIN_LICENSES.md`: inventário mínimo de licenças/proveniência da toolchain externa.
+- `toolchain-core/*.sh`: detecção de host, resolução de ambiente, ativação e verificação da toolchain.
+- `toolchain-manifests/toolchain-bom.json`: BOM de componentes JDK/SDK/NDK/CMake usados no fluxo.
+- `forks-sync.sh`: sincroniza fontes de forks externos (GitHub codeload) declarados em manifesto.
+- `fork-manifests/forks-sources.json`: manifesto de forks necessários/opcionais para composição local.
 
 ## Execução local (recomendada)
 
@@ -59,7 +63,8 @@ bash tools/termux-arm64-orchestrator/orchestrate-build.sh
 - `VECTRAS_RELEASE_KEY_PASSWORD` (obrigatória para release; compatível com legado `VECTRAS_KEY_PASSWORD`)
 - `TOOLCHAIN_PACK_DIR` (default `.toolchain-packs`)
 - `ALLOW_NETWORK_TOOLCHAIN=0|1` (quando `0`, exige pack local de cmdline-tools)
-- `ENABLE_FORK_SYNC=0|1` (sincroniza forks externos declarados antes do bootstrap)
+- `ENABLE_FORK_SYNC=0|1` (default `0`; sincroniza forks externos declarados antes do bootstrap)
 - `ALLOW_NETWORK_FORKS=0|1` (quando `0`, não baixa forks; forks obrigatórios ausentes geram erro)
+- `RELEASE_SIGNING_REQUIRED=0|1` (default `1`; quando `0`, pula somente validação de credenciais de signing no compliance gate)
 - `BOOTSTRAP_ANDROID=0|1`
 - `CI_DRY_RUN=0|1`

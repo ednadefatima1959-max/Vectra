@@ -9,7 +9,7 @@ BUILD_SPILL_DIR="${BUILD_SPILL_DIR:-$ROOT_DIR/.build-spill}"
 ENABLE_SPILL="${ENABLE_SPILL:-1}"
 CI_DRY_RUN="${CI_DRY_RUN:-0}"
 BOOTSTRAP_ANDROID="${BOOTSTRAP_ANDROID:-1}"
-ENABLE_FORK_SYNC="${ENABLE_FORK_SYNC:-1}"
+ENABLE_FORK_SYNC="${ENABLE_FORK_SYNC:-0}"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-35}"
 VECTRAS_RELEASE_STORE_FILE="${VECTRAS_RELEASE_STORE_FILE:-}"
 VECTRAS_RELEASE_KEY_ALIAS="${VECTRAS_RELEASE_KEY_ALIAS:-}"
@@ -34,8 +34,6 @@ export VECTRAS_RELEASE_STORE_FILE VECTRAS_RELEASE_KEY_ALIAS VECTRAS_RELEASE_STOR
 APK_PATH="${APK_PATH:-$ROOT_DIR/app/build/outputs/apk/release/app-release.apk}"
 GRADLE_WRAPPER="$ROOT_DIR/tools/gradle_with_jdk21.sh"
 TOOLCHAIN_CORE_DIR="$ROOT_DIR/tools/termux-arm64-orchestrator/toolchain-core"
-HOST_ENV_FILE="$BUILD_SPILL_DIR/host.env"
-TOOLCHAIN_ENV_FILE="$BUILD_SPILL_DIR/toolchain.env"
 
 SPILL_ALLOC_MB="${SPILL_ALLOC_MB:-256}"
 HOST_PROBE_FILE="$BUILD_SPILL_DIR/host-probe.txt"
@@ -292,6 +290,20 @@ sync_required_forks() {
   fi
 }
 
+sync_required_forks() {
+  if [[ "$ENABLE_FORK_SYNC" != "1" ]]; then
+    log "fork sync desabilitado por ENABLE_FORK_SYNC=$ENABLE_FORK_SYNC"
+    return
+  fi
+
+  if [[ -x tools/termux-arm64-orchestrator/forks-sync.sh ]]; then
+    log "sincronizando forks externos necessários"
+    bash tools/termux-arm64-orchestrator/forks-sync.sh
+  else
+    warn "forks-sync.sh ausente"
+  fi
+}
+
 bootstrap_android_env() {
   if [[ "$BOOTSTRAP_ANDROID" != "1" ]]; then
     log "bootstrap Android desabilitado por BOOTSTRAP_ANDROID=$BOOTSTRAP_ANDROID"
@@ -374,7 +386,7 @@ run_build() {
     -Pandroid.injected.signing.store.password="$VECTRAS_RELEASE_STORE_PASSWORD" \
     -Pandroid.injected.signing.key.alias="$VECTRAS_RELEASE_KEY_ALIAS" \
     -Pandroid.injected.signing.key.password="$VECTRAS_RELEASE_KEY_PASSWORD" \
-    -Dorg.gradle.jvmargs="${ORCHESTRATOR_GRADLE_JVMARGS:--Xmx2g -XX:MaxMetaspaceSize=512m -XX:+UseSerialGC}"
+    -Dorg.gradle.jvmargs="-Xmx2g -XX:MaxMetaspaceSize=512m -XX:+UseSerialGC"
 
   verify_signing "$APK_PATH"
   log "build finished (signed, local artifact only; sem publicação em loja)"
@@ -392,6 +404,9 @@ require_cmd "$TOOLCHAIN_CORE_DIR/verify-toolchain.sh"
 log "running legal compliance gate"
 bash tools/termux-arm64-orchestrator/legal-compliance-check.sh
 
+log "running legal compliance gate"
+RELEASE_SIGNING_REQUIRED=1 bash tools/termux-arm64-orchestrator/legal-compliance-check.sh
+
 run_toolchain_core_probe
 detect_arch
 configure_signing_env
@@ -399,6 +414,8 @@ run_native_helpers
 configure_memory_spill
 configure_toolchain_paths
 configure_toolchain_flags
+run_native_helpers
+sync_required_forks
 bootstrap_android_env
 resolve_toolchain
 verify_toolchain

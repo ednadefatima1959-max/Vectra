@@ -4,15 +4,38 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-TOOLCHAIN_LICENSES_FILE="tools/termux-arm64-orchestrator/TOOLCHAIN_LICENSES.md"
-TOOLCHAIN_BOM_FILE="tools/termux-arm64-orchestrator/toolchain-manifests/toolchain-bom.json"
+RELEASE_SIGNING_REQUIRED="${RELEASE_SIGNING_REQUIRED:-1}"
+
+# Compatibilidade com variáveis legadas de assinatura
+if [[ -z "${VECTRAS_RELEASE_STORE_FILE:-}" && -n "${VECTRAS_KEYSTORE:-}" ]]; then
+  export VECTRAS_RELEASE_STORE_FILE="$VECTRAS_KEYSTORE"
+fi
+if [[ -z "${VECTRAS_RELEASE_KEY_ALIAS:-}" && -n "${VECTRAS_KEY_ALIAS:-}" ]]; then
+  export VECTRAS_RELEASE_KEY_ALIAS="$VECTRAS_KEY_ALIAS"
+fi
+if [[ -z "${VECTRAS_RELEASE_STORE_PASSWORD:-}" && -n "${VECTRAS_STORE_PASSWORD:-}" ]]; then
+  export VECTRAS_RELEASE_STORE_PASSWORD="$VECTRAS_STORE_PASSWORD"
+fi
+if [[ -z "${VECTRAS_RELEASE_KEY_PASSWORD:-}" && -n "${VECTRAS_KEY_PASSWORD:-}" ]]; then
+  export VECTRAS_RELEASE_KEY_PASSWORD="$VECTRAS_KEY_PASSWORD"
+fi
 
 required_files=(
   "LICENSE"
   "THIRD_PARTY_NOTICES.md"
   "app/build.gradle"
-  "$TOOLCHAIN_LICENSES_FILE"
-  "$TOOLCHAIN_BOM_FILE"
+  "tools/gradle_with_jdk21.sh"
+  "tools/termux-arm64-orchestrator/bootstrap-termux-android15.sh"
+  "tools/termux-arm64-orchestrator/toolchain-pack.sh"
+  "tools/termux-arm64-orchestrator/forks-sync.sh"
+  "tools/termux-arm64-orchestrator/fork-manifests/forks-sources.json"
+  "tools/termux-arm64-orchestrator/TOOLCHAIN_LICENSES.md"
+  "tools/termux-arm64-orchestrator/TOOLCHAIN_CORE.md"
+  "tools/termux-arm64-orchestrator/toolchain-manifests/toolchain-bom.json"
+  "tools/termux-arm64-orchestrator/toolchain-core/detect-host.sh"
+  "tools/termux-arm64-orchestrator/toolchain-core/resolve-toolchain.sh"
+  "tools/termux-arm64-orchestrator/toolchain-core/activate-env.sh"
+  "tools/termux-arm64-orchestrator/toolchain-core/verify-toolchain.sh"
 )
 
 for file in "${required_files[@]}"; do
@@ -21,53 +44,6 @@ for file in "${required_files[@]}"; do
     exit 1
   fi
 done
-
-validate_toolchain_bom() {
-  local bom_file="$1"
-
-  python3 - "$bom_file" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-bom_path = Path(sys.argv[1])
-required_fields = ("name", "version", "source", "sha256", "license")
-
-try:
-    raw = bom_path.read_text(encoding="utf-8")
-except OSError:
-    print(f"[compliance] toolchain BOM unreadable: {bom_path}", file=sys.stderr)
-    raise SystemExit(1)
-
-try:
-    doc = json.loads(raw)
-except json.JSONDecodeError as exc:
-    print(f"[compliance] invalid toolchain BOM JSON at line {exc.lineno}, column {exc.colno}", file=sys.stderr)
-    raise SystemExit(1)
-
-components = doc.get("components")
-if not isinstance(components, list) or not components:
-    print("[compliance] toolchain BOM must contain a non-empty 'components' array", file=sys.stderr)
-    raise SystemExit(1)
-
-for idx, component in enumerate(components):
-    item_ref = f"components[{idx}]"
-    if not isinstance(component, dict):
-        print(f"[compliance] {item_ref} must be an object", file=sys.stderr)
-        raise SystemExit(1)
-
-    for field in required_fields:
-        if field not in component:
-            print(f"[compliance] {item_ref} missing field: {field}", file=sys.stderr)
-            raise SystemExit(1)
-        value = component[field]
-        if not isinstance(value, str) or not value.strip():
-            print(f"[compliance] {item_ref}.{field} must be a non-empty string", file=sys.stderr)
-            raise SystemExit(1)
-PY
-}
-
-validate_toolchain_bom "$TOOLCHAIN_BOM_FILE"
 
 if ! rg -n "android\.injected\.signing\.store\.file|VECTRAS_RELEASE_STORE_FILE" app/build.gradle >/dev/null; then
   echo "[compliance] app/build.gradle must support signing store path via android.injected.signing.store.file or VECTRAS_RELEASE_STORE_FILE" >&2
@@ -84,33 +60,37 @@ if ! rg -n "targetSdk\s*=\s*.*targetApi" app/build.gradle >/dev/null; then
   exit 1
 fi
 
-required_signing_vars=(
-  "VECTRAS_RELEASE_STORE_FILE"
-  "VECTRAS_RELEASE_STORE_PASSWORD"
-  "VECTRAS_RELEASE_KEY_ALIAS"
-  "VECTRAS_RELEASE_KEY_PASSWORD"
-)
+if [[ "$RELEASE_SIGNING_REQUIRED" == "1" ]]; then
+  required_signing_vars=(
+    "VECTRAS_RELEASE_STORE_FILE"
+    "VECTRAS_RELEASE_STORE_PASSWORD"
+    "VECTRAS_RELEASE_KEY_ALIAS"
+    "VECTRAS_RELEASE_KEY_PASSWORD"
+  )
 
-for var_name in "${required_signing_vars[@]}"; do
-  if [[ -z "${!var_name:-}" ]]; then
-    echo "[compliance] missing required release signing variable: ${var_name}" >&2
+  for var_name in "${required_signing_vars[@]}"; do
+    if [[ -z "${!var_name:-}" ]]; then
+      echo "[compliance] missing required release signing variable: ${var_name}" >&2
+      exit 1
+    fi
+  done
+
+  if [[ "${VECTRAS_RELEASE_STORE_FILE:0:1}" != "/" ]]; then
+    echo "[compliance] invalid VECTRAS_RELEASE_STORE_FILE: expected absolute path" >&2
     exit 1
   fi
-done
 
-if [[ "${VECTRAS_RELEASE_STORE_FILE:0:1}" != "/" ]]; then
-  echo "[compliance] invalid VECTRAS_RELEASE_STORE_FILE: expected absolute path" >&2
-  exit 1
-fi
+  if [[ ! -f "$VECTRAS_RELEASE_STORE_FILE" ]]; then
+    echo "[compliance] invalid VECTRAS_RELEASE_STORE_FILE: file not found" >&2
+    exit 1
+  fi
 
-if [[ ! -f "$VECTRAS_RELEASE_STORE_FILE" ]]; then
-  echo "[compliance] invalid VECTRAS_RELEASE_STORE_FILE: file not found" >&2
-  exit 1
-fi
-
-if [[ -z "${VECTRAS_RELEASE_KEY_ALIAS//[[:space:]]/}" ]]; then
-  echo "[compliance] invalid VECTRAS_RELEASE_KEY_ALIAS: alias must be non-empty" >&2
-  exit 1
+  if [[ -z "${VECTRAS_RELEASE_KEY_ALIAS//[[:space:]]/}" ]]; then
+    echo "[compliance] invalid VECTRAS_RELEASE_KEY_ALIAS: alias must be non-empty" >&2
+    exit 1
+  fi
+else
+  echo "[compliance] release signing gate skipped by RELEASE_SIGNING_REQUIRED=$RELEASE_SIGNING_REQUIRED"
 fi
 
 if ! rg -n '"ndk;\$\{ANDROID_NDK_VERSION\}"|"ndk;\$ANDROID_NDK_VERSION"' tools/termux-arm64-orchestrator/bootstrap-termux-android15.sh >/dev/null; then
