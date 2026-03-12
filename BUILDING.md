@@ -20,12 +20,14 @@ from `ANDROID_SDK_ROOT` (or `ANDROID_HOME`) when the directory exists.
 
 ## Build commands
 ```bash
-./gradlew --version
-./gradlew clean
-./gradlew :app:assembleDebug --stacktrace
-./gradlew :app:assembleRelease --stacktrace
-./gradlew :app:lintDebug --stacktrace
+./tools/gradle_with_jdk21.sh --version
+./tools/gradle_with_jdk21.sh clean
+./tools/gradle_with_jdk21.sh :app:assembleDebug --stacktrace
+./tools/gradle_with_jdk21.sh :app:assembleRelease --stacktrace
+./tools/gradle_with_jdk21.sh :app:lintDebug --stacktrace
 ```
+
+> Use `./tools/gradle_with_jdk21.sh` como comando canônico: o wrapper aplica a política de JVM suportada (17/21) e faz autoajuste de `sdk.dir` quando possível.
 
 ## ABI policy
 Configured by `APP_ABI_POLICY` and `SUPPORTED_ABIS` in `gradle.properties`.
@@ -38,12 +40,12 @@ Default is arm64-only.
 
 To include 32-bit ARM:
 ```bash
-./gradlew -PAPP_ABI_POLICY=with-32bit -PSUPPORTED_ABIS=arm64-v8a,armeabi-v7a :app:assembleDebug
+./tools/gradle_with_jdk21.sh -PAPP_ABI_POLICY=with-32bit -PSUPPORTED_ABIS=arm64-v8a,armeabi-v7a :app:assembleDebug
 ```
 
 To run full internal ABI validation coverage:
 ```bash
-./gradlew -PAPP_ABI_POLICY=all -PSUPPORTED_ABIS=arm64-v8a,armeabi-v7a,x86,x86_64 :app:assembleDebug
+./tools/gradle_with_jdk21.sh -PAPP_ABI_POLICY=all -PSUPPORTED_ABIS=arm64-v8a,armeabi-v7a,x86,x86_64 :app:assembleDebug
 ```
 
 
