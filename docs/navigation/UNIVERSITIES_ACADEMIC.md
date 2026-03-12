@@ -26,5 +26,5 @@ Guia acadêmico para uso didático do projeto com foco em método experimental r
 ## Metadados
 - Versão do documento: 1.3
 - Última atualização: 2026-03-06
-- Commit de referência: `f16c52a`
+- Commit de referência: `a70a4d9`
 - Domínio de código coberto: Uso acadêmico de arquitetura, benchmark e runtime do projeto.

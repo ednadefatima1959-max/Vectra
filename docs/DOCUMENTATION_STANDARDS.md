@@ -57,6 +57,7 @@ Cada documento técnico deve conter, quando aplicável:
 - `Última atualização`: usar data ISO (`YYYY-MM-DD`) da revisão efetiva da PR.
 - `Versão do documento`: incrementar em `+0.1` para ajustes editoriais/estruturais e em `+1.0` para reestruturação completa de escopo.
 - Em documentos relacionados (ex.: `docs/README.md`, `docs/navigation/INDEX.md` e guias de navegação vinculados), atualizar metadados em bloco na mesma PR para manter coerência de rastreabilidade.
+- Em CI, executar `tools/check_docs_reference_commit.sh`; a pipeline deve falhar quando qualquer `Commit de referência` divergir do commit alvo de publicação (`DOCS_TARGET_COMMIT`, `GITHUB_SHA` ou `HEAD`).
 
 ## 7) Padrões para Arquivos de Navegação
 

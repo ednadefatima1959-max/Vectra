@@ -95,5 +95,5 @@ sequenceDiagram
 ## Metadados
 - Versão do documento: 1.2
 - Última atualização: 2026-03-06
-- Commit de referência: `f16c52a`
+- Commit de referência: `a70a4d9`
 - Domínio de código coberto: Arquitetura operacional VM (app Android + supervisor/runtime + engine C/JNI).
