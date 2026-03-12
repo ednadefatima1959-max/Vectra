@@ -2,9 +2,7 @@
 #ifndef RMR_BENCH_SUITE_H
 #define RMR_BENCH_SUITE_H
 
-typedef unsigned char u8;
-typedef unsigned int u32;
-typedef unsigned long long u64;
+#include "rmr_types.h"
 
 #define RMR_BENCH_COUNT 50u
 

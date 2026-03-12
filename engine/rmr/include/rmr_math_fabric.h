@@ -3,9 +3,7 @@
 
 #include "rmr_hw_detect.h"
 
-typedef unsigned char u8;
-typedef unsigned int u32;
-typedef unsigned long long u64;
+#include "rmr_types.h"
 
 #define RMR_MATH_DOMAINS 8u
 #define RMR_MATH_POINTS 9u

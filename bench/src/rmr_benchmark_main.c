@@ -1,3 +1,4 @@
+#include "rmr_types.h"
 #include "rmr_bench_suite.h"
 #include "rmr_hw_detect.h"
 #include "rmr_isorf.h"

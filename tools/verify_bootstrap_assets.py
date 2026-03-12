@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Valida presença e integridade básica dos bootstraps versionados no app."""
+"""Valida presença e integridade básica dos bootstraps versionados no app.
+Pode ser executado diretamente (./tools/verify_bootstrap_assets.py) ou via python3.
+"""
 
 from __future__ import annotations
 

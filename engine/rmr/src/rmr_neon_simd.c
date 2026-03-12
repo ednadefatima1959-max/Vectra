@@ -27,12 +27,17 @@ typedef unsigned long long u64;
 #  if defined(__has_include)
 #    if __has_include(<arm_neon.h>)
 #      include <arm_neon.h>
+#      define RMR_NEON_AVAILABLE 1
 #    else
-#      error "__aarch64__ build requires <arm_neon.h>"
+#      define RMR_NEON_AVAILABLE 0
 #    endif
 #  else
 #    include <arm_neon.h>
+#    define RMR_NEON_AVAILABLE 1
 #  endif
+#endif
+
+#if defined(__aarch64__) && defined(RMR_NEON_AVAILABLE) && (RMR_NEON_AVAILABLE == 1)
 
 u32 rmr_neon_xor_fold32(const u8 *data, u32 len) {
     if (!data || len == 0) return 0u;

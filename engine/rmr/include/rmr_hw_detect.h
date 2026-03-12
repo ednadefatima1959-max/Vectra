@@ -2,9 +2,7 @@
 #ifndef RMR_HW_DETECT_H
 #define RMR_HW_DETECT_H
 
-typedef unsigned char u8;
-typedef unsigned int u32;
-typedef unsigned long long u64;
+#include "rmr_types.h"
 
 typedef struct {
   u32 arch;

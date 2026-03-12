@@ -2,9 +2,7 @@
 #ifndef RMR_ISORF_H
 #define RMR_ISORF_H
 
-typedef unsigned char u8;
-typedef unsigned int u32;
-typedef unsigned long long u64;
+#include "rmr_types.h"
 
 typedef struct {
   u64 base_bit;
