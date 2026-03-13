@@ -47,17 +47,35 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android SDK licenses (non-interactive)
+        shell: bash
+        run: |
+          set -euo pipefail
+          licenses_input_file="$(mktemp)"
+          trap 'rm -f "${licenses_input_file}"' EXIT
+          for _ in $(seq 1 200); do
+            echo 'y'
+          done > "${licenses_input_file}"
+          sdkmanager --licenses < "${licenses_input_file}" > /dev/null
+
       - name: Install Android SDK packages
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses > /dev/null
           sdkmanager \
             "platform-tools" \
             "platforms;android-${COMPILE_API}" \
             "build-tools;${TOOLS_VERSION}" \
             "cmake;${CMAKE_VERSION}" \
             "ndk;${NDK_VERSION}"
+
+      - name: Generate local.properties
+        run: echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+
+      - name: Materialize Firebase config (optional fallback for debug/tests)
+        env:
+          VECTRAS_GOOGLE_SERVICES_JSON_B64: ${{ secrets.VECTRAS_GOOGLE_SERVICES_JSON_B64 }}
+        run: ./tools/ci/materialize_google_services_placeholder.sh
 
       - name: Make Gradle executable
         run: chmod +x ./gradlew
