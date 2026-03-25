@@ -9,15 +9,20 @@
 
 set(RMR_SOURCE_GROUP_CORE
   engine/rmr/src/bitomega.c
+  engine/rmr/src/bitraf.c
+  engine/rmr/src/rmr_bit_broadcast.c
   engine/rmr/src/rmr_baremetal_compat.c
   engine/rmr/src/rmr_cycles.c
   engine/rmr/src/rmr_hw_detect.c
   engine/rmr/src/rmr_isorf.c
   engine/rmr/src/rmr_apk_module.c
   engine/rmr/src/rmr_qemu_bridge.c
+  engine/rmr/src/rmr_predictive_cache.c
   engine/rmr/src/rmr_math_fabric.c
+  engine/rmr/src/rmr_output_sync.c
   engine/rmr/src/rafaelia_formulas_core.c
   engine/rmr/src/rmr_corelib.c
+  engine/rmr/src/rmr_coherence_engine.c
   engine/rmr/src/rmr_ll_ops.c
   engine/rmr/src/rmr_ll_tuning.c
   engine/rmr/src/rmr_casm_bridge.c
@@ -29,6 +34,7 @@ set(RMR_SOURCE_GROUP_CORE
   engine/rmr/src/rmr_lowlevel_mix.c
   engine/rmr/src/rmr_lowlevel_reduce.c
   engine/rmr/src/rmr_neon_simd.c
+  engine/rmr/src/rmr_simd_geometry.c
 )
 
 set(RMR_SOURCE_GROUP_OPTIONAL_POLICY
@@ -42,11 +48,13 @@ set(RMR_SOURCE_GROUP_ANDROID_ONLY
   engine/rmr/src/rmr_attractor.c
   engine/rmr/src/rmr_vhw_model.c
   engine/rmr/src/rmr_ethica_loss.c
+  engine/rmr/src/rmr_execution_graph.c
 )
 
 # Hosted/root-only units. Intentionally excluded from Android shared library.
 set(RMR_SOURCE_GROUP_HOST_ONLY
   engine/rmr/src/rmr_bench.c
+  engine/rmr/src/rmr_benchmark.c
   engine/rmr/src/rmr_bench_suite.c
 )
 

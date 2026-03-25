@@ -5,6 +5,8 @@
 #include "rmr_corelib.h"
 #include "rmr_hw_detect.h"
 #include "rmr_zipraf_core.h"
+#include "rmr_execution_graph.h"
+#include "rmr_output_sync.h"
 #if defined(RMR_ENABLE_POLICY_MODULE) && RMR_ENABLE_POLICY_MODULE
 #include "rmr_policy_kernel.h"
 #endif
@@ -355,9 +357,14 @@ rmr_status_t rmr_legacy_kernel_ingest(rmr_legacy_kernel_t *kernel,
 rmr_status_t rmr_legacy_kernel_process(rmr_legacy_kernel_t *kernel,
                                        const rmr_legacy_kernel_process_desc_t *desc,
                                        rmr_legacy_kernel_process_result_t *out_result) {
+  rmr_exec_graph_t graph;
+  uint64_t graph_out;
   if (!rmr_legacy_is_ready(kernel) || !desc || !out_result) return RMR_STATUS_ERR_ARG;
 
-  out_result->cpu_pressure = (uint32_t)((desc->cpu_cycles >> 10u) & 0xFFFFu);
+  rmr_execution_graph_build(&graph);
+  graph_out = rmr_execution_graph_run(&graph, (uint64_t)kernel->seed ^ kernel->rolling_bitraf_hash);
+
+  out_result->cpu_pressure = (uint32_t)(((desc->cpu_cycles >> 10u) ^ graph_out) & 0xFFFFu);
   out_result->storage_pressure =
       (uint32_t)(((desc->storage_read_bytes + desc->storage_write_bytes) >> 10u) & 0xFFFFu);
   out_result->io_pressure = (uint32_t)(((desc->input_bytes + desc->output_bytes) >> 10u) & 0xFFFFu);
@@ -405,6 +412,9 @@ rmr_status_t rmr_legacy_kernel_route(rmr_legacy_kernel_t *kernel,
   out_result->route_signature = toroidal_tag ^ ((uint64_t)kernel->rolling_crc32c << 32) ^
                                 kernel->rolling_bitraf_hash ^ (uint64_t)process->matrix_determinant ^
                                 ((uint64_t)route << 48u);
+  if (!rmr_output_commit_if_coherent(kernel->last_route_signature, out_result->route_signature)) {
+    out_result->route_signature = kernel->last_route_signature;
+  }
   kernel->last_route_signature = out_result->route_signature;
   kernel->stage_counter += 1u;
   return RMR_STATUS_OK;

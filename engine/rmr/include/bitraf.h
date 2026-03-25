@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "rmr_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -72,6 +74,17 @@ size_t bitraf_reconstruct_ex(const uint8_t *in, size_t in_len,
  */
 int bitraf_verify(const uint8_t *data, size_t len,
                   uint64_t expected_hash, uint64_t seed);
+
+typedef struct {
+  uint64_t id;
+  uint64_t state_hash;
+  uint64_t neighbors_mask;
+  uint32_t coherence_q16;
+} rmr_bit_state_t;
+
+rmr_bit_state_t bitraf_get_state_ref(uint64_t id);
+rmr_bit_state_t bitraf_get_neighbors(uint64_t id);
+
 
 #ifdef __cplusplus
 }

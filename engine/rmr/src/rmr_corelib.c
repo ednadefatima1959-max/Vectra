@@ -1,11 +1,26 @@
 #include "rmr_corelib.h"
 
+#include "rmr_coherence_engine.h"
+#include "rmr_predictive_cache.h"
+
 static int rmr_is_ws(uint8_t c) {
   return (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v') ? 1 : 0;
 }
 
+static uint64_t rmr_len_pattern(const uint8_t *s) {
+  return (uint64_t)(uintptr_t)s;
+}
+
 size_t rmr_len_u8(const uint8_t *s) {
   if (!s) return 0u;
+
+  {
+    uint64_t pattern = rmr_len_pattern(s);
+    uint64_t predicted = rmr_predict_state(pattern);
+    if (predicted != 0u && !rmr_coherence_should_execute(pattern, predicted)) {
+      return (size_t)predicted;
+    }
+  }
 
   const uint8_t *p = s;
   while (((uintptr_t)p & (sizeof(size_t) - 1u)) != 0u) {
@@ -21,7 +36,11 @@ size_t rmr_len_u8(const uint8_t *s) {
     if (((v - ones) & (~v) & highs) != 0u) {
       p = (const uint8_t *)w;
       while (*p != 0u) ++p;
-      return (size_t)(p - s);
+      {
+        size_t out = (size_t)(p - s);
+        rmr_cache_learn(rmr_len_pattern(s), (uint64_t)out);
+        return out;
+      }
     }
     ++w;
   }

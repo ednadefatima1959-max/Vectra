@@ -10,6 +10,7 @@
      hash φ-step, parity 2D, popcount bulk
    ─────────────────────────────────────────────────────────────── */
 #include "rmr_hw_detect.h"
+#include "rmr_simd_geometry.h"
 
 #include "zero.h"
 #include "zero_compat.h"
@@ -269,3 +270,8 @@ u32 rmr_neon_popcount_bulk(const u32 *data, u32 count) {
     return (u32)t;
 }
 #endif
+
+
+u32 rmr_neon_process_state_vector(const u32 *in, u32 *out, u32 count) {
+    return rmr_simd_process_state_vector(in, out, count);
+}

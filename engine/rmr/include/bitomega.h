@@ -89,6 +89,8 @@ uint32_t bitomega_norm01(uint32_t x);
 uint32_t bitomega_float_to_q16(float x);
 float bitomega_q16_to_float(uint32_t x);
 
+float bitomega_coherence_score(uint32_t a, uint32_t b);
+
 /* Canonical context constructor (all zeros, seed kept). */
 bitomega_ctx_t bitomega_ctx_default(uint64_t seed);
 

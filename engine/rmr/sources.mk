@@ -3,6 +3,14 @@
 
 RMR_ENGINE_CORE_SOURCES :=
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/bitomega.c
+RMR_ENGINE_CORE_SOURCES += engine/rmr/src/bitraf.c
+RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_bit_broadcast.c
+RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_benchmark.c
+RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_coherence_engine.c
+RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_execution_graph.c
+RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_output_sync.c
+RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_predictive_cache.c
+RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_simd_geometry.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_apk_module.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_attractor.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_baremetal_compat.c

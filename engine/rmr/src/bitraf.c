@@ -282,3 +282,19 @@ int bitraf_verify(const uint8_t *data, size_t len,
   d |= d >> 1;
   return (int)((d ^ 1u) & 1u);
 }
+
+rmr_bit_state_t bitraf_get_state_ref(uint64_t id) {
+  rmr_bit_state_t state;
+  state.id = id;
+  state.state_hash = bitraf_mix64(id ^ g_bitraf_seed);
+  state.neighbors_mask = bitraf_mix64(id + 1u) ^ bitraf_mix64(id + 2u);
+  state.coherence_q16 = (uint32_t)(state.state_hash & 0xFFFFu);
+  return state;
+}
+
+rmr_bit_state_t bitraf_get_neighbors(uint64_t id) {
+  rmr_bit_state_t state = bitraf_get_state_ref(id);
+  state.state_hash ^= bitraf_mix64(id ^ 0xA5A5A5A5A5A5A5A5ULL);
+  state.neighbors_mask = bitraf_mix64(id - 1u) ^ bitraf_mix64(id + 1u) ^ bitraf_mix64(id + 3u);
+  return state;
+}

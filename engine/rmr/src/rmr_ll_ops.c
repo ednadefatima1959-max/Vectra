@@ -1,5 +1,7 @@
 #include "rmr_ll_ops.h"
 
+#include "rmr_bit_broadcast.h"
+
 #if defined(_MSC_VER)
 #include <intrin.h>
 #endif
@@ -154,6 +156,7 @@ uint64_t RmR_LL_Rotr64(uint64_t v, uint32_t shift) {
 }
 
 uint32_t RmR_LL_PopCount32(uint32_t v) {
+  rmr_bit_broadcast_dispatch((uint64_t)v, 0xFFFFFFFFu);
 #if defined(__GNUC__) || defined(__clang__)
   return (uint32_t)__builtin_popcount(v);
 #else
@@ -162,6 +165,7 @@ uint32_t RmR_LL_PopCount32(uint32_t v) {
 }
 
 uint32_t RmR_LL_PopCount64(uint64_t v) {
+  rmr_bit_broadcast_dispatch(v, 0xFFFFFFFFFFFFFFFFULL);
 #if defined(__GNUC__) || defined(__clang__)
   return (uint32_t)__builtin_popcountll(v);
 #else

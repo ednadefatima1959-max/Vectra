@@ -1,70 +1,21 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
+#include "rmr_bit_broadcast.h"
 
-// Broadcast state structure
-typedef struct {
-    bool is_active;
-    int current_bit;
-    // Add other necessary state information
-} BroadcastState;
+#include "rmr_coherence_engine.h"
 
-// Reusable bit storage structure
-typedef struct {
-    int *bits;
-    int size;
-    int index;
-} ReusePool;
-
-// Function to initialize broadcast engine
-void initialize_broadcast_engine(BroadcastState *state) {
-    state->is_active = false;
-    state->current_bit = 0;
+rmr_bit_state_t rmr_bit_broadcast_map(uint64_t bit) {
+  return bitraf_get_neighbors(bit);
 }
 
-// Function to capture current state
-void capture_state(BroadcastState *state) {
-    // Logic for capturing the current state
-    printf("State captured: %d\n", state->current_bit);
-}
+rmr_bit_broadcast_result_t rmr_bit_broadcast_dispatch(uint64_t bit, uint64_t task_mask) {
+  rmr_bit_broadcast_result_t out;
+  rmr_bit_state_t mapped = rmr_bit_broadcast_map(bit);
+  float coherence = rmr_coherence_score(mapped.state_hash, task_mask);
 
-// Function to reuse a bit
-void reuse_bit(ReusePool *pool) {
-    if (pool->index < pool->size) {
-        int reused_bit = pool->bits[pool->index++];
-        printf("Reused bit: %d\n", reused_bit);
-    } else {
-        printf("No more bits to reuse.\n");
-    }
-}
-
-// Function to display current status
-void display_status(BroadcastState *state) {
-    printf("Broadcast is %s\n", state->is_active ? "active" : "inactive");
-}
-
-// Function to send output
-void send_output(int output) {
-    printf("Output sent: %d\n", output);
-}
-
-// Function to start broadcast
-void start_broadcast(BroadcastState *state) {
-    state->is_active = true;
-    printf("Broadcast started.\n");
-}
-
-// Function to stop broadcast
-void stop_broadcast(BroadcastState *state) {
-    state->is_active = false;
-    printf("Broadcast stopped.\n");
-}
-
-// Function to process the bit broadcast
-void process_bit_broadcast(BroadcastState *state, ReusePool *pool) {
-    if (state->is_active) {
-        capture_state(state);
-        reuse_bit(pool);
-        send_output(state->current_bit);
-    }
+  out.source_bit = bit;
+  out.task_mask = task_mask;
+  out.mapped_targets = mapped.neighbors_mask;
+  if (coherence < 0.40f) {
+    out.mapped_targets = 0u;
+  }
+  return out;
 }
