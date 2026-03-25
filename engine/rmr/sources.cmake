@@ -3,15 +3,20 @@
 
 set(RMR_ENGINE_CORE_SOURCES
   engine/rmr/src/bitomega.c
+  engine/rmr/src/bitraf.c
+  engine/rmr/src/rmr_bit_broadcast.c
   engine/rmr/src/rmr_apk_module.c
   engine/rmr/src/rmr_attractor.c
   engine/rmr/src/rmr_baremetal_compat.c
   engine/rmr/src/rmr_bench.c
+  engine/rmr/src/rmr_benchmark.c
   engine/rmr/src/rmr_bench_suite.c
   engine/rmr/src/rmr_casm_bridge.c
   engine/rmr/src/rmr_corelib.c
+  engine/rmr/src/rmr_coherence_engine.c
   engine/rmr/src/rmr_cycles.c
   engine/rmr/src/rmr_ethica_loss.c
+  engine/rmr/src/rmr_execution_graph.c
   engine/rmr/src/rmr_host_compat.c
   engine/rmr/src/rmr_hw_detect.c
   engine/rmr/src/rmr_isorf.c
@@ -21,8 +26,11 @@ set(RMR_ENGINE_CORE_SOURCES
   engine/rmr/src/rmr_lowlevel_portable.c
   engine/rmr/src/rmr_lowlevel_reduce.c
   engine/rmr/src/rmr_math_fabric.c
+  engine/rmr/src/rmr_output_sync.c
   engine/rmr/src/rmr_neon_simd.c
+  engine/rmr/src/rmr_simd_geometry.c
   engine/rmr/src/rmr_qemu_bridge.c
+  engine/rmr/src/rmr_predictive_cache.c
   engine/rmr/src/rmr_tcg_cache.c
   engine/rmr/src/rmr_unified_jni_bridge.c
   engine/rmr/src/rmr_unified_kernel.c

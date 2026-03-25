@@ -51,6 +51,16 @@ float bitomega_q16_to_float(uint32_t x) {
   return (float)clamp01_q16(x) / (float)BITOMEGA_Q16_ONE;
 }
 
+
+float bitomega_coherence_score(uint32_t a, uint32_t b) {
+  uint32_t xa = clamp01_q16(a);
+  uint32_t xb = clamp01_q16(b);
+  uint32_t hi = xa > xb ? xa : xb;
+  uint32_t lo = xa > xb ? xb : xa;
+  uint32_t delta = hi - lo;
+  return 1.0f - ((float)delta / (float)BITOMEGA_Q16_ONE);
+}
+
 bitomega_ctx_t bitomega_ctx_default(uint64_t seed) {
   bitomega_ctx_t c;
   c.coherence_in = 0u;

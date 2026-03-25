@@ -25,6 +25,9 @@ void rmr_neon_phi_step_bulk(uint32_t *states, uint32_t count);
 /** Bulk popcount across array of uint32_t words. */
 uint32_t rmr_neon_popcount_bulk(const uint32_t *data, uint32_t count);
 
+/** Delegates to geometry pipeline state processing. */
+uint32_t rmr_neon_process_state_vector(const uint32_t *in, uint32_t *out, uint32_t count);
+
 #ifdef __cplusplus
 }
 #endif
