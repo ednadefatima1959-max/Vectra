@@ -3,6 +3,7 @@
 #include "bitomega.h"
 #include "bitraf.h"
 #include "rmr_corelib.h"
+#include "rmr_invariant_extractor.h"
 #include "rmr_hw_detect.h"
 #include "rmr_zipraf_core.h"
 #include "rmr_execution_graph.h"
@@ -359,10 +360,16 @@ rmr_status_t rmr_legacy_kernel_process(rmr_legacy_kernel_t *kernel,
                                        rmr_legacy_kernel_process_result_t *out_result) {
   rmr_exec_graph_t graph;
   uint64_t graph_out;
+  uint64_t graph_seed;
+  rmr_invariant_fingerprint_t seed_fp;
   if (!rmr_legacy_is_ready(kernel) || !desc || !out_result) return RMR_STATUS_ERR_ARG;
 
   rmr_execution_graph_build(&graph);
-  graph_out = rmr_execution_graph_run(&graph, (uint64_t)kernel->seed ^ kernel->rolling_bitraf_hash);
+  graph_seed = (uint64_t)kernel->seed ^ kernel->rolling_bitraf_hash;
+  if (rmr_invariant_extract((const uint8_t *)&graph_seed, sizeof(graph_seed), &seed_fp) != RMR_INVARIANT_BROKEN) {
+    graph_seed ^= seed_fp.fingerprint;
+  }
+  graph_out = rmr_execution_graph_run(&graph, graph_seed);
 
   out_result->cpu_pressure = (uint32_t)(((desc->cpu_cycles >> 10u) ^ graph_out) & 0xFFFFu);
   out_result->storage_pressure =

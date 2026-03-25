@@ -237,6 +237,10 @@ add_executable(zipraf_core_selftest demo_cli/src/zipraf_core_selftest.c)
 target_link_libraries(zipraf_core_selftest PRIVATE rmr)
 rmr_apply_common_flags(zipraf_core_selftest)
 
+add_executable(rmr_invariant_extractor_selftest demo_cli/src/rmr_invariant_extractor_selftest.c)
+target_link_libraries(rmr_invariant_extractor_selftest PRIVATE rmr)
+rmr_apply_common_flags(rmr_invariant_extractor_selftest)
+
 if(RMR_HAS_NEON_SELFTEST)
   add_executable(rmr_neon_simd_selftest demo_cli/src/neon_simd_selftest.c)
   target_link_libraries(rmr_neon_simd_selftest PRIVATE rmr)
@@ -258,6 +262,7 @@ set(RMR_RUN_SELFTEST_COMMANDS
   rmr_hw_detect_selftest
   rmr_asm_equivalence_selftest
   zipraf_core_selftest
+  rmr_invariant_extractor_selftest
   bitomega_smoketest
 )
 
@@ -272,6 +277,7 @@ set(RMR_RUN_SELFTEST_DEPENDS
   rmr_hw_detect_selftest
   rmr_asm_equivalence_selftest
   zipraf_core_selftest
+  rmr_invariant_extractor_selftest
   bitomega_smoketest
 )
 
