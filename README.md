@@ -129,6 +129,7 @@ make run-bitomega-smoketest
 
 ## Governança e estado — navegação rápida
 - Estado do projeto: [`PROJECT_STATE.md`](PROJECT_STATE.md)
+- Mapa técnico por camadas: [`KEYINDEX.md`](KEYINDEX.md)
 - Histórico de mudanças: [`CHANGELOG.md`](CHANGELOG.md)
 - Notas de release: [`RELEASE_NOTES.md`](RELEASE_NOTES.md)
 - Índice documental: [`DOC_INDEX.md`](DOC_INDEX.md)
