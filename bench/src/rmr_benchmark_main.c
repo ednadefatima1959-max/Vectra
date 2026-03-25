@@ -8,11 +8,15 @@
 static void write_csv(const char *path, const RmR_Bench_SuiteResult *r) {
   FILE *f = fopen(path, "w");
   if (!f) return;
-  fprintf(f, "metric,score,variance,error_margin\n");
+  fprintf(f, "metric,score,variance,error_margin,execution_flags\n");
   for (unsigned i = 0; i < RMR_BENCH_COUNT; ++i) {
-    fprintf(f, "%u,%u,%u,%u\n", i, r->metric[i].score, r->metric[i].variance, r->metric[i].error_margin);
+    fprintf(f, "%u,%u,%u,%u,%u\n", i, r->metric[i].score, r->metric[i].variance, r->metric[i].error_margin, r->metric[i].execution_flags);
   }
-  fprintf(f, "total,%u,0,%u\n", r->total_score, r->total_error);
+  fprintf(f, "total,%u,0,%u,0\n", r->total_score, r->total_error);
+  fprintf(f, "coherence_mean,%u,0,0,0\n", r->coherence_mean_ppm);
+  fprintf(f, "reuse_ratio,%u,0,0,0\n", r->reuse_ratio_ppm);
+  fprintf(f, "skip_execution_ratio,%u,0,0,0\n", r->skip_execution_ratio_ppm);
+  fprintf(f, "invariant_violation_count,%u,0,0,0\n", r->invariant_violation_count);
   fclose(f);
 }
 
@@ -22,10 +26,12 @@ static void write_json(
     const RmR_HW_Info *hw,
     const RmR_ISOraf_Manifest *manifest,
     const u64 *matrix_map,
-    u32 matrix_map_count) {
+    u32 matrix_map_count,
+    u32 reconstruction_success_rate_ppm) {
   FILE *f = fopen(path, "w");
   if (!f) return;
   fprintf(f, "{\n");
+  fprintf(f, "  \"schema_version\": \"bench_run_v2\",\n");
   fprintf(f, "  \"hw\": {\"arch\": %u, \"ptr_bits\": %u, \"little_endian\": %u},\n", hw->arch, hw->ptr_bits, hw->is_little_endian);
   fprintf(f, "  \"manifest\": {\"magic\": %llu, \"identity\": %llu, \"logical_bits\": %llu, \"physical_bits\": %llu, \"page_bits\": %u, \"page_count\": %u, \"pages_used\": %u, \"data_word_used\": %u},\n",
           (unsigned long long)manifest->magic,
@@ -46,11 +52,16 @@ static void write_json(
   fprintf(f, "  \"total_score\": %u,\n", r->total_score);
   fprintf(f, "  \"total_error\": %u,\n", r->total_error);
   fprintf(f, "  \"score_formula_id\": \"%s\",\n", RMR_BENCH_SCORE_FORMULA_ID);
+  fprintf(f, "  \"coherence_mean\": %u,\n", r->coherence_mean_ppm);
+  fprintf(f, "  \"reuse_ratio\": %u,\n", r->reuse_ratio_ppm);
+  fprintf(f, "  \"skip_execution_ratio\": %u,\n", r->skip_execution_ratio_ppm);
+  fprintf(f, "  \"reconstruction_success_rate\": %u,\n", reconstruction_success_rate_ppm);
+  fprintf(f, "  \"invariant_violation_count\": %u,\n", r->invariant_violation_count);
   fprintf(f, "  \"metrics\": [\n");
   for (unsigned i = 0; i < RMR_BENCH_COUNT; ++i) {
     const char *comma = (i + 1u < RMR_BENCH_COUNT) ? "," : "";
-    fprintf(f, "    {\"id\": %u, \"score\": %u, \"variance\": %u, \"error_margin\": %u}%s\n",
-            i, r->metric[i].score, r->metric[i].variance, r->metric[i].error_margin, comma);
+    fprintf(f, "    {\"id\": %u, \"score\": %u, \"variance\": %u, \"error_margin\": %u, \"execution_flags\": %u}%s\n",
+            i, r->metric[i].score, r->metric[i].variance, r->metric[i].error_margin, r->metric[i].execution_flags, comma);
   }
   fprintf(f, "  ]\n");
   fprintf(f, "}\n");
@@ -80,17 +91,24 @@ int main(int argc, char **argv) {
   }
   RmR_ISOraf_ExportManifest(&isorf, &manifest);
   u32 matrix_map_count = RmR_ISOraf_ExportMatrixMap(&isorf, matrix_map, PAGE_COUNT);
+  u32 rebuild_ok = (u32)RmR_ISOraf_RebuildCheck(&isorf, &manifest);
+  u32 reconstruction_success_rate_ppm = rebuild_ok ? 1000000u : 0u;
 
   write_csv(csv, &res);
-  write_json(json, &res, &hw, &manifest, matrix_map, matrix_map_count);
+  write_json(json, &res, &hw, &manifest, matrix_map, matrix_map_count, reconstruction_success_rate_ppm);
 
   printf("bench_total_score=%u\n", res.total_score);
   printf("bench_total_error=%u\n", res.total_error);
   printf("bench_exec_signature=%llu\n", (unsigned long long)res.exec_signature);
+  printf("coherence_mean=%u\n", res.coherence_mean_ppm);
+  printf("reuse_ratio=%u\n", res.reuse_ratio_ppm);
+  printf("skip_execution_ratio=%u\n", res.skip_execution_ratio_ppm);
+  printf("reconstruction_success_rate=%u\n", reconstruction_success_rate_ppm);
+  printf("invariant_violation_count=%u\n", res.invariant_violation_count);
   printf("isorf_identity=%llu pages_used=%u rebuild=%u\n",
          (unsigned long long)manifest.identity,
          manifest.pages_used,
-         (unsigned)RmR_ISOraf_RebuildCheck(&isorf, &manifest));
+         rebuild_ok);
   printf("csv=%s\njson=%s\n", csv, json);
   return 0;
 }
