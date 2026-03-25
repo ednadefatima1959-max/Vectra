@@ -1,0 +1,2 @@
+{"id":"struct-001","class":"structural","input":{"tokens":["A","B","C"],"edges":[["A","B"],["B","C"]]},"ground_truth":{"is_acyclic":true,"connected_components":1},"adversarial":false}
+{"id":"struct-adv-001","class":"structural","input":{"tokens":["N0","N1","N2"],"edges":[["N0","N1"],["N1","N2"],["N2","N0"]]},"ground_truth":{"is_acyclic":false,"connected_components":1},"adversarial":true}

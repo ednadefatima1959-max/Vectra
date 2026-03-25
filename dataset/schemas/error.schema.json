@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vectra.local/dataset/schemas/error.schema.json",
+  "title": "Error Sample",
+  "type": "object",
+  "version": "1.0.0",
+  "required": ["id", "class", "input", "ground_truth", "adversarial"],
+  "properties": {
+    "id": { "type": "string" },
+    "class": { "const": "error" },
+    "input": {
+      "type": "object",
+      "required": ["payload"],
+      "properties": {
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "ground_truth": {
+      "type": "object",
+      "required": ["expected_error", "is_valid"],
+      "properties": {
+        "expected_error": { "type": ["string", "null"] },
+        "is_valid": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "adversarial": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

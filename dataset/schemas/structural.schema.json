@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vectra.local/dataset/schemas/structural.schema.json",
+  "title": "Structural Sample",
+  "type": "object",
+  "version": "1.0.0",
+  "required": ["id", "class", "input", "ground_truth", "adversarial"],
+  "properties": {
+    "id": { "type": "string" },
+    "class": { "const": "structural" },
+    "input": {
+      "type": "object",
+      "required": ["tokens", "edges"],
+      "properties": {
+        "tokens": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ground_truth": {
+      "type": "object",
+      "required": ["is_acyclic", "connected_components"],
+      "properties": {
+        "is_acyclic": { "type": "boolean" },
+        "connected_components": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": true
+    },
+    "adversarial": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

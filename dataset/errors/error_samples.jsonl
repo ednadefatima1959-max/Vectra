@@ -1,0 +1,2 @@
+{"id":"err-001","class":"error","input":{"payload":{"value":42,"unit":"ms"}},"ground_truth":{"expected_error":null,"is_valid":true},"adversarial":false}
+{"id":"err-adv-001","class":"error","input":{"payload":{"value":"forty-two","unit":100}},"ground_truth":{"expected_error":"TYPE_MISMATCH","is_valid":false},"adversarial":true}

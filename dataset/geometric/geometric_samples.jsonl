@@ -1,0 +1,2 @@
+{"id":"geo-001","class":"geometric","input":{"shape":"triangle","points":[[0,0],[3,0],[0,4]]},"ground_truth":{"area":6.0,"perimeter":12.0,"tolerance":1e-9},"adversarial":false}
+{"id":"geo-adv-001","class":"geometric","input":{"shape":"triangle","points":[[0,0],[1,1],[2,2]]},"ground_truth":{"area":0.0,"degenerate":true,"tolerance":1e-9},"adversarial":true}

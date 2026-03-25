@@ -1,0 +1,47 @@
+{
+  "dataset_version": "1.0.0",
+  "hash_algorithm": "sha256",
+  "generated_at": "2026-03-25T00:00:00Z",
+  "files": [
+    {
+      "path": "dataset/README.md",
+      "sha256": "177ec9fe028150bf022479a5a9c5b267a9feb65866146313b56dbfad2556e0c2"
+    },
+    {
+      "path": "dataset/core/structural_samples.jsonl",
+      "sha256": "044ec9572bc316161fd719d798447521c4dfa916f04039d95ac1d995d8832c2e"
+    },
+    {
+      "path": "dataset/errors/error_samples.jsonl",
+      "sha256": "d2054138104a67b47ad2a9fa49c5de59064e6e4e2a810b375a82055e1d409773"
+    },
+    {
+      "path": "dataset/geometric/geometric_samples.jsonl",
+      "sha256": "8fa96ba6713d66036de1d070904af3cdd01611a652f27532e0003ac4c41920d8"
+    },
+    {
+      "path": "dataset/processed/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "dataset/recursive/recurrence_samples.jsonl",
+      "sha256": "3f129e058eb3706297ada1a9ba2fa7645da3d25a5c31e53a768d0f1bf36640be"
+    },
+    {
+      "path": "dataset/schemas/error.schema.json",
+      "sha256": "584f7696a242ac572c00817a30c390b264698e87554ea963807d587303209ac6"
+    },
+    {
+      "path": "dataset/schemas/geometric.schema.json",
+      "sha256": "136024db30c06ff8553333f7b5eb580e5082aa850abc75c1d8c44b4f6a028c89"
+    },
+    {
+      "path": "dataset/schemas/recurrence.schema.json",
+      "sha256": "f9ef36bcc41c97f81b981c0533e9577223aba21846b8f23a552a031b97fefadf"
+    },
+    {
+      "path": "dataset/schemas/structural.schema.json",
+      "sha256": "a69da82cb08def90e934c92901ccfb218f750d32034770369d42ae2f0446313a"
+    }
+  ]
+}
