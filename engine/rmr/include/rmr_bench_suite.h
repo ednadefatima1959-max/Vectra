@@ -18,6 +18,7 @@ typedef struct {
   u32 score;
   u32 variance;
   u32 error_margin;
+  u32 execution_flags;
   u32 stage_seed;
   u32 tune_plan;
   u32 path_id;
@@ -29,6 +30,10 @@ typedef struct {
   RmR_Bench_Metric metric[RMR_BENCH_COUNT];
   u32 total_score;
   u32 total_error;
+  u32 coherence_mean_ppm;
+  u32 reuse_ratio_ppm;
+  u32 skip_execution_ratio_ppm;
+  u32 invariant_violation_count;
   u64 exec_signature;
 } RmR_Bench_SuiteResult;
 

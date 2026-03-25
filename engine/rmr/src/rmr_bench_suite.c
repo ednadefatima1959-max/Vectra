@@ -121,6 +121,7 @@ static void RmR_RunOne(const RmR_Bench_Def *d, u32 idx, u32 tune_plan, RmR_Bench
   m->score = score;
   m->variance = (score >> 3) ^ (checksum & 0xFFu);
   m->error_margin = (score >> 5) + (m->variance & 0x3Fu);
+  m->execution_flags = (cycles == 0u) ? 1u : 0u;
   m->stage_seed = 0xC0FFEE11u ^ (idx * 0x9E37u);
   m->tune_plan = tune_plan;
   m->path_id = (d->kind << 16) ^ (d->p0 << 1) ^ d->p1;
@@ -147,8 +148,15 @@ void RmR_BenchSuite_Run(const RmR_Bench_Config *cfg, RmR_Bench_SuiteResult *out)
   };
   out->total_score = 0u;
   out->total_error = 0u;
+  out->coherence_mean_ppm = 0u;
+  out->reuse_ratio_ppm = 0u;
+  out->skip_execution_ratio_ppm = 0u;
+  out->invariant_violation_count = 0u;
   out->exec_signature = 1469598103934665603ull;
   u32 tune_plan = ((iters & 0xFFFFu) << 16) ^ ((stride & 0xFFu) << 8) ^ (msize & 0xFFu);
+  u64 coherence_sum_ppm = 0u;
+  u32 skip_count = 0u;
+  u32 duplicate_count = 0u;
   for(u32 i=0;i<RMR_BENCH_COUNT;i++){
     RmR_Bench_Def d = defs[i];
     if(d.kind == 0u || d.kind == 1u || d.kind == 2u) d.p0 = (d.p0 * iters) >> 10;
@@ -158,5 +166,25 @@ void RmR_BenchSuite_Run(const RmR_Bench_Config *cfg, RmR_Bench_SuiteResult *out)
     out->total_score += out->metric[i].score;
     out->total_error += out->metric[i].error_margin;
     out->exec_signature = RmR_Mix64(out->exec_signature, out->metric[i].stage_signature);
+    if(out->metric[i].execution_flags & 1u) skip_count++;
+    u64 denom = (u64)out->metric[i].score + (u64)out->metric[i].variance + (u64)out->metric[i].error_margin;
+    if(denom == 0u) {
+      out->invariant_violation_count++;
+      coherence_sum_ppm += 1000000ull;
+    } else {
+      coherence_sum_ppm += (((u64)out->metric[i].score) * 1000000ull) / denom;
+    }
+    if(out->metric[i].score == 0u || out->metric[i].stage_signature == 0u) {
+      out->invariant_violation_count++;
+    }
+    for(u32 j=0u; j<i; ++j){
+      if(out->metric[j].path_id == out->metric[i].path_id){
+        duplicate_count++;
+        break;
+      }
+    }
   }
+  out->coherence_mean_ppm = (u32)(coherence_sum_ppm / (u64)RMR_BENCH_COUNT);
+  out->skip_execution_ratio_ppm = (skip_count * 1000000u) / RMR_BENCH_COUNT;
+  out->reuse_ratio_ppm = (duplicate_count * 1000000u) / RMR_BENCH_COUNT;
 }
