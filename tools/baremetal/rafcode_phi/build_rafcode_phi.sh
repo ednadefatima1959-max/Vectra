@@ -15,28 +15,40 @@ if [[ -r /proc/cpuinfo ]]; then
 fi
 
 BACKEND_KIND="c"
-BACKEND_SRC="${ROOT_DIR}/c/rafcode_phi_emit_word_c.c"
 BACKEND_ARCH="unknown"
+BACKEND_SOURCES=(
+  "${ROOT_DIR}/c/rafcode_phi_emit_word_c.c"
+)
 
 case "${HOST_ARCH}" in
   aarch64|arm64)
     BACKEND_KIND="asm"
-    BACKEND_SRC="${ROOT_DIR}/asm/rafcode_phi_emit_word.S"
     BACKEND_ARCH="aarch64"
+    BACKEND_SOURCES=(
+      "${ROOT_DIR}/asm/rafcode_phi_emit_word.S"
+      "${ROOT_DIR}/asm/rafcode_phi_compare.S"
+      "${ROOT_DIR}/asm/rafcode_phi_branch.S"
+      "${ROOT_DIR}/asm/rafcode_phi_loop.S"
+      "${ROOT_DIR}/asm/rafcode_phi_blkmix.S"
+    )
     ;;
   x86_64|amd64)
     BACKEND_KIND="asm"
-    BACKEND_SRC="${ROOT_DIR}/asm/rafcode_phi_emit_word.S"
     BACKEND_ARCH="x86_64"
+    BACKEND_SOURCES=(
+      "${ROOT_DIR}/asm/rafcode_phi_emit_word.S"
+      "${ROOT_DIR}/asm/rafcode_phi_compare.S"
+      "${ROOT_DIR}/asm/rafcode_phi_branch.S"
+      "${ROOT_DIR}/asm/rafcode_phi_loop.S"
+      "${ROOT_DIR}/asm/rafcode_phi_blkmix.S"
+    )
     ;;
   riscv64)
     BACKEND_KIND="c"
-    BACKEND_SRC="${ROOT_DIR}/c/rafcode_phi_emit_word_c.c"
     BACKEND_ARCH="riscv64"
     ;;
   *)
     BACKEND_KIND="c"
-    BACKEND_SRC="${ROOT_DIR}/c/rafcode_phi_emit_word_c.c"
     BACKEND_ARCH="unknown"
     ;;
 esac
@@ -44,16 +56,23 @@ esac
 printf 'rafcode_phi.build.host_arch=%s\n' "${HOST_ARCH}"
 printf 'rafcode_phi.build.backend_kind=%s\n' "${BACKEND_KIND}"
 printf 'rafcode_phi.build.backend_arch=%s\n' "${BACKEND_ARCH}"
-printf 'rafcode_phi.build.backend_src=%s\n' "${BACKEND_SRC}"
+printf 'rafcode_phi.build.backend_src=%s\n' "${BACKEND_SOURCES[*]}"
 printf 'rafcode_phi.build.hwcaps=%s\n' "${HWCAPS}"
 
 "${CC_BIN}" ${CFLAGS} -I"${ROOT_DIR}/include" -c "${ROOT_DIR}/c/rafcode_phi_front_shell.c" -o "${BUILD_DIR}/rafcode_phi_front_shell.o"
-"${CC_BIN}" ${CFLAGS} -I"${ROOT_DIR}/include" -c "${BACKEND_SRC}" -o "${BUILD_DIR}/rafcode_phi_emit_word.o"
+
+backend_objects=()
+for src in "${BACKEND_SOURCES[@]}"; do
+  obj="${BUILD_DIR}/$(basename "${src}").o"
+  "${CC_BIN}" ${CFLAGS} -I"${ROOT_DIR}/include" -c "${src}" -o "${obj}"
+  backend_objects+=("${obj}")
+done
+
 "${CC_BIN}" ${CFLAGS} -I"${ROOT_DIR}/include" -c "${ROOT_DIR}/c/rafcode_phi_cli.c" -o "${BUILD_DIR}/rafcode_phi_cli.o"
 
 "${CC_BIN}" ${CFLAGS} \
   "${BUILD_DIR}/rafcode_phi_front_shell.o" \
-  "${BUILD_DIR}/rafcode_phi_emit_word.o" \
+  "${backend_objects[@]}" \
   "${BUILD_DIR}/rafcode_phi_cli.o" \
   -o "${BUILD_DIR}/rafcode_phi_cli"
 
