@@ -6,8 +6,7 @@
 #include "rmr_ll_ops.h"
 #include "rmr_math_fabric.h"
 #include "rmr_ll_tuning.h"
-
-#include <string.h>
+#include "rmr_policy_kernel_autoral.h"
 
 /* BUG FIX baremetal: removido #include <stdio.h> */
 /* BUG FIX baremetal: removido #include <stdlib.h> */
@@ -19,13 +18,6 @@
 #if defined(__x86_64__) || defined(__i386__)
 #include <nmmintrin.h>
 #endif
-
-typedef struct {
-  RmR_ChunkMeta *v;
-  size_t n;
-  size_t cap;
-} ChunkVec;
-
 
 static uint32_t clamp_u32_local(uint32_t v, uint32_t lo, uint32_t hi) {
   if (v < lo) return lo;
@@ -141,18 +133,6 @@ static void choose_route(const RmR_TriadStatus *triad,
   m->decision_mode = RMR_DECISION_MODE_BRANCHLESS;
 }
 
-static int vec_push(ChunkVec *vec, const RmR_ChunkMeta *m) {
-  if (vec->n == vec->cap) {
-    size_t next = vec->cap ? vec->cap * 2u : 64u;
-    RmR_ChunkMeta *nv = (RmR_ChunkMeta *)rmr_realloc(vec->v, next * sizeof(*nv));
-    if (!nv) return -1;
-    vec->v = nv;
-    vec->cap = next;
-  }
-  vec->v[vec->n++] = *m;
-  return 0;
-}
-
 static int append_event(rmr_file_t *logf, uint64_t event_idx, RmR_Stage stage, const RmR_ChunkMeta *m) {
   char line[512];
   int len = rmr_snprintf(line, sizeof(line),
@@ -175,6 +155,43 @@ static int append_event(rmr_file_t *logf, uint64_t event_idx, RmR_Stage stage, c
                          (unsigned int)m->flags.temp_hint);
   if (len <= 0) return -1;
   return (rmr_fwrite(line, 1u, (size_t)len, logf) == (size_t)len) ? 0 : -1;
+}
+
+static int append_policy_error_event(rmr_file_t *logf,
+                                     uint64_t event_idx,
+                                     int error_code,
+                                     const char *reason) {
+  char line[256];
+  int len = rmr_snprintf(line,
+                         sizeof(line),
+                         "event=%llu stage=%u policy_error=%d reason=%s\n",
+                         (unsigned long long)event_idx,
+                         (unsigned int)RMR_STAGE_AUDIT,
+                         error_code,
+                         reason ? reason : "unknown");
+  if (len <= 0) return -1;
+  return (rmr_fwrite(line, 1u, (size_t)len, logf) == (size_t)len) ? 0 : -1;
+}
+
+static int push_chunk_checked(RmR_ChunkMeta *chunks,
+                              size_t capacity,
+                              size_t *count,
+                              const RmR_ChunkMeta *meta,
+                              rmr_file_t *logf,
+                              uint64_t *event_idx,
+                              const char *label) {
+  if (*count >= capacity) {
+    if (logf && event_idx) {
+      (void)append_policy_error_event(logf,
+                                      (*event_idx)++,
+                                      RMR_POLICY_ERR_CAPACITY_OVERFLOW,
+                                      label);
+    }
+    return RMR_POLICY_ERR_CAPACITY_OVERFLOW;
+  }
+  chunks[*count] = *meta;
+  (*count)++;
+  return RMR_POLICY_OK;
 }
 
 static uint32_t g_crc32c_table[256];
@@ -319,8 +336,14 @@ int RmR_RunPolicyPipeline(const char *input_path,
                           const char *audit_log_path,
                           const RmR_PipelineConfig *config,
   RmR_AuditSummary *summary) {
-  if (!input_path || !output_path || !audit_log_path || !config || config->chunk_size == 0) return -1;
-  if (paths_refer_same_file(input_path, output_path)) return -7;
+  if (!input_path || !output_path || !audit_log_path || !config || config->chunk_size == 0) {
+    return RMR_POLICY_ERR_INVALID_ARGUMENT;
+  }
+  if (!config->plan_chunks || !config->applied_chunks || !config->io_buffer ||
+      config->chunk_capacity == 0u || config->io_buffer_size < config->chunk_size) {
+    return RMR_POLICY_ERR_INVALID_ARGUMENT;
+  }
+  if (paths_refer_same_file(input_path, output_path)) return RMR_POLICY_ERR_SAME_PATH;
 
   RmR_AuditSummary local_summary;
   RmR_HW_Info hw;
@@ -329,42 +352,41 @@ int RmR_RunPolicyPipeline(const char *input_path,
   size_t io_batch_size;
   uint32_t commit_quantum;
   uint32_t commit_counter = 0u;
+  size_t plan_count = 0u;
+  size_t applied_count = 0u;
   const uint8_t decision_mode = RMR_DECISION_MODE_BRANCHLESS;
-  memset(&local_summary, 0, sizeof(local_summary));
+  rmr_file_t *in = NULL;
+  rmr_file_t *out = NULL;
+  rmr_file_t *logf = NULL;
+  uint8_t *buf = config->io_buffer;
+  int error_code = RMR_POLICY_ERR_PIPELINE_FAILURE;
+
+  RMR_PK_Zero(&local_summary, sizeof(local_summary));
   local_summary.exec_signature = RMR_ZERO_POLICY_KERNEL_FNV1A_BASIS_U64;
-  memset(&hw, 0, sizeof(hw));
-  memset(&math_plan, 0, sizeof(math_plan));
+  RMR_PK_Zero(&hw, sizeof(hw));
+  RMR_PK_Zero(&math_plan, sizeof(math_plan));
   RmR_HW_Detect(&hw);
   RmR_MathFabric_AutodetectPlan(&hw, &math_plan);
   RmR_LL_ApplyTuneDefaults(&hw, &tune);
   math_plan.lane_count = clamp_u32_local(tune.policy_lane_width, 4u, 32u);
-  io_batch_size = config->chunk_size;
-  if (tune.policy_batch_size > 0u && (size_t)tune.policy_batch_size < io_batch_size) {
-    io_batch_size = (size_t)tune.policy_batch_size;
-  }
+  io_batch_size = (size_t)RMR_PK_SelectIoBatch(config->chunk_size, tune.policy_batch_size);
   if (io_batch_size == 0u) io_batch_size = config->chunk_size;
+  if (config->io_buffer_size < io_batch_size) return RMR_POLICY_ERR_INVALID_ARGUMENT;
   commit_quantum = tune.policy_commit_quantum ? tune.policy_commit_quantum : 16u;
 
-  rmr_file_t *in = rmr_fopen(input_path, "rb");
-  if (!in) return -2;
-  rmr_file_t *out = rmr_fopen(output_path, "wb");
-  if (!out) { rmr_fclose(in); return -3; }
-  rmr_file_t *logf = rmr_fopen(audit_log_path, "ab");
-  if (!logf) { rmr_fclose(in); rmr_fclose(out); return -4; }
-
-  ChunkVec plan = {0}, applied = {0};
-  uint8_t *buf = (uint8_t *)rmr_malloc(io_batch_size);
-  if (!buf) {
-    rmr_fclose(in); rmr_fclose(out); rmr_fclose(logf);
-    return -5;
-  }
+  in = rmr_fopen(input_path, "rb");
+  if (!in) return RMR_POLICY_ERR_INPUT_OPEN;
+  out = rmr_fopen(output_path, "wb");
+  if (!out) { rmr_fclose(in); return RMR_POLICY_ERR_OUTPUT_OPEN; }
+  logf = rmr_fopen(audit_log_path, "ab");
+  if (!logf) { rmr_fclose(in); rmr_fclose(out); return RMR_POLICY_ERR_AUDIT_OPEN; }
 
   uint64_t event_idx = 1;
   uint64_t offset = 0;
   size_t rd;
   while ((rd = rmr_fread(buf, 1, io_batch_size, in)) > 0) {
     RmR_ChunkMeta m;
-    rmr_mem_set(&m, 0, sizeof(m));
+    RMR_PK_Zero(&m, sizeof(m));
     m.offset = offset;
     m.size = (uint32_t)rd;
     m.crc32c = RmR_CRC32C(buf, rd);
@@ -375,7 +397,17 @@ int RmR_RunPolicyPipeline(const char *input_path,
     choose_route(&config->triad, local_summary.chunks_planned, decision_mode, &m);
     m.stage_signature = stage_signature(RMR_STAGE_PLAN, math_plan.matrix_seed, &math_plan, &m);
     local_summary.exec_signature = mix_u64(local_summary.exec_signature, m.stage_signature);
-    if (append_event(logf, event_idx++, RMR_STAGE_PLAN, &m) != 0 || vec_push(&plan, &m) != 0) goto fail;
+    if (append_event(logf, event_idx++, RMR_STAGE_PLAN, &m) != 0) goto fail;
+    if (push_chunk_checked(config->plan_chunks,
+                           config->chunk_capacity,
+                           &plan_count,
+                           &m,
+                           logf,
+                           &event_idx,
+                           "plan_capacity") != RMR_POLICY_OK) {
+      error_code = RMR_POLICY_ERR_CAPACITY_OVERFLOW;
+      goto fail;
+    }
     local_summary.chunks_planned++;
 
     apply_mutation(buf, rd, offset, config->mutation_xor, config->mutation_stride);
@@ -389,7 +421,17 @@ int RmR_RunPolicyPipeline(const char *input_path,
     am.stage_signature = stage_signature(RMR_STAGE_APPLY, math_plan.matrix_seed, &math_plan, &am);
     local_summary.exec_signature = mix_u64(local_summary.exec_signature, am.stage_signature);
 
-    if (append_event(logf, event_idx++, RMR_STAGE_APPLY, &am) != 0 || vec_push(&applied, &am) != 0) goto fail;
+    if (append_event(logf, event_idx++, RMR_STAGE_APPLY, &am) != 0) goto fail;
+    if (push_chunk_checked(config->applied_chunks,
+                           config->chunk_capacity,
+                           &applied_count,
+                           &am,
+                           logf,
+                           &event_idx,
+                           "applied_capacity") != RMR_POLICY_OK) {
+      error_code = RMR_POLICY_ERR_CAPACITY_OVERFLOW;
+      goto fail;
+    }
     local_summary.chunks_applied++;
 
     if (rmr_fwrite(buf, 1, rd, out) != rd) goto fail;
@@ -402,9 +444,9 @@ int RmR_RunPolicyPipeline(const char *input_path,
   }
   rmr_fflush(out);
 
-  for (size_t i = 0; i < plan.n && i < applied.n; ++i) {
-    RmR_ChunkMeta d = applied.v[i];
-    d.flags.miss = (plan.v[i].crc32c != applied.v[i].crc32c) ? 1u : 0u;
+  for (size_t i = 0; i < plan_count && i < applied_count; ++i) {
+    RmR_ChunkMeta d = config->applied_chunks[i];
+    d.flags.miss = (config->plan_chunks[i].crc32c != config->applied_chunks[i].crc32c) ? 1u : 0u;
     d.stage_signature = stage_signature(RMR_STAGE_DIFF, math_plan.matrix_seed, &math_plan, &d);
     local_summary.exec_signature = mix_u64(local_summary.exec_signature, d.stage_signature);
     if (append_event(logf, event_idx++, RMR_STAGE_DIFF, &d) != 0) goto fail;
@@ -418,16 +460,16 @@ int RmR_RunPolicyPipeline(const char *input_path,
   if (!verify) goto fail;
   offset = 0;
   size_t idx = 0;
-  while ((rd = rmr_fread(buf, 1, io_batch_size, verify)) > 0 && idx < applied.n) {
-    RmR_ChunkMeta vm = applied.v[idx];
+  while ((rd = rmr_fread(buf, 1, io_batch_size, verify)) > 0 && idx < applied_count) {
+    RmR_ChunkMeta vm = config->applied_chunks[idx];
     vm.offset = offset;
     vm.size = (uint32_t)rd;
     vm.crc32c = RmR_CRC32C(buf, rd);
     vm.hash64 = RmR_Hash64_FNV1a(buf, rd);
     vm.entropy_milli = RmR_EntropyEstimateMilli(buf, rd);
     build_math_signature(&math_plan, buf, rd, offset, &vm);
-    vm.decision_mode = applied.v[idx].decision_mode;
-    vm.flags.miss = (vm.crc32c != applied.v[idx].crc32c) ? 1u : 0u;
+    vm.decision_mode = config->applied_chunks[idx].decision_mode;
+    vm.flags.miss = (vm.crc32c != config->applied_chunks[idx].crc32c) ? 1u : 0u;
     vm.stage_signature = stage_signature(RMR_STAGE_VERIFY, math_plan.matrix_seed, &math_plan, &vm);
     local_summary.exec_signature = mix_u64(local_summary.exec_signature, vm.stage_signature);
     if (vm.flags.miss) {
@@ -454,7 +496,7 @@ int RmR_RunPolicyPipeline(const char *input_path,
 
   {
     RmR_ChunkMeta final_meta;
-    rmr_mem_set(&final_meta, 0, sizeof(final_meta));
+    RMR_PK_Zero(&final_meta, sizeof(final_meta));
     final_meta.route_id = RMR_ROUTE_FALLBACK;
     final_meta.route_target = route_target_from_id(RMR_ROUTE_FALLBACK);
     final_meta.math_signature = math_plan.matrix_seed ^ hw.arch;
@@ -469,20 +511,14 @@ int RmR_RunPolicyPipeline(const char *input_path,
     if (append_event(logf, event_idx++, RMR_STAGE_AUDIT, &final_meta) != 0) goto fail;
   }
 
-  rmr_free(buf);
-  rmr_free(plan.v);
-  rmr_free(applied.v);
   rmr_fclose(logf);
   rmr_fclose(in);
   if (summary) *summary = local_summary;
-  return (local_summary.verify_failures == 0) ? 0 : 1;
+  return (local_summary.verify_failures == 0) ? RMR_POLICY_OK : 1;
 
 fail:
-  rmr_free(buf);
-  rmr_free(plan.v);
-  rmr_free(applied.v);
   if (logf) rmr_fclose(logf);
   if (in) rmr_fclose(in);
   if (out) rmr_fclose(out);
-  return -6;
+  return error_code;
 }
