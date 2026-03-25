@@ -6,8 +6,7 @@
 #include "rmr_ll_ops.h"
 #include "rmr_math_fabric.h"
 #include "rmr_ll_tuning.h"
-
-#include <string.h>
+#include "rmr_policy_kernel_autoral.h"
 
 /* BUG FIX baremetal: removido #include <stdio.h> */
 /* BUG FIX baremetal: removido #include <stdlib.h> */
@@ -362,18 +361,15 @@ int RmR_RunPolicyPipeline(const char *input_path,
   uint8_t *buf = config->io_buffer;
   int error_code = RMR_POLICY_ERR_PIPELINE_FAILURE;
 
-  memset(&local_summary, 0, sizeof(local_summary));
+  RMR_PK_Zero(&local_summary, sizeof(local_summary));
   local_summary.exec_signature = RMR_ZERO_POLICY_KERNEL_FNV1A_BASIS_U64;
-  memset(&hw, 0, sizeof(hw));
-  memset(&math_plan, 0, sizeof(math_plan));
+  RMR_PK_Zero(&hw, sizeof(hw));
+  RMR_PK_Zero(&math_plan, sizeof(math_plan));
   RmR_HW_Detect(&hw);
   RmR_MathFabric_AutodetectPlan(&hw, &math_plan);
   RmR_LL_ApplyTuneDefaults(&hw, &tune);
   math_plan.lane_count = clamp_u32_local(tune.policy_lane_width, 4u, 32u);
-  io_batch_size = config->chunk_size;
-  if (tune.policy_batch_size > 0u && (size_t)tune.policy_batch_size < io_batch_size) {
-    io_batch_size = (size_t)tune.policy_batch_size;
-  }
+  io_batch_size = (size_t)RMR_PK_SelectIoBatch(config->chunk_size, tune.policy_batch_size);
   if (io_batch_size == 0u) io_batch_size = config->chunk_size;
   if (config->io_buffer_size < io_batch_size) return RMR_POLICY_ERR_INVALID_ARGUMENT;
   commit_quantum = tune.policy_commit_quantum ? tune.policy_commit_quantum : 16u;
@@ -390,7 +386,7 @@ int RmR_RunPolicyPipeline(const char *input_path,
   size_t rd;
   while ((rd = rmr_fread(buf, 1, io_batch_size, in)) > 0) {
     RmR_ChunkMeta m;
-    rmr_mem_set(&m, 0, sizeof(m));
+    RMR_PK_Zero(&m, sizeof(m));
     m.offset = offset;
     m.size = (uint32_t)rd;
     m.crc32c = RmR_CRC32C(buf, rd);
@@ -500,7 +496,7 @@ int RmR_RunPolicyPipeline(const char *input_path,
 
   {
     RmR_ChunkMeta final_meta;
-    rmr_mem_set(&final_meta, 0, sizeof(final_meta));
+    RMR_PK_Zero(&final_meta, sizeof(final_meta));
     final_meta.route_id = RMR_ROUTE_FALLBACK;
     final_meta.route_target = route_target_from_id(RMR_ROUTE_FALLBACK);
     final_meta.math_signature = math_plan.matrix_seed ^ hw.arch;
@@ -526,4 +522,3 @@ fail:
   if (out) rmr_fclose(out);
   return error_code;
 }
-
