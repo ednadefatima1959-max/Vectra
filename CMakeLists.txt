@@ -223,6 +223,17 @@ add_executable(rmr_asm_equivalence_selftest demo_cli/src/rmr_asm_equivalence_sel
 target_link_libraries(rmr_asm_equivalence_selftest PRIVATE rmr)
 rmr_apply_common_flags(rmr_asm_equivalence_selftest)
 
+add_executable(rmr_ir_abi_selftest
+  demo_cli/src/rmr_ir_abi_selftest.c
+  tools/baremetal/rafcode_phi/asm/rafcode_phi_emit_word.S
+)
+target_link_libraries(rmr_ir_abi_selftest PRIVATE rmr)
+target_include_directories(rmr_ir_abi_selftest PRIVATE
+  ${CMAKE_SOURCE_DIR}/engine/rmr/include
+  ${CMAKE_SOURCE_DIR}/tools/baremetal/rafcode_phi/include
+)
+rmr_apply_common_flags(rmr_ir_abi_selftest)
+
 add_executable(rmr_unified_arena_selftest demo_cli/src/rmr_unified_arena_selftest.c)
 
 add_executable(rmr_legacy_kernel_selftest demo_cli/src/rmr_legacy_kernel_selftest.c)
@@ -261,6 +272,7 @@ set(RMR_RUN_SELFTEST_COMMANDS
   rmr_legacy_kernel_selftest
   rmr_hw_detect_selftest
   rmr_asm_equivalence_selftest
+  rmr_ir_abi_selftest
   zipraf_core_selftest
   rmr_invariant_extractor_selftest
   bitomega_smoketest
@@ -276,6 +288,7 @@ set(RMR_RUN_SELFTEST_DEPENDS
   rmr_legacy_kernel_selftest
   rmr_hw_detect_selftest
   rmr_asm_equivalence_selftest
+  rmr_ir_abi_selftest
   zipraf_core_selftest
   rmr_invariant_extractor_selftest
   bitomega_smoketest

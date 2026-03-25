@@ -28,6 +28,7 @@ set(RMR_SOURCE_GROUP_CORE
   engine/rmr/src/rmr_ll_ops.c
   engine/rmr/src/rmr_ll_tuning.c
   engine/rmr/src/rmr_casm_bridge.c
+  engine/rmr/src/rmr_ir_bridge.c
   engine/rmr/src/rmr_unified_kernel.c
   engine/rmr/src/rmr_unified_jni_bridge.c
   engine/rmr/src/rmr_host_compat.c
