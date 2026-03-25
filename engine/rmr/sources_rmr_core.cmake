@@ -18,11 +18,13 @@ set(RMR_SOURCE_GROUP_CORE
   engine/rmr/src/rmr_apk_module.c
   engine/rmr/src/rmr_qemu_bridge.c
   engine/rmr/src/rmr_predictive_cache.c
+  engine/rmr/src/rmr_invariant_extractor.c
   engine/rmr/src/rmr_math_fabric.c
   engine/rmr/src/rmr_output_sync.c
   engine/rmr/src/rafaelia_formulas_core.c
   engine/rmr/src/rmr_corelib.c
   engine/rmr/src/rmr_coherence_engine.c
+  engine/rmr/src/rmr_execution_graph.c
   engine/rmr/src/rmr_ll_ops.c
   engine/rmr/src/rmr_ll_tuning.c
   engine/rmr/src/rmr_casm_bridge.c
@@ -48,7 +50,6 @@ set(RMR_SOURCE_GROUP_ANDROID_ONLY
   engine/rmr/src/rmr_attractor.c
   engine/rmr/src/rmr_vhw_model.c
   engine/rmr/src/rmr_ethica_loss.c
-  engine/rmr/src/rmr_execution_graph.c
 )
 
 # Hosted/root-only units. Intentionally excluded from Android shared library.

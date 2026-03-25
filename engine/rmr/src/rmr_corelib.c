@@ -1,6 +1,7 @@
 #include "rmr_corelib.h"
 
 #include "rmr_coherence_engine.h"
+#include "rmr_invariant_extractor.h"
 #include "rmr_predictive_cache.h"
 
 static int rmr_is_ws(uint8_t c) {
@@ -8,7 +9,19 @@ static int rmr_is_ws(uint8_t c) {
 }
 
 static uint64_t rmr_len_pattern(const uint8_t *s) {
-  return (uint64_t)(uintptr_t)s;
+  rmr_invariant_fingerprint_t fp;
+  size_t i = 0u;
+  uint8_t window[64];
+  if (!s) return 0u;
+
+  while (i < sizeof(window) && s[i] != 0u) {
+    window[i] = s[i];
+    ++i;
+  }
+  if (rmr_invariant_extract(window, i, &fp) == RMR_INVARIANT_BROKEN) {
+    return (uint64_t)(uintptr_t)s;
+  }
+  return fp.fingerprint ^ (uint64_t)i;
 }
 
 size_t rmr_len_u8(const uint8_t *s) {
