@@ -17,6 +17,7 @@ set(RMR_ENGINE_CORE_SOURCES
   engine/rmr/src/rmr_cycles.c
   engine/rmr/src/rmr_ethica_loss.c
   engine/rmr/src/rmr_execution_graph.c
+  engine/rmr/src/rmr_invariant_extractor.c
   engine/rmr/src/rmr_host_compat.c
   engine/rmr/src/rmr_hw_detect.c
   engine/rmr/src/rmr_isorf.c

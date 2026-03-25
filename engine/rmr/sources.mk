@@ -8,6 +8,7 @@ RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_bit_broadcast.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_benchmark.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_coherence_engine.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_execution_graph.c
+RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_invariant_extractor.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_output_sync.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_predictive_cache.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_simd_geometry.c
