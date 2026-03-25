@@ -46,8 +46,17 @@ int main(void) {
     return 1;
   }
 
+  enum { POLICY_TEST_CHUNK_CAPACITY = 64u, POLICY_TEST_IO_BUFFER_SIZE = 4096u };
+  RmR_ChunkMeta plan_chunks[POLICY_TEST_CHUNK_CAPACITY];
+  RmR_ChunkMeta applied_chunks[POLICY_TEST_CHUNK_CAPACITY];
+  uint8_t io_buffer[POLICY_TEST_IO_BUFFER_SIZE];
   RmR_PipelineConfig cfg;
   cfg.chunk_size = 4096u;
+  cfg.chunk_capacity = POLICY_TEST_CHUNK_CAPACITY;
+  cfg.plan_chunks = plan_chunks;
+  cfg.applied_chunks = applied_chunks;
+  cfg.io_buffer = io_buffer;
+  cfg.io_buffer_size = POLICY_TEST_IO_BUFFER_SIZE;
   cfg.mutation_xor = 0xA5u;
   cfg.mutation_stride = 31u;
   cfg.triad.cpu_ok = 1;

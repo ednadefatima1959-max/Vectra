@@ -26,12 +26,21 @@ static int run_policy_stack_demo(void) {
   }
   fclose(in);
 
+  enum { POLICY_DEMO_CHUNK_CAPACITY = 64u, POLICY_DEMO_IO_BUFFER_SIZE = 4096u };
+  RmR_ChunkMeta plan_chunks[POLICY_DEMO_CHUNK_CAPACITY];
+  RmR_ChunkMeta applied_chunks[POLICY_DEMO_CHUNK_CAPACITY];
+  uint8_t io_buffer[POLICY_DEMO_IO_BUFFER_SIZE];
   RmR_PipelineConfig cfg;
   RmR_AuditSummary summary;
   memset(&cfg, 0, sizeof(cfg));
   memset(&summary, 0, sizeof(summary));
 
   cfg.chunk_size = 16u;
+  cfg.chunk_capacity = POLICY_DEMO_CHUNK_CAPACITY;
+  cfg.plan_chunks = plan_chunks;
+  cfg.applied_chunks = applied_chunks;
+  cfg.io_buffer = io_buffer;
+  cfg.io_buffer_size = POLICY_DEMO_IO_BUFFER_SIZE;
   cfg.mutation_xor = 0x5Au;
   cfg.mutation_stride = 7u;
   cfg.triad.cpu_ok = 1u;

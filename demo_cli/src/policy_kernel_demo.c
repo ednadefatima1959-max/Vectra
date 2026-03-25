@@ -91,8 +91,17 @@ int main(int argc, char **argv) {
     return 2;
   }
 
+  enum { POLICY_CHUNK_CAPACITY = 4096u, POLICY_IO_BUFFER_SIZE = 65536u };
+  RmR_ChunkMeta plan_chunks[POLICY_CHUNK_CAPACITY];
+  RmR_ChunkMeta applied_chunks[POLICY_CHUNK_CAPACITY];
+  uint8_t io_buffer[POLICY_IO_BUFFER_SIZE];
   RmR_PipelineConfig cfg;
   cfg.chunk_size = (size_t)chunk_size;
+  cfg.chunk_capacity = POLICY_CHUNK_CAPACITY;
+  cfg.plan_chunks = plan_chunks;
+  cfg.applied_chunks = applied_chunks;
+  cfg.io_buffer = io_buffer;
+  cfg.io_buffer_size = POLICY_IO_BUFFER_SIZE;
   cfg.mutation_xor = mutation_xor;
   cfg.mutation_stride = mutation_stride;
   cfg.triad.cpu_ok = cpu_ok;

@@ -87,8 +87,25 @@ typedef struct {
   RmR_ChunkFlags flags;
 } RmR_ChunkMeta;
 
+typedef enum {
+  RMR_POLICY_OK = 0,
+  RMR_POLICY_ERR_INVALID_ARGUMENT = -1,
+  RMR_POLICY_ERR_INPUT_OPEN = -2,
+  RMR_POLICY_ERR_OUTPUT_OPEN = -3,
+  RMR_POLICY_ERR_AUDIT_OPEN = -4,
+  RMR_POLICY_ERR_BUFFER_UNAVAILABLE = -5,
+  RMR_POLICY_ERR_PIPELINE_FAILURE = -6,
+  RMR_POLICY_ERR_SAME_PATH = -7,
+  RMR_POLICY_ERR_CAPACITY_OVERFLOW = -8
+} RmR_PolicyError;
+
 typedef struct {
   size_t chunk_size;
+  size_t chunk_capacity;
+  RmR_ChunkMeta *plan_chunks;
+  RmR_ChunkMeta *applied_chunks;
+  uint8_t *io_buffer;
+  size_t io_buffer_size;
   uint8_t mutation_xor;
   uint32_t mutation_stride;
   RmR_TriadStatus triad;
