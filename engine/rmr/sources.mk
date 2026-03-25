@@ -26,6 +26,7 @@ RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_hw_detect.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_isorf.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_ll_ops.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_ll_tuning.c
+RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_ir_bridge.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_lowlevel_mix.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_lowlevel_portable.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_lowlevel_reduce.c

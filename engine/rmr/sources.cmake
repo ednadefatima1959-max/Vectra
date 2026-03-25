@@ -23,6 +23,7 @@ set(RMR_ENGINE_CORE_SOURCES
   engine/rmr/src/rmr_isorf.c
   engine/rmr/src/rmr_ll_ops.c
   engine/rmr/src/rmr_ll_tuning.c
+  engine/rmr/src/rmr_ir_bridge.c
   engine/rmr/src/rmr_lowlevel_mix.c
   engine/rmr/src/rmr_lowlevel_portable.c
   engine/rmr/src/rmr_lowlevel_reduce.c
