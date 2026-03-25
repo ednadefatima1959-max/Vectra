@@ -1,0 +1,22 @@
+{
+  "context": {
+    "title": "2_DETERMINISTIC_COHERENCE_MATRIX",
+    "source_artifacts": [
+      "bug/2_DETERMINISTIC_COHERENCE_MATRIX.md"
+    ],
+    "owner": "unassigned",
+    "created_at": "2026-03-25"
+  },
+  "input": {
+    "scenario": "Migrated from bug/2_DETERMINISTIC_COHERENCE_MATRIX.md",
+    "error_dataset_id": null
+  },
+  "expected": {
+    "behavior": "Definir comportamento esperado durante a normalização."
+  },
+  "observed": {
+    "behavior": "Artefato legado inventariado e pendente de curadoria."
+  },
+  "invariant_broken": null,
+  "status": "unstable"
+}

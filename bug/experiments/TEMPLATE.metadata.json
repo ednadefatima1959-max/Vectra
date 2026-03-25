@@ -1,0 +1,22 @@
+{
+  "context": {
+    "title": "nome-curto-do-experimento",
+    "source_artifacts": [
+      "bug/arquivo_legado.md"
+    ],
+    "owner": "unassigned",
+    "created_at": "YYYY-MM-DD"
+  },
+  "input": {
+    "scenario": "descrever entrada/condicao do experimento",
+    "error_dataset_id": "err-001"
+  },
+  "expected": {
+    "behavior": "descrever comportamento esperado"
+  },
+  "observed": {
+    "behavior": "descrever comportamento observado"
+  },
+  "invariant_broken": "descrever invariante violada ou null",
+  "status": "failed"
+}

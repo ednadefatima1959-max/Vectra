@@ -1,0 +1,22 @@
+{
+  "context": {
+    "title": "3_ZIP_DETERMINISTIC_CONTAINER",
+    "source_artifacts": [
+      "bug/3_ZIP_DETERMINISTIC_CONTAINER.md"
+    ],
+    "owner": "unassigned",
+    "created_at": "2026-03-25"
+  },
+  "input": {
+    "scenario": "Migrated from bug/3_ZIP_DETERMINISTIC_CONTAINER.md",
+    "error_dataset_id": null
+  },
+  "expected": {
+    "behavior": "Definir comportamento esperado durante a normalização."
+  },
+  "observed": {
+    "behavior": "Artefato legado inventariado e pendente de curadoria."
+  },
+  "invariant_broken": null,
+  "status": "unstable"
+}

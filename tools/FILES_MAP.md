@@ -105,6 +105,11 @@ Mapa arquivo-a-arquivo em três linhas por item: papel, ligação e comando de i
 - **Liga com**: gera [`reports/NON_MD_AUDIT_REPORT.md`](../reports/NON_MD_AUDIT_REPORT.md) e [`reports/non_md_inventory.tsv`](../reports/non_md_inventory.tsv).
 - **Inspeção**: `python3 tools/audit_non_md_inventory.py` e `sed -n "1,80p" "reports/NON_MD_AUDIT_REPORT.md"`.
 
+## `tools/bug_experiment_inventory.py`
+- **Papel**: inventaria artefatos legados de `bug/`, cria migração gradual para `bug/experiments/` e valida links de `failed/` para `dataset/errors/`.
+- **Liga com**: escreve [`bug/experiments/inventory.json`](../bug/experiments/inventory.json) e usa [`dataset/errors/error_samples.jsonl`](../dataset/errors/error_samples.jsonl) para validação de `input.error_dataset_id`.
+- **Inspeção**: `python3 tools/bug_experiment_inventory.py --apply --migrate-limit 5 --status-target unstable`.
+
 ## `tools/baremetal/rafcode_phi/README.md`
 - **Papel**: guia local da base RAFCODE❤️PHI C→ASM com emissão de opcodes em hexadecimal.
 - **Liga com**: ver [`docs/RAFCODE_PHI_COMPILER_HEADER.md`](../docs/RAFCODE_PHI_COMPILER_HEADER.md) para contrato técnico e [`tools/baremetal/`](baremetal/) para contexto low-level.

@@ -1,0 +1,90 @@
+{
+  "generated_at": "2026-03-25T19:49:12Z",
+  "summary": {
+    "legacy_artifacts_root_bug": 43,
+    "experiment_metadata_files": 4,
+    "migrated_in_run": 0,
+    "dataset_error_ids": 2,
+    "failed_links_total": 1,
+    "failed_links_linked": 1
+  },
+  "migrated": [],
+  "legacy_artifacts": [
+    "bug/1_RAFAELIA_BITRAF64_KERNEL.md",
+    "bug/2_DETERMINISTIC_COHERENCE_MATRIX.md",
+    "bug/3_ZIP_DETERMINISTIC_CONTAINER.md",
+    "bug/4_GEOMETRIC_PARITY_REDUNDANCY.md",
+    "bug/5_OMEGA_SME_COMPRESSION_CODEC.md",
+    "bug/ANALISE_70_METRICAS_DATACENTER.md",
+    "bug/ANALISE_CODIGO_VECTRAS_v3.6.5.md",
+    "bug/ANALISE_COMPLETA_8_NIVEIS_SEMANTICOS.md",
+    "bug/ANALISE_REAL_COMPILACAO_HARDWARE.md",
+    "bug/ANALISE_REAL_HARDWARE_COMPLETA.md",
+    "bug/ANALISE_SO_COMPLETO_BIOS_FIRMWARE_BOOTLOADER.md",
+    "bug/AUTOTUNE_ADAPTATIVO_REAL.md",
+    "bug/BUGS_ENUMERATION.md",
+    "bug/BUG_FIXES.md",
+    "bug/BUG_FIXES_AND_PATCHES_EXACT_CODE.md",
+    "bug/COMPARACAO_UPSTREAM_VS_OTIMIZADO.md",
+    "bug/DEPLOYMENT_GUIDE_COMPLETO.md",
+    "bug/EXPERIENCIA_USUARIO_IMPACTO_TRABALHO.md",
+    "bug/GUIA_TECNICO_IMPLEMENTACAO_PATCHES.md",
+    "bug/MATRIZ_T_ESPACO_ESTADOS_VERDADE.md",
+    "bug/RAFGITTOOLS_AUDIT_REPORT.md",
+    "bug/RAFGITTOOLS_BUG_HUNTER_v6.md",
+    "bug/SIGMA_SUMMARY.txt",
+    "bug/SOURCE_CODE_TRACEABILITY.md",
+    "bug/STATUS_CORRECOES_VERIFICADAS.md",
+    "bug/STATUS_IMPLEMENTACAO_COMPLETO.md",
+    "bug/SUMARIO_EXECUTIVO.md",
+    "bug/VECTRAS_ANALISE_TECNICA_DETALHADA.md",
+    "bug/VECTRAS_CODIGO_ALEM_DOCUMENTACAO.md",
+    "bug/VECTRAS_V7_BUG_HUNTER_55.md",
+    "bug/VECTRAS_VM_ADDITIONAL_56_BUGS.txt",
+    "bug/VECTRAS_VM_ANALYSIS_SUMMARY.txt",
+    "bug/VECTRAS_VM_ANDROID_BUG_REPORT.txt",
+    "bug/VECTRAS_VM_ANDROID_CORRECTIONS.txt",
+    "bug/VECTRAS_VM_BUG_HUNTER.md",
+    "bug/VECTRAS_VM_COGNITIVE_STRATEGIC_TACTICAL_SOLUTIONS.txt",
+    "bug/VECTRAS_VM_COMPLETE_BENCHTABLE_TESTS.txt",
+    "bug/VECTRAS_VM_DETAILED_INVENTORY_COMPLETE.txt",
+    "bug/VECTRAS_VM_EXPLICACAO_EXECUTIVA_CONSOLIDADA.txt",
+    "bug/VECTRAS_VM_LISTA_76_BUGS.txt",
+    "bug/VECTRAS_VM_SYSTEMIC_FAILURE_ANALYSIS.txt",
+    "bug/VERDADE_CRITICA_SEM_ABSTRACCAO.md",
+    "bug/Vectras_BugReport.md"
+  ],
+  "experiments": [
+    {
+      "metadata_path": "bug/experiments/failed/type-mismatch-payload/metadata.json",
+      "status": "failed",
+      "context_title": "type-mismatch-payload",
+      "error_dataset_id": "err-adv-001"
+    },
+    {
+      "metadata_path": "bug/experiments/unstable/1-rafaelia-bitraf64-kernel/metadata.json",
+      "status": "unstable",
+      "context_title": "1_RAFAELIA_BITRAF64_KERNEL",
+      "error_dataset_id": null
+    },
+    {
+      "metadata_path": "bug/experiments/unstable/2-deterministic-coherence-matrix/metadata.json",
+      "status": "unstable",
+      "context_title": "2_DETERMINISTIC_COHERENCE_MATRIX",
+      "error_dataset_id": null
+    },
+    {
+      "metadata_path": "bug/experiments/unstable/3-zip-deterministic-container/metadata.json",
+      "status": "unstable",
+      "context_title": "3_ZIP_DETERMINISTIC_CONTAINER",
+      "error_dataset_id": null
+    }
+  ],
+  "failed_links": [
+    {
+      "metadata_path": "bug/experiments/failed/type-mismatch-payload/metadata.json",
+      "status": "linked",
+      "error_dataset_id": "err-adv-001"
+    }
+  ]
+}

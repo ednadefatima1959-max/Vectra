@@ -97,5 +97,6 @@ Resumo de status:
 | `prioridade/` | `prioridade/README.md` + `prioridade/FILES_MAP.md` | Priorização (mantém `readme.md` legado). |
 | `fazer hotfix/` | `fazer hotfix/README.md` + `fazer hotfix/FILES_MAP.md` | Execução imediata (mantém `readme.md` legado). |
 | `feito/` | `feito/README.md` + `feito/FILES_MAP.md` | Histórico de hotfix concluído. |
+| `experiments/` | `experiments/README.md` + `experiments/TEMPLATE.metadata.json` | Estrutura experimental canônica com metadados (`failed/`, `unstable/`, `validated/`). |
 | `archive/` | `archive/README.md` + `archive/FILES_MAP.md` | Trilha histórica. |
 | `archive/evidencias/` | `archive/evidencias/README.md` + `archive/evidencias/FILES_MAP.md` | Binários/evidências brutas. |

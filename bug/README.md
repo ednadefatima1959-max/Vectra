@@ -8,6 +8,7 @@ Camada de gestão de falhas do Vectras VM Android com inventário reconciliado e
 - `prioridade/`: triagem e ordenação de execução.
 - `fazer hotfix/`: fila de correção imediata.
 - `feito/`: histórico de ciclos encerrados.
+- `experiments/`: trilha experimental normalizada (`failed/`, `unstable/`, `validated/`) com `metadata.json`.
 - `archive/`: trilha histórica para anexos não canônicos.
 
 ## Regras aplicadas neste ciclo
@@ -21,5 +22,6 @@ Camada de gestão de falhas do Vectras VM Android com inventário reconciliado e
 - [prioridade/README.md](prioridade/README.md)
 - [fazer hotfix/README.md](fazer hotfix/README.md)
 - [feito/README.md](feito/README.md)
+- [experiments/README.md](experiments/README.md)
 - [archive/README.md](archive/README.md)
 - [archive/evidencias/README.md](archive/evidencias/README.md)

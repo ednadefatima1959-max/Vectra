@@ -1,0 +1,22 @@
+{
+  "context": {
+    "title": "1_RAFAELIA_BITRAF64_KERNEL",
+    "source_artifacts": [
+      "bug/1_RAFAELIA_BITRAF64_KERNEL.md"
+    ],
+    "owner": "unassigned",
+    "created_at": "2026-03-25"
+  },
+  "input": {
+    "scenario": "Migrated from bug/1_RAFAELIA_BITRAF64_KERNEL.md",
+    "error_dataset_id": null
+  },
+  "expected": {
+    "behavior": "Definir comportamento esperado durante a normalização."
+  },
+  "observed": {
+    "behavior": "Artefato legado inventariado e pendente de curadoria."
+  },
+  "invariant_broken": null,
+  "status": "unstable"
+}

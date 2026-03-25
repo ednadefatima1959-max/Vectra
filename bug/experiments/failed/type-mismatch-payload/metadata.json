@@ -1,0 +1,22 @@
+{
+  "context": {
+    "title": "type-mismatch-payload",
+    "source_artifacts": [
+      "bug/VECTRAS_VM_ANDROID_BUG_REPORT.txt"
+    ],
+    "owner": "bug-triage",
+    "created_at": "2026-03-25"
+  },
+  "input": {
+    "scenario": "Payload com tipo inválido para campo numérico.",
+    "error_dataset_id": "err-adv-001"
+  },
+  "expected": {
+    "behavior": "O validador deve rejeitar o payload com TYPE_MISMATCH."
+  },
+  "observed": {
+    "behavior": "A execução atual aceita o payload em alguns caminhos de parsing legado."
+  },
+  "invariant_broken": "Validação de tipo estrita para payload.value.",
+  "status": "failed"
+}
