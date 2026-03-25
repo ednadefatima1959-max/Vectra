@@ -2,8 +2,129 @@
 
 > Plataforma Android de virtualização com base híbrida (Android + C/C++ + Rust), foco em determinismo operacional, rastreabilidade e governança documental.
 
-## Abstract
-Esta revisão consolida a documentação em três camadas por diretório (propósito, estrutura e arquivo-a-arquivo), conectando documentação raiz, mapas locais e cadeia de comandos de inspeção. O objetivo é eliminar lacunas entre arquivos soltos, módulos ativos e documentação técnica, com navegação formal e auditável.
+## FORMAL MODEL
+O **Vectra** é modelado como uma engine semântica determinística para transformação e validação de estados computacionais, com foco em execução de baixo nível (C/C++/Rust), previsibilidade operacional e rastreabilidade de decisão.
+
+Definição formal (alto nível):
+- **Sistema**: `S = (N, E, V, T, D)`.
+- `N` (Normalizer): normaliza entrada bruta para representação canônica estável.
+- `E` (Invariant Extractor): extrai invariantes estruturais e semânticos (hashes, coerência de domínio, flags de consistência).
+- `V` (BitOmega Encoder): codifica estado/invariantes em vetores discretos e assinaturas determinísticas.
+- `T` (Matrix/Cache): materializa estado técnico em matriz/cache para reuso de avaliação.
+- `D` (Decision/Output): emite estado final, assinatura e decisão de execução.
+
+Domínios:
+- **Entrada** `I`: bytes (`u8[]`), vetores (`u32[]`/`u64[]`), grafos de transição e padrões estruturais.
+- **Saída** `O`: assinaturas (`signature/hash`), estado canônico (`state_id/state_flags`) e decisão (`allow`, `deny`, `retry`, `degraded`).
+
+Restrições de implementação:
+- Prioridade em comandos diretos e baixo overhead (sem camadas desnecessárias de abstração).
+- Caminho crítico orientado a determinismo de compilador/SO/hardware.
+- Interoperabilidade com rotinas low-level e representação hexadecimal/bitwise quando aplicável.
+
+## DATA MODEL
+Schema JSON mínimo (versionado) para troca entre estágios da pipeline:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VectraCanonicalEnvelope",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "input",
+    "normalized",
+    "invariants",
+    "bitomega",
+    "decision"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^v[0-9]+\.[0-9]+$" },
+    "trace_id": { "type": "string" },
+    "timestamp_utc": { "type": "string", "format": "date-time" },
+    "input": {
+      "type": "object",
+      "required": ["kind", "payload_hex"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["bytes", "vector", "graph", "pattern"] },
+        "payload_hex": { "type": "string" },
+        "byte_length": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "normalized": {
+      "type": "object",
+      "required": ["state_id", "state_hash"],
+      "properties": {
+        "state_id": { "type": "string" },
+        "state_hash": { "type": "string" },
+        "state_flags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "invariants": {
+      "type": "object",
+      "required": ["deterministic", "coherent_hash"],
+      "properties": {
+        "deterministic": { "type": "boolean" },
+        "idempotent_partial": { "type": "boolean" },
+        "coherent_hash": { "type": "boolean" }
+      }
+    },
+    "bitomega": {
+      "type": "object",
+      "required": ["signature"],
+      "properties": {
+        "signature": { "type": "string" },
+        "vector_u32": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["action", "status"],
+      "properties": {
+        "action": { "type": "string", "enum": ["allow", "deny", "retry", "degraded"] },
+        "status": { "type": "string", "enum": ["ok", "warn", "fail"] },
+        "reason": { "type": "string" }
+      }
+    }
+  }
+}
+```
+
+Versionamento:
+- Compatibilidade por `schema_version` no formato semântico `vMAJOR.MINOR`.
+- Mudanças **breaking** incrementam `MAJOR`; adições compatíveis incrementam `MINOR`.
+
+## EXECUTION FLOW
+Pipeline canônico:
+
+`Raw Data -> Normalizer -> Invariant Extractor -> BitOmega Encoder -> Matrix/Cache -> Decision/Output`
+
+Semântica operacional:
+1. **Raw Data**: ingestão de bytes/vetores/grafos/padrões.
+2. **Normalizer**: canonicalização do estado para comparação estável.
+3. **Invariant Extractor**: extração e validação de invariantes de coerência.
+4. **BitOmega Encoder**: assinatura e codificação vetorial determinística.
+5. **Matrix/Cache**: sincronização de estado e reaproveitamento de cálculo.
+6. **Decision/Output**: decisão final de execução com status auditável.
+
+## INVARIANTS
+- **Determinismo**: mesma entrada canônica produz mesma assinatura/decisão.
+- **Idempotência parcial**: reprocessamento de estado já normalizado não altera a decisão final.
+- **Consistência de hash/coerência**: hashes e flags de coerência devem convergir entre estágios.
+- **Rastreabilidade**: toda decisão deve ser explicável por `trace_id`, assinatura e estado.
+
+## Quickstart mínimo
+Gerar dataset de exemplo (CSV + JSON de benchmark):
+
+```bash
+make run-bench
+```
+
+Validar invariantes do pipeline BitOmega:
+
+```bash
+make run-bitomega-smoketest
+```
 
 
 ## Governança e estado — navegação rápida
@@ -81,7 +202,7 @@ find . -maxdepth 2 -type d | sort
 
 ## Índices
 - [DOC_INDEX.md](DOC_INDEX.md)
-- [docs/README.md](docs/README.md)
+- [docs/README.md](docs/README.md) *(índice documental detalhado existente)*
 - [docs/navigation/BIGTECH_REVOLUTION_ANNOUNCE.md](docs/navigation/BIGTECH_REVOLUTION_ANNOUNCE.md)
 
 ## Como rodar manualmente
