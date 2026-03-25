@@ -29,6 +29,58 @@ from `ANDROID_SDK_ROOT` (or `ANDROID_HOME`) when the directory exists.
 
 > Use `./tools/gradle_with_jdk21.sh` como comando canônico: o wrapper aplica a política de JVM suportada (17/21) e faz autoajuste de `sdk.dir` quando possível.
 
+## Binary Semantics Map
+Mapeamento obrigatório entre alvo binário, contrato de entrada/saída e invariantes semânticos.
+
+| Alvo/binário | Entrada esperada | Saída esperada | Invariantes verificados | Módulo responsável |
+|---|---|---|---|---|
+| `build/rmr_core_host` (host CMake) | Harness nativa com vetores determinísticos (`seed=0x5A17`) | Exit code `0` + logs de selftest no `bench/results/` | ABI pública estável (`rmr_unified_kernel.h`), CRC dos vetores, ausência de divergência entre lanes | `rmr_unified_kernel.h`, `rmr_policy_kernel.h`, targets CMake de selftest |
+| `app/build/outputs/apk/debug/app-debug.apk` | Build Gradle com `APP_ABI_POLICY` explícita + SDK/NDK válidos | APK debug gerado sem erro + tasks de validação concluídas | Compatibilidade API mínima, matriz ABI coerente com política, parity de toolchain CMake | `app` (Gradle), `tools/gradle_with_jdk21.sh`, `gradle.properties` |
+| `app/build/outputs/apk/release/app-release.apk` | Build release com assinatura e `buildStrict=true` | APK release assinado + gates de compliance aprovados | Mesmo comportamento semântico do debug; zero relaxamento de invariantes de segurança/compliance | pipeline Gradle release + `tools/ci/*` |
+| `run_selftest` / `make run-selftest` | Execução local ou CI da suíte nativa por arquitetura | Relatório de selftest + falha imediata em regressão | Resultados equivalentes entre backends suportados (dentro da tolerância definida), sem regressão funcional | `Makefile`, `CMakeLists.txt`, targets `rmr_*_selftest` |
+
+## SIMD/Backend Flags and Semantics
+Os backends devem preservar semântica idêntica. SIMD acelera execução, mas **não** pode alterar resultado lógico.
+
+| Backend | Ganho esperado | Risco/limitação | Invariantes que não podem mudar entre backends |
+|---|---|---|---|
+| `NEON` (ARM64) | Melhor throughput em operações vetoriais, menor latência em loops críticos | Dependente de hardware ARMv8-A com suporte NEON; diferenças de alinhamento podem expor bugs de implementação | Mesmo output bit-a-bit (ou mesma tolerância formal definida nos testes), mesma política de erro/retorno, mesma ordem semântica de transformação |
+| `AVX2` (x86_64) | Aceleração relevante em hosts de validação e benchmarks locais | Não disponível em CPUs legadas; risco de variação se instruções não forem corretamente protegidas por feature-detect | Exatamente os mesmos invariantes funcionais do NEON e do fallback escalar |
+| `scalar fallback` | Portabilidade máxima e baseline de referência | Menor desempenho absoluto; pode mascarar gargalos que aparecem apenas em SIMD | Referência semântica canônica: qualquer backend SIMD deve convergir para o mesmo resultado observado no fallback |
+
+Flags recomendadas:
+- ARM64/NEON: manter flags de arquitetura no toolchain sem alterar contrato de saída.
+- x86_64/AVX2: habilitar apenas quando feature detect/runtime gate confirmar suporte.
+- Fallback escalar: sempre disponível como rota determinística de validação.
+
+## Reproducibility Contract
+Contrato mínimo para repetibilidade de build/test e validação semântica.
+
+- Seed fixa de validação: `0x5A17` (deve ser registrada nos logs de benchmark/selftest).
+- Versão de dataset vetorial de teste: `vectra-selftest-dataset v1`.
+- Ambiente mínimo: JDK 17, NDK 27.2.12479018, CMake 3.22.1, SDK Platform 35.
+- Critério de sucesso:
+  - Build termina com exit code `0`.
+  - Selftests obrigatórios por arquitetura passam.
+  - Invariantes do mapa semântico permanecem verdadeiros entre execuções e entre backends.
+- Critério de falha:
+  - Divergência semântica entre backends (NEON/AVX2/scalar) fora da tolerância definida.
+  - Ausência de artefato obrigatório (APK/binário/log de selftest).
+  - Quebra de contrato API/ABI ou gate de compliance em `buildStrict=true`.
+
+## Semantic outcomes per build/test command
+Cada comando abaixo possui resultado semântico observável (não apenas compilação).
+
+| Comando | Resultado semântico esperado |
+|---|---|
+| `./tools/gradle_with_jdk21.sh --version` | Prova que o wrapper de toolchain está operacional e seleciona JVM suportada sem desvio de política. |
+| `./tools/gradle_with_jdk21.sh clean` | Remove artefatos antigos para evitar falso-positivo de reprodutibilidade por cache residual. |
+| `./tools/gradle_with_jdk21.sh :app:assembleDebug --stacktrace` | Gera APK debug semanticamente equivalente ao contrato do runtime, com validações de API/ABI aplicadas. |
+| `./tools/gradle_with_jdk21.sh :app:assembleRelease --stacktrace` | Gera binário de release apto para distribuição oficial, mantendo invariantes de debug + gates estritos de release. |
+| `./tools/gradle_with_jdk21.sh :app:lintDebug --stacktrace` | Verifica integridade estrutural/código Android sem alterar semântica funcional declarada. |
+| `make run-selftest` | Executa validação funcional canônica por arquitetura; falha indica quebra semântica real do core nativo. |
+| `cmake --build <build-dir> --target run_selftest` | Mesmo contrato de `make run-selftest`, garantindo consistência no fluxo CMake puro. |
+
 ## ABI policy
 Configured by `APP_ABI_POLICY` and `SUPPORTED_ABIS` in `gradle.properties`.
 Accepted policies in code and docs are exactly:
