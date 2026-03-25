@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vectra.local/dataset/schemas/geometric.schema.json",
+  "title": "Geometric Sample",
+  "type": "object",
+  "version": "1.0.0",
+  "required": ["id", "class", "input", "ground_truth", "adversarial"],
+  "properties": {
+    "id": { "type": "string" },
+    "class": { "const": "geometric" },
+    "input": {
+      "type": "object",
+      "required": ["shape", "points"],
+      "properties": {
+        "shape": { "type": "string" },
+        "points": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ground_truth": {
+      "type": "object",
+      "required": ["tolerance"],
+      "properties": {
+        "area": { "type": "number" },
+        "perimeter": { "type": "number" },
+        "degenerate": { "type": "boolean" },
+        "tolerance": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "adversarial": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

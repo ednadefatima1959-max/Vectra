@@ -1,0 +1,2 @@
+{"id":"rec-001","class":"recurrence","input":{"relation":"f(n)=f(n-1)+f(n-2)","initial":{"f0":0,"f1":1},"n":7},"ground_truth":{"sequence_prefix":[0,1,1,2,3,5,8,13],"value_at_n":13},"adversarial":false}
+{"id":"rec-adv-001","class":"recurrence","input":{"relation":"f(n)=f(n-1)+f(n-2)","initial":{"f0":1,"f1":1},"n":-1},"ground_truth":{"expected_error":"DOMAIN_NEGATIVE_INDEX","is_valid":false},"adversarial":true}

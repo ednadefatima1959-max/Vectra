@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vectra.local/dataset/schemas/recurrence.schema.json",
+  "title": "Recurrence Sample",
+  "type": "object",
+  "version": "1.0.0",
+  "required": ["id", "class", "input", "ground_truth", "adversarial"],
+  "properties": {
+    "id": { "type": "string" },
+    "class": { "const": "recurrence" },
+    "input": {
+      "type": "object",
+      "required": ["relation", "initial", "n"],
+      "properties": {
+        "relation": { "type": "string", "minLength": 1 },
+        "initial": {
+          "type": "object",
+          "required": ["f0", "f1"],
+          "properties": {
+            "f0": { "type": "integer" },
+            "f1": { "type": "integer" }
+          },
+          "additionalProperties": false
+        },
+        "n": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "ground_truth": {
+      "type": "object",
+      "properties": {
+        "sequence_prefix": { "type": "array", "items": { "type": "integer" }, "minItems": 1 },
+        "value_at_n": { "type": "integer" },
+        "expected_error": { "type": ["string", "null"] },
+        "is_valid": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "adversarial": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}
