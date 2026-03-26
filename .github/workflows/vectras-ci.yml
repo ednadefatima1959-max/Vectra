@@ -1,0 +1,5 @@
+- name: Validação de Integridade MaiaSuprema
+  run: |
+    python scripts/v_integrity_check.py ./generated_output/ir_hex.asm
+  # Este passo garante que o 'Semeador' não quebre o build.
+  # Se falhar aqui, o 'Cultivador' rejeita a semente antes do compilador falhar.
