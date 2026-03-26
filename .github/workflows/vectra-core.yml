@@ -1,0 +1,32 @@
+name: Vectra Core Minimal
+
+on:
+  workflow_dispatch:
+
+jobs:
+  vectra-core:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: List structure (real scan)
+        run: |
+          echo "=== ROOT ==="
+          ls -la
+          echo "=== ENGINE ==="
+          ls -la engine || true
+          echo "=== RUNTIME ==="
+          ls -la runtime || true
+          echo "=== TOOLS ==="
+          ls -la tools || true
+
+      - name: Canonical probe (no inference)
+        run: |
+          echo "=== VECTRA PROBE ==="
+          find . -maxdepth 2 -type f | sort | head -n 50
+
+      - name: State marker
+        run: |
+          echo "STATE=RAW->SCAN->OBSERVED"
