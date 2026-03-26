@@ -275,3 +275,12 @@ org.gradle.java.home=/usr/lib/jvm/java-21-openjdk
 ## Canal oficial de comunidade e suporte
 - Canal oficial neutro: https://vectras.vercel.app/community.html
 - Para notícias, suporte e feedback, use sempre o canal oficial acima.
+
+---
+
+## CORE PROBE (REAL)
+
+Executa leitura estrutural sem inferência:
+
+```bash
+bash tools/vectra_probe.sh
