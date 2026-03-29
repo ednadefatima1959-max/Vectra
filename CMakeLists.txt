@@ -20,7 +20,7 @@ option(RMR_ASM_CORE_ARM64_VALIDATED ON)
 option(RMR_ASM_CORE_RISCV64_VALIDATED ON)
 
 # ========================
-# RESOLVE FLAGS → INT
+# RESOLVE FLAGS
 # ========================
 set(RMR_JNI_BUILD_VALUE 0)
 if(RMR_JNI_BUILD)
@@ -140,13 +140,8 @@ endif()
 rmr_apply_common_flags(rmr)
 
 # ========================
-# SYMBOL CHECK (SAFE)
+# SYMBOL CHECK (FIXED)
 # ========================
-set(RMR_REQUIRED_SYMBOLS
-  RmR_MathFabric_AutodetectPlan
-  RmR_MathFabric_VectorMix
-)
-
 find_program(BASH_EXECUTABLE bash)
 
 if(BASH_EXECUTABLE)
@@ -157,7 +152,8 @@ if(BASH_EXECUTABLE)
     COMMAND ${BASH_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/verify_librmr_symbols.sh
             $<TARGET_FILE:rmr>
-            ${RMR_REQUIRED_SYMBOLS}
+            RmR_MathFabric_AutodetectPlan
+            RmR_MathFabric_VectorMix
     VERBATIM
   )
 else()
@@ -177,7 +173,7 @@ rmr_apply_common_flags(bitraf_static)
 target_link_libraries(rmr PUBLIC bitraf_static)
 
 # ========================
-# EXECUTABLES (NO ANDROID)
+# EXECUTABLES
 # ========================
 if(NOT ANDROID)
 
