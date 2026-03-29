@@ -1,10 +1,25 @@
 cmake_minimum_required(VERSION 3.22.1)
+
 project(rafaelia_rmr C ASM)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+enable_language(ASM)
+
+# ========================
+# INCLUDE CORE
+# ========================
 include(${CMAKE_SOURCE_DIR}/engine/rmr/sources_rmr_core.cmake)
+
+if(NOT DEFINED RMR_SOURCE_GROUP_CORE)
+  message(FATAL_ERROR "sources_rmr_core.cmake não definiu RMR_SOURCE_GROUP_CORE")
+endif()
+
+if(NOT COMMAND rmr_manifest_apply_base)
+  message(FATAL_ERROR "Função rmr_manifest_apply_base não definida")
+endif()
 
 # ========================
 # OPTIONS
@@ -107,7 +122,14 @@ endif()
 # ARCH DETECT
 # ========================
 set(RMR_HAS_CASM FALSE)
-string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" PROC_LOWER)
+
+if(ANDROID)
+  set(PROC_LOWER ${ANDROID_ABI})
+else()
+  set(PROC_LOWER ${CMAKE_SYSTEM_PROCESSOR})
+endif()
+
+string(TOLOWER "${PROC_LOWER}" PROC_LOWER)
 
 if(RMR_ASM_CORE_EXPERIMENTAL AND UNIX)
   if(PROC_LOWER MATCHES "x86_64|amd64" AND RMR_ASM_CORE_X86_64_VALIDATED)
@@ -137,14 +159,33 @@ else()
   target_compile_definitions(rmr PUBLIC VECTRA_HAS_CASM_MARKER=0)
 endif()
 
+# Arch-specific tuning
+if(PROC_LOWER MATCHES "arm64|aarch64")
+  target_compile_options(rmr PRIVATE -march=armv8-a+simd)
+endif()
+
 rmr_apply_common_flags(rmr)
 
 # ========================
-# SYMBOL CHECK (FIXED)
+# BITRAF
+# ========================
+add_library(bitraf_static STATIC engine/rmr/src/bitraf.c)
+set_target_properties(bitraf_static PROPERTIES OUTPUT_NAME bitraf)
+
+target_include_directories(bitraf_static PRIVATE
+  ${CMAKE_SOURCE_DIR}/engine/rmr/include
+)
+
+rmr_apply_common_flags(bitraf_static)
+
+target_link_libraries(rmr PUBLIC bitraf_static)
+
+# ========================
+# SYMBOL CHECK
 # ========================
 find_program(BASH_EXECUTABLE bash)
 
-if(BASH_EXECUTABLE)
+if(BASH_EXECUTABLE AND EXISTS "${CMAKE_SOURCE_DIR}/tools/verify_librmr_symbols.sh")
   add_custom_command(
     TARGET rmr
     POST_BUILD
@@ -157,20 +198,10 @@ if(BASH_EXECUTABLE)
     VERBATIM
   )
 else()
-  message(WARNING "bash não encontrado, pulando verificação determinística de símbolos.")
+  message(WARNING "bash ou script não encontrado, pulando verificação de símbolos.")
 endif()
 
 add_custom_target(verify_contracts DEPENDS rmr)
-
-# ========================
-# BITRAF
-# ========================
-add_library(bitraf_static STATIC engine/rmr/src/bitraf.c)
-set_target_properties(bitraf_static PROPERTIES OUTPUT_NAME bitraf)
-
-rmr_apply_common_flags(bitraf_static)
-
-target_link_libraries(rmr PUBLIC bitraf_static)
 
 # ========================
 # EXECUTABLES
@@ -190,4 +221,14 @@ if(NOT ANDROID)
   target_link_libraries(bitomega_smoketest PRIVATE rmr)
   rmr_apply_common_flags(bitomega_smoketest)
 
+endif()
+
+# ========================
+# LTO (IPO)
+# ========================
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported)
+
+if(ipo_supported)
+  set_property(TARGET rmr PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
