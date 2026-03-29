@@ -1,0 +1,36 @@
+name: Rafaelia RMR Engine Build
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout do Repositório
+      uses: actions/checkout@v4
+
+    - name: Instalar Dependências (CMake, GCC, Bash)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bash
+
+    - name: Configurar CMake
+      # Cria o diretório de build e gera os arquivos Makefile
+      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+
+    - name: Compilar Engine e Utilitários
+      # Executa a compilação paralela
+      run: cmake --build build -j $(nproc)
+
+    - name: Rodar Verificação de Símbolos
+      # Força o target customizado que garante que a MathFabric existe
+      run: cmake --build build --target verify_contracts
+
+    - name: Executar Smoketest (Partícula Ômega)
+      # Testa se o binário principal roda sem falha de segmentação
+      run: ./build/bitomega_smoketest
