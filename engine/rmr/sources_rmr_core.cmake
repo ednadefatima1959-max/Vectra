@@ -1,86 +1,60 @@
-# Canonical RMR source manifest.
-#
-# Group contract used by all build systems:
-#   - core
-#   - optional-policy
-#   - android-only
-#   - host-only
-#   - asm-per-arch
+# ====================================================================
+#  sources_rmr_core.cmake – Manifesto de fontes do módulo RMR
+# ====================================================================
+# Define grupos de fontes e a função rmr_manifest_apply_base.
+# Os caminhos são relativos à raiz do projeto (CMAKE_SOURCE_DIR).
 
+# Grupo 1: Núcleo obrigatório
 set(RMR_SOURCE_GROUP_CORE
-  engine/rmr/src/bitomega.c
-  engine/rmr/src/bitraf.c
-  engine/rmr/src/rmr_bit_broadcast.c
-  engine/rmr/src/rmr_baremetal_compat.c
-  engine/rmr/src/rmr_cycles.c
-  engine/rmr/src/rmr_hw_detect.c
-  engine/rmr/src/rmr_isorf.c
-  engine/rmr/src/rmr_apk_module.c
-  engine/rmr/src/rmr_qemu_bridge.c
-  engine/rmr/src/rmr_predictive_cache.c
-  engine/rmr/src/rmr_invariant_extractor.c
-  engine/rmr/src/rmr_math_fabric.c
-  engine/rmr/src/rmr_output_sync.c
-  engine/rmr/src/rafaelia_formulas_core.c
-  engine/rmr/src/rmr_corelib.c
-  engine/rmr/src/rmr_coherence_engine.c
-  engine/rmr/src/rmr_execution_graph.c
-  engine/rmr/src/rmr_ll_ops.c
-  engine/rmr/src/rmr_ll_tuning.c
-  engine/rmr/src/rmr_casm_bridge.c
-  engine/rmr/src/rmr_ir_bridge.c
-  engine/rmr/src/rmr_unified_kernel.c
-  engine/rmr/src/rmr_unified_jni_bridge.c
-  engine/rmr/src/rmr_host_compat.c
-  engine/rmr/src/rmr_zipraf_core.c
-  engine/rmr/src/rmr_lowlevel_portable.c
-  engine/rmr/src/rmr_lowlevel_mix.c
-  engine/rmr/src/rmr_lowlevel_reduce.c
-  engine/rmr/src/rmr_neon_simd.c
-  engine/rmr/src/rmr_simd_geometry.c
+    engine/rmr/src/rmr_corelib.c
+    engine/rmr/src/rmr_ll_ops.c
+    engine/rmr/src/rmr_ll_tuning.c
+    engine/rmr/src/rmr_math_fabric.c
+    engine/rmr/src/rmr_execution_graph.c
+    engine/rmr/src/rmr_unified_kernel.c
+    engine/rmr/src/rmr_unified_jni_bridge.c
+    engine/rmr/src/rmr_output_sync.c
+    engine/rmr/src/bitraf.c
 )
 
-set(RMR_SOURCE_GROUP_OPTIONAL_POLICY
-  engine/rmr/src/rmr_policy_kernel.c
-)
-
-# Android JNI/library-only units. Intentionally excluded from hosted targets.
-set(RMR_SOURCE_GROUP_ANDROID_ONLY
-  engine/rmr/src/rmr_tcg_cache.c
-  engine/rmr/src/rmr_virtio_blk.c
-  engine/rmr/src/rmr_attractor.c
-  engine/rmr/src/rmr_vhw_model.c
-  engine/rmr/src/rmr_ethica_loss.c
-)
-
-# Hosted/root-only units. Intentionally excluded from Android shared library.
+# Grupo 2: Apenas para builds host (não Android)
 set(RMR_SOURCE_GROUP_HOST_ONLY
-  engine/rmr/src/rmr_bench.c
-  engine/rmr/src/rmr_benchmark.c
-  engine/rmr/src/rmr_bench_suite.c
+    engine/rmr/src/rmr_hw_detect_selftest.c
+    engine/rmr/src/rmr_bench.c
+    engine/rmr/src/rmr_bench_suite.c
 )
 
+# Grupo 3: Módulo de política (opcional)
+set(RMR_SOURCE_GROUP_OPTIONAL_POLICY
+    engine/rmr/src/rmr_policy_kernel.c
+)
+
+# Grupo 4: ASM para x86_64
 set(RMR_SOURCE_GROUP_ASM_X86_64
-  engine/rmr/interop/rmr_lowlevel_x86_64.S
-  engine/rmr/interop/rmr_casm_x86_64.S
+    engine/rmr/src/asm/x86_64/rmr_casm_x86_64.s
 )
 
+# Grupo 5: ASM para ARM64
 set(RMR_SOURCE_GROUP_ASM_ARM64
-  engine/rmr/interop/rmr_casm_arm64.S
+    engine/rmr/src/asm/arm64/rmr_casm_arm64.s
 )
 
+# Grupo 6: ASM para RISC-V 64
 set(RMR_SOURCE_GROUP_ASM_RISCV64
-  engine/rmr/interop/rmr_casm_riscv64.S
+    engine/rmr/src/asm/riscv64/rmr_casm_riscv64.s
 )
 
-function(rmr_manifest_apply_base OUT_VAR)
-  set(_rmr_manifest_out)
-  foreach(_rmr_manifest_src IN LISTS ARGN)
-    if(DEFINED RMR_SOURCE_BASE AND NOT RMR_SOURCE_BASE STREQUAL "")
-      list(APPEND _rmr_manifest_out "${RMR_SOURCE_BASE}${_rmr_manifest_src}")
-    else()
-      list(APPEND _rmr_manifest_out "${_rmr_manifest_src}")
-    endif()
-  endforeach()
-  set(${OUT_VAR} "${_rmr_manifest_out}" PARENT_SCOPE)
+# ====================================================================
+#  Função que adiciona os arquivos dos grupos a uma variável de saída
+# ====================================================================
+function(rmr_manifest_apply_base out_var)
+    set(_sources "")
+    foreach(group ${ARGN})
+        if(DEFINED ${group})
+            list(APPEND _sources ${${group}})
+        else()
+            message(WARNING "Grupo de fontes ${group} não definido")
+        endif()
+    endforeach()
+    set(${out_var} ${_sources} PARENT_SCOPE)
 endfunction()
