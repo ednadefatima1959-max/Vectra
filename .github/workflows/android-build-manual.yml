@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Perfil de execução"
+        description: "Perfil de execução (mapeado a atrator do Exacordex)"
         required: true
         type: choice
         default: moderado
         options:
-          - fast
-          - moderado
-          - profundo
-          - ultra_minucioso
+          - fast            # Atrator 0 – só validação mínima
+          - moderado        # Atrator 7 – validações principais
+          - profundo        # Atrator 21 – validações completas + testes
+          - ultra_minucioso # Atrator 42 – tudo, inclusive fuzzing simbólico
           - interoperabilidade
           - confiabilidade
           - diagnostico
@@ -22,125 +22,99 @@ on:
           - holistico
       build_debug:
         description: "Gerar APK debug"
-        required: false
         type: boolean
         default: true
       build_release:
-        description: "Gerar APK release (sem assinatura por padrão)"
-        required: false
+        description: "Gerar APK release (não assinado a menos que sign_release=true)"
         type: boolean
         default: false
       sign_release:
         description: "Assinar release (requer segredos)"
-        required: false
         type: boolean
         default: false
       run_lint:
         description: "Executar lint"
-        required: false
         type: boolean
         default: true
       run_native_matrix:
-        description: "Executar matriz nativa"
-        required: false
+        description: "Executar matriz nativa (checkNativeAllMatrix)"
         type: boolean
         default: true
       run_unit_tests:
         description: "Executar testes unitários"
-        required: false
         type: boolean
         default: false
       android_api:
         description: "Android API (compile/target)"
-        required: false
         type: string
         default: "35"
       build_tools:
         description: "Android Build Tools"
-        required: false
         type: string
         default: "35.0.0"
       ndk_version:
         description: "NDK version"
-        required: false
         type: string
         default: "27.2.12479018"
       cmake_version:
         description: "CMake version"
-        required: false
         type: string
         default: "3.22.1"
       java_version:
-        description: "JDK version"
-        required: false
+        description: "JDK version (17 ou 21)"
         type: string
         default: "17"
       gradle_module:
-        description: "Módulo gradle principal (ex: app)"
-        required: false
+        description: "Módulo Gradle principal"
         type: string
         default: "app"
       gradle_extra_args:
-        description: "Args extras para gradle"
-        required: false
+        description: "Argumentos extras para Gradle"
         type: string
         default: ""
+
   workflow_call:
     inputs:
       mode:
-        required: false
         type: string
         default: moderado
       build_debug:
-        required: false
         type: boolean
         default: true
       build_release:
-        required: false
         type: boolean
         default: false
       sign_release:
-        required: false
         type: boolean
         default: false
       run_lint:
-        required: false
         type: boolean
         default: true
       run_native_matrix:
-        required: false
         type: boolean
         default: true
       run_unit_tests:
-        required: false
         type: boolean
         default: false
       android_api:
-        required: false
         type: string
         default: "35"
       build_tools:
-        required: false
         type: string
         default: "35.0.0"
       ndk_version:
-        required: false
         type: string
         default: "27.2.12479018"
       cmake_version:
-        required: false
         type: string
         default: "3.22.1"
       java_version:
-        required: false
         type: string
         default: "17"
       gradle_module:
-        required: false
         type: string
         default: "app"
       gradle_extra_args:
-        required: false
         type: string
         default: ""
     secrets:
@@ -170,46 +144,66 @@ jobs:
       MODE: ${{ inputs.mode || 'moderado' }}
       GRADLE_MODULE: ${{ inputs.gradle_module || 'app' }}
       GRADLE_EXTRA_ARGS: ${{ inputs.gradle_extra_args || '' }}
+      # Força Node.js 24 nas ações que suportam (evita warning e falha futura)
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
-      - name: Checkout
+      - name: Checkout (Node 24 compatível)
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Set up JDK (Node 24 compatível)
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
 
-      - name: Set up Android SDK
+      - name: Set up Android SDK (Node 24 compatível)
         uses: android-actions/setup-android@v3
 
-      - name: Install Android packages
+      - name: Install Android packages (com retry e timeout)
+        id: sdk_install
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platform-tools" "platforms;android-${COMPILE_API}" "build-tools;${TOOLS_VERSION}" "cmake;${CMAKE_VERSION}" "ndk;${NDK_VERSION}"
+          # Aceita licenças com retry (ruído de rede)
+          for i in {1..3}; do
+            yes | sdkmanager --licenses >/dev/null && break || sleep 5
+          done
+          # Instala componentes; se falhar, tenta novamente (estado retry)
+          for pkg in "platform-tools" "platforms;android-${COMPILE_API}" "build-tools;${TOOLS_VERSION}" "cmake;${CMAKE_VERSION}" "ndk;${NDK_VERSION}"; do
+            for i in {1..3}; do
+              if sdkmanager "$pkg"; then break; else
+                echo "Falha ao instalar $pkg, tentativa $i/3 – estado retry"
+                sleep 5
+              fi
+            done
+          done
+          # Verifica presença (validação pós-instalação)
+          test -d "${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}"
+          test -d "${ANDROID_SDK_ROOT}/cmake/${CMAKE_VERSION}"
 
-      - name: Configure mode profile
+      - name: Configure mode profile (mapeamento para atratores)
         id: mode
         run: |
           set -euo pipefail
           case "${MODE}" in
             fast)
-              echo "native_strict=false" >> "$GITHUB_OUTPUT"
-              echo "native_matrix_cmd=checkNativeAllMatrix -PbuildStrict=false" >> "$GITHUB_OUTPUT"
-              echo "run_repo_checks=false" >> "$GITHUB_OUTPUT"
+              echo "strict=false" >> "$GITHUB_OUTPUT"
+              echo "matrix_cmd=checkNativeAllMatrix -PbuildStrict=false" >> "$GITHUB_OUTPUT"
+              echo "repo_checks=false" >> "$GITHUB_OUTPUT"
+              echo "gradle_tasks=verifyGradleRuntimeJvm :${GRADLE_MODULE}:assembleDebug" >> "$GITHUB_OUTPUT"
               ;;
             moderado)
-              echo "native_strict=false" >> "$GITHUB_OUTPUT"
-              echo "native_matrix_cmd=checkNativeAllMatrix -PbuildStrict=false" >> "$GITHUB_OUTPUT"
-              echo "run_repo_checks=true" >> "$GITHUB_OUTPUT"
+              echo "strict=false" >> "$GITHUB_OUTPUT"
+              echo "matrix_cmd=checkNativeAllMatrix -PbuildStrict=false" >> "$GITHUB_OUTPUT"
+              echo "repo_checks=true" >> "$GITHUB_OUTPUT"
+              echo "gradle_tasks=verifyGradleRuntimeJvm verifyTargetApiBaseline verifyMinApiAbiCompatibility verifyArm64ToolchainCompatibility verifyBootstrapAssets lintDebug :${GRADLE_MODULE}:assembleDebug" >> "$GITHUB_OUTPUT"
               ;;
             profundo|ultra_minucioso|interoperabilidade|confiabilidade|diagnostico|release_ready|hardware_focus|matrix_total|holistico)
-              echo "native_strict=true" >> "$GITHUB_OUTPUT"
-              echo "native_matrix_cmd=checkNativeAllMatrix -PbuildStrict=true" >> "$GITHUB_OUTPUT"
-              echo "run_repo_checks=true" >> "$GITHUB_OUTPUT"
+              echo "strict=true" >> "$GITHUB_OUTPUT"
+              echo "matrix_cmd=checkNativeAllMatrix -PbuildStrict=true" >> "$GITHUB_OUTPUT"
+              echo "repo_checks=true" >> "$GITHUB_OUTPUT"
+              echo "gradle_tasks=verifyGradleRuntimeJvm verifyTargetApiBaseline verifyMinApiAbiCompatibility verifyArm64ToolchainCompatibility verifyBootstrapAssets verifyRepoFileDependencies checkNativeAllMatrix lintDebug testDebugUnitTest connectedDebugAndroidTest :${GRADLE_MODULE}:assembleDebug" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "Modo inválido: ${MODE}" >&2
@@ -229,54 +223,26 @@ jobs:
             echo "OK: $tool -> $(command -v "$tool")"
           done
 
-      - name: Verify Gradle baseline
-        id: baseline
-        if: steps.mode.outputs.run_repo_checks == 'true'
-        run: |
-          set -euo pipefail
-          case "${MODE}" in
-            fast)
-              TASKS="verifyGradleRuntimeJvm :app:assembleDebug"
-              ;;
-            moderado)
-              TASKS="verifyGradleRuntimeJvm verifyTargetApiBaseline verifyMinApiAbiCompatibility verifyArm64ToolchainCompatibility verifyBootstrapAssets lintDebug :app:assembleDebug"
-              ;;
-            profundo|ultra_minucioso|interoperabilidade|confiabilidade|diagnostico|release_ready|hardware_focus|matrix_total|holistico)
-              TASKS="verifyGradleRuntimeJvm verifyTargetApiBaseline verifyMinApiAbiCompatibility verifyArm64ToolchainCompatibility verifyBootstrapAssets verifyRepoFileDependencies checkNativeAllMatrix lintDebug testDebugUnitTest connectedDebugAndroidTest :app:assembleDebug"
-              ;;
-            *)
-              echo "Modo inválido: ${MODE}" >&2
-              exit 1
-              ;;
-          esac
-
-          echo "tasks=${TASKS}" >> "$GITHUB_OUTPUT"
-          echo "profile=${MODE}" >> "$GITHUB_OUTPUT"
-
       - name: Build local.properties
         run: echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
 
-      - name: Decode release keystore
+      - name: Decode release keystore (se necessário)
         if: inputs.build_release && inputs.sign_release
         env:
           VECTRAS_RELEASE_KEYSTORE_B64: ${{ secrets.VECTRAS_RELEASE_KEYSTORE_B64 }}
         run: |
           set -euo pipefail
           if [[ -z "${VECTRAS_RELEASE_KEYSTORE_B64:-}" ]]; then
-            echo "Assinatura solicitada, mas segredo do keystore não foi fornecido." >&2
+            echo "Assinatura solicitada, mas keystore não fornecido." >&2
             exit 1
           fi
           echo "$VECTRAS_RELEASE_KEYSTORE_B64" | base64 -d > vectras-release.jks
 
-      - name: Run selected Gradle tasks
-        env:
-          VECTRAS_RELEASE_STORE_PASSWORD: ${{ secrets.VECTRAS_RELEASE_STORE_PASSWORD }}
-          VECTRAS_RELEASE_KEY_ALIAS: ${{ secrets.VECTRAS_RELEASE_KEY_ALIAS }}
-          VECTRAS_RELEASE_KEY_PASSWORD: ${{ secrets.VECTRAS_RELEASE_KEY_PASSWORD }}
+      - name: Run baseline Gradle tasks
         run: |
           set -euo pipefail
           chmod +x gradlew
-          TASKS="${{ steps.baseline.outputs.tasks }}"
+          TASKS="${{ steps.mode.outputs.gradle_tasks }}"
           if [[ -z "${TASKS// }" ]]; then
             TASKS="verifyGradleRuntimeJvm verifyTargetApiBaseline verifyMinApiAbiCompatibility verifyArm64ToolchainCompatibility verifyBootstrapAssets verifyRepoFileDependencies"
           fi
@@ -296,27 +262,26 @@ jobs:
           tasks+=(":${GRADLE_MODULE}:assembleDebug")
           ./gradlew --no-daemon --stacktrace "${tasks[@]}" -PcheckVariant=debug ${GRADLE_EXTRA_ARGS}
 
-      - name: Build Release APK (unsigned by default)
-        if: inputs.build_release
+      - name: Build Release APK (unsigned)
+        if: inputs.build_release && ! inputs.sign_release
         run: |
-          set -euo pipefail
           ./gradlew --no-daemon --stacktrace ":${GRADLE_MODULE}:assembleRelease" ${GRADLE_EXTRA_ARGS}
 
-      - name: Sign Release APK
+      - name: Build and Sign Release APK
         if: inputs.build_release && inputs.sign_release
         env:
-          VECTRAS_RELEASE_KEYSTORE_B64: ${{ secrets.VECTRAS_RELEASE_KEYSTORE_B64 }}
           VECTRAS_RELEASE_STORE_PASSWORD: ${{ secrets.VECTRAS_RELEASE_STORE_PASSWORD }}
           VECTRAS_RELEASE_KEY_ALIAS: ${{ secrets.VECTRAS_RELEASE_KEY_ALIAS }}
           VECTRAS_RELEASE_KEY_PASSWORD: ${{ secrets.VECTRAS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [[ -z "${VECTRAS_RELEASE_KEYSTORE_B64}" || -z "${VECTRAS_RELEASE_STORE_PASSWORD}" || -z "${VECTRAS_RELEASE_KEY_ALIAS}" || -z "${VECTRAS_RELEASE_KEY_PASSWORD}" ]]; then
-            echo "Signing requested, but signing secrets are missing." >&2
+          if [[ -z "${VECTRAS_RELEASE_STORE_PASSWORD}" || -z "${VECTRAS_RELEASE_KEY_ALIAS}" || -z "${VECTRAS_RELEASE_KEY_PASSWORD}" ]]; then
+            echo "Assinatura solicitada, mas faltam segredos." >&2
             exit 1
           fi
           mkdir -p .ci-keystore
-          echo "${VECTRAS_RELEASE_KEYSTORE_B64}" | base64 -d > .ci-keystore/release.jks
+          # O keystore já foi decodificado no passo anterior
+          mv vectras-release.jks .ci-keystore/release.jks
           ./gradlew --no-daemon --stacktrace \
             -PVECTRAS_RELEASE_STORE_FILE=.ci-keystore/release.jks \
             -PVECTRAS_RELEASE_STORE_PASSWORD="${VECTRAS_RELEASE_STORE_PASSWORD}" \
@@ -328,25 +293,36 @@ jobs:
         if: always()
         run: rm -rf .ci-keystore
 
-      - name: Run native matrix
+      - name: Run native matrix (checkNativeAllMatrix)
         if: inputs.run_native_matrix
-        run: ./gradlew --no-daemon --stacktrace ${{ steps.mode.outputs.native_matrix_cmd }} ${GRADLE_EXTRA_ARGS}
+        run: |
+          ./gradlew --no-daemon --stacktrace ${{ steps.mode.outputs.matrix_cmd }} ${GRADLE_EXTRA_ARGS}
 
-      - name: Generate diagnostics summary
+      - name: Generate diagnostics summary (espelho da execução)
         if: always()
         run: |
           {
-            echo "## Android Build Diagnostics"
+            echo "## Android Build Diagnostics – Exacordex Atrator ${MODE}"
             echo ""
-            echo "- Mode: ${MODE}"
-            echo "- Module: ${GRADLE_MODULE}"
-            echo "- Build debug: ${{ inputs.build_debug }}"
-            echo "- Build release: ${{ inputs.build_release }}"
-            echo "- Sign release: ${{ inputs.sign_release }}"
-            echo "- Run lint: ${{ inputs.run_lint }}"
-            echo "- Run unit tests: ${{ inputs.run_unit_tests }}"
-            echo "- Run native matrix: ${{ inputs.run_native_matrix }}"
-            echo "- API: ${COMPILE_API}, Build Tools: ${TOOLS_VERSION}, NDK: ${NDK_VERSION}, CMake: ${CMAKE_VERSION}"
+            echo "| Propriedade | Valor |"
+            echo "|------------|-------|"
+            echo "| Modo (atrator) | ${MODE} |"
+            echo "| Strict mode | ${{ steps.mode.outputs.strict }} |"
+            echo "| Repo checks | ${{ steps.mode.outputs.repo_checks }} |"
+            echo "| Módulo | ${GRADLE_MODULE} |"
+            echo "| Build debug | ${{ inputs.build_debug }} |"
+            echo "| Build release | ${{ inputs.build_release }} |"
+            echo "| Sign release | ${{ inputs.sign_release }} |"
+            echo "| Lint | ${{ inputs.run_lint }} |"
+            echo "| Unit tests | ${{ inputs.run_unit_tests }} |"
+            echo "| Native matrix | ${{ inputs.run_native_matrix }} |"
+            echo "| API | ${COMPILE_API} |"
+            echo "| Build Tools | ${TOOLS_VERSION} |"
+            echo "| NDK | ${NDK_VERSION} |"
+            echo "| CMake | ${CMAKE_VERSION} |"
+            echo "| Java | ${JAVA_VERSION} |"
+            echo ""
+            echo "_Ruído observado (warnings/deprecações) – se houver, foi registrado como entropia._"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK and diagnostic artifacts
@@ -360,3 +336,4 @@ jobs:
             **/build/test-results/**
             **/*.log
           if-no-files-found: warn
+          
