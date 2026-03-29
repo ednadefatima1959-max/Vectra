@@ -1,0 +1,60 @@
+name: full-error-scan
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build
+
+      - name: Run full scan (ONE PASS)
+        run: |
+          set +e
+
+          # roda tudo SEM parar
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release > full.log 2>&1
+          cmake --build build -- -j1 >> full.log 2>&1
+
+          echo "=== SCAN COMPLETO ==="
+
+          echo ""
+          echo "🔴 FATAL ERRORS (headers faltando):"
+          grep -E "fatal error:" full.log | sort | uniq | head -n 20 || true
+
+          echo ""
+          echo "🟠 UNDEFINED REFERENCES (linkagem):"
+          grep -E "undefined reference" full.log | sort | uniq | head -n 20 || true
+
+          echo ""
+          echo "🟡 ERROS DE COMPILAÇÃO (syntax/tipo):"
+          grep -E "error:" full.log | grep -v "fatal error" | sort | uniq | head -n 20 || true
+
+          echo ""
+          echo "🔵 WARNINGS (avisos):"
+          grep -E "warning:" full.log | sort | uniq | head -n 20 || true
+
+          echo ""
+          echo "🟢 RESUMO FINAL:"
+          echo "fatal: $(grep -c 'fatal error:' full.log || true)"
+          echo "undefined: $(grep -c 'undefined reference' full.log || true)"
+          echo "error: $(grep -c 'error:' full.log || true)"
+          echo "warning: $(grep -c 'warning:' full.log || true)"
+
+          echo ""
+          echo "=== FIM DO SCAN ==="
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-log
+          path: full.log
