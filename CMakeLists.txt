@@ -14,7 +14,7 @@ endif()
 include(${RMR_SOURCES_CMAKE})
 
 # ========================
-# OPTIONS (com valores padrão que podem ser sobrescritos via -D)
+# OPTIONS (valores padrão que podem ser sobrescritos via -D)
 # ========================
 option(RMR_JNI_BUILD "Use hosted/JNI libc path for root builds" ON)
 set(RMR_BUILD_HOST_TOOLING "AUTO" CACHE STRING "Host-tooling compatibility path")
@@ -101,10 +101,8 @@ function(rmr_apply_common_flags target_name)
 endfunction()
 
 # ========================
-# SOURCES COLLECTION (usando a função definida no sources_rmr_core.cmake)
+# SOURCES COLLECTION
 # ========================
-# A função rmr_manifest_apply_base deve estar disponível no arquivo incluído.
-# Ela adiciona as fontes dos grupos indicados à variável RMR_SOURCES.
 rmr_manifest_apply_base(RMR_SOURCES ${RMR_SOURCE_GROUP_CORE} ${RMR_SOURCE_GROUP_HOST_ONLY})
 
 if(RMR_ENABLE_POLICY_MODULE)
@@ -149,7 +147,7 @@ endif()
 rmr_apply_common_flags(rmr)
 
 # ========================
-# BITRAF (biblioteca auxiliar)
+# BITRAF (já incluído no grupo core, mas mantemos por compatibilidade)
 # ========================
 add_library(bitraf_static STATIC engine/rmr/src/bitraf.c)
 set_target_properties(bitraf_static PROPERTIES OUTPUT_NAME bitraf)
@@ -157,7 +155,7 @@ rmr_apply_common_flags(bitraf_static)
 target_link_libraries(rmr PUBLIC bitraf_static)
 
 # ========================
-# SYMBOL CHECK (apenas em builds host, não em Android)
+# SYMBOL CHECK (apenas host)
 # ========================
 if(NOT ANDROID)
     find_program(BASH_EXECUTABLE bash)
@@ -180,7 +178,7 @@ if(NOT ANDROID)
 endif()
 
 # ========================
-# EXECUTÁVEIS (host apenas)
+# EXECUTÁVEIS (apenas host)
 # ========================
 if(NOT ANDROID)
     add_executable(rafaelia_demo demo_cli/src/main.c)
