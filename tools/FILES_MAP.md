@@ -129,3 +129,9 @@ Mapa arquivo-a-arquivo em três linhas por item: papel, ligação e comando de i
 - **Papel**: rotina ASM bare-metal para serializar palavra `opcode_hex` no buffer de saída com retorno de sucesso/falha.
 - **Liga com**: implementa contrato de [`tools/baremetal/rafcode_phi/include/rafcode_phi_abi.h`](baremetal/rafcode_phi/include/rafcode_phi_abi.h) para caminhos `__aarch64__` e `__x86_64__`.
 - **Inspeção**: `file "tools/baremetal/rafcode_phi/asm/rafcode_phi_emit_word.S"` e, quando texto, `sed -n "1,220p" "tools/baremetal/rafcode_phi/asm/rafcode_phi_emit_word.S"`.
+
+
+## `tools/verify_bug_core_promotion.py`
+- **Papel**: verifica governança de promoção entre `bug/core` e `engine/rmr/src` por assinatura, ordem, exports ABI e includes críticos, gerando relatório incremental.
+- **Liga com**: integrado em [`tools/verify_rmr_source_alignment.sh`](verify_rmr_source_alignment.sh) e gera [`reports/promotion_governance_report.md`](../reports/promotion_governance_report.md).
+- **Inspeção**: `python3 tools/verify_bug_core_promotion.py --report reports/promotion_governance_report.md`.

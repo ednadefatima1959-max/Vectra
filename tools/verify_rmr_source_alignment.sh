@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 python3 tools/sync_rmr_manifest_to_mk.py --check
+python3 tools/verify_bug_core_promotion.py --report reports/promotion_governance_report.md
 
 if ! rg -Fq 'include(${CMAKE_SOURCE_DIR}/engine/rmr/sources_rmr_core.cmake)' CMakeLists.txt; then
   echo "[rmr-manifest] root CMakeLists.txt does not include canonical manifest" >&2

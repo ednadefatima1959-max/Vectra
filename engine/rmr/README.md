@@ -118,3 +118,18 @@ Status da revisão atual dos pares:
 - `bug/core/bitraf.c` vs `engine/rmr/src/bitraf.c`: não promovido (interseção parcial, sem patch isolado validado).
 - `bug/core/rmr_hw_detect.c` vs `engine/rmr/src/rmr_hw_detect.c`: não promovido (pipeline de detecção divergente).
 - `bug/core/rmr_unified_kernel.c` vs `engine/rmr/src/rmr_unified_kernel.c`: não promovido em bloco; manter revisão incremental por função.
+
+## Procedimento automatizado de promoção `bug/core` → `engine/rmr/src`
+Comando canônico de governança:
+
+```bash
+python3 tools/verify_bug_core_promotion.py --report reports/promotion_governance_report.md
+```
+
+Esse verificador também está integrado ao fluxo existente `tools/verify_rmr_source_alignment.sh` (usado pelo target `verify-rmr-source-alignment` no `Makefile`).
+
+### Critérios de aceite
+- Promoção em bloco só é permitida quando o par não apresentar divergência de API/ABI, ordem e includes críticos.
+- Com incompatibilidade detectada, a promoção em bloco é bloqueada e somente promoção incremental (função por função) é aceitável.
+- Toda promoção deve referenciar o relatório gerado (`reports/promotion_governance_report.md`) e preservar compatibilidade com `engine/rmr/include`.
+- O gate de verificação (`tools/verify_rmr_source_alignment.sh`) deve permanecer verde após a mudança.
