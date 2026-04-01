@@ -3,7 +3,6 @@
 
 RMR_ENGINE_CORE_SOURCES :=
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/bitomega.c
-RMR_ENGINE_CORE_SOURCES += engine/rmr/src/bitraf.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_bit_broadcast.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_apk_module.c
 RMR_ENGINE_CORE_SOURCES += engine/rmr/src/rmr_attractor.c
@@ -49,7 +48,6 @@ RMR_ENGINE_ASM_X86_64_LOWLEVEL_SOURCES += engine/rmr/interop/rmr_lowlevel_x86_64
 
 RMR_ENGINE_ASM_X86_64_CASM_SOURCES :=
 RMR_ENGINE_ASM_X86_64_CASM_SOURCES += engine/rmr/interop/rmr_casm_x86_64.S
-RMR_ENGINE_ASM_X86_64_CASM_SOURCES += engine/rmr/interop/vectra_pulse.s
 
 RMR_ENGINE_ASM_ARM64_SOURCES :=
 RMR_ENGINE_ASM_ARM64_SOURCES += engine/rmr/interop/rmr_casm_arm64.S

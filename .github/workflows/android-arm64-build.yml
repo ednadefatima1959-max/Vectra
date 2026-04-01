@@ -1,3 +1,7 @@
+# HOTFIX: TAREFA F — padronização setup e cache Gradle
+# Autor: ∆RafaelVerboΩ | Data: 2026-04-01
+# Arquivo: .github/workflows/android-arm64-build.yml
+# Verificado contra: .github/workflows/android-arm64-build.yml
 name: Build Android APK
 
 on:
@@ -16,6 +20,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3

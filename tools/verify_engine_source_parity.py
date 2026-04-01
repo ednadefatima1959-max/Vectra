@@ -113,9 +113,10 @@ def main() -> None:
     if cmake_expected != make_expected:
         fail("derived root CMake and Make source lists differ")
 
-    ensure_contains(ROOT_CMAKE, 'include(${CMAKE_SOURCE_DIR}/engine/rmr/sources.cmake)')
-    ensure_contains(APP_CMAKE, 'include(${VECTRA_REPO_ROOT}/engine/rmr/sources.cmake)')
+    ensure_contains(ROOT_CMAKE, 'include(${CMAKE_SOURCE_DIR}/engine/rmr/sources_rmr_core.cmake)')
+    ensure_contains(APP_CMAKE, 'include(${VECTRA_REPO_ROOT}/engine/rmr/sources_rmr_core.cmake)')
     ensure_contains(MAKEFILE, "include engine/rmr/sources.mk")
+    ensure_contains(MAKEFILE, "include engine/rmr/sources_rmr_core.mk")
 
     print("[source-parity] OK: canonical manifest, root CMake include path, and Make lists are aligned")
 
