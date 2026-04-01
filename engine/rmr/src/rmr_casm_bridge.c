@@ -15,6 +15,7 @@
 
 #if RMR_ASM_CORE_EXPERIMENTAL && RMR_ASM_CORE_X86_64_VALIDATED && defined(__x86_64__)
 extern uint32_t rmr_casm_xor_fold32_x86_64(const uint8_t *data, size_t size) __attribute__((weak));
+extern uint32_t rmr_vectra_pulse_u32_x86_64(uint32_t seed) __attribute__((weak));
 #define RMR_CASM_HAS_ASM 1
 #elif RMR_ASM_CORE_EXPERIMENTAL && RMR_ASM_CORE_ARM64_VALIDATED && defined(__aarch64__)
 extern uint32_t rmr_casm_xor_fold32_arm64(const uint8_t *data, size_t size) __attribute__((weak));
@@ -113,4 +114,54 @@ uint32_t RmR_CASM_XorFold32_Interop(const uint8_t *data, size_t size, uint32_t *
   if (c_out) *c_out = csum_c;
 
   return (csum_asm == csum_c) ? 0u : 1u;
+}
+
+uint32_t RmR_CASM_VectraPulse_C(uint32_t seed) {
+  uint32_t x = seed ^ 0x9E3779B9u;
+  x ^= x << 13u;
+  x ^= x >> 17u;
+  x ^= x << 5u;
+  return x ^ 0xA5A5A5A5u;
+}
+
+uint32_t RmR_CASM_VectraPulse_SymbolReady(void) {
+#if RMR_CASM_HAS_ASM
+#if defined(__x86_64__)
+  return (rmr_vectra_pulse_u32_x86_64 != 0) ? 1u : 0u;
+#else
+  return 0u;
+#endif
+#else
+  return 0u;
+#endif
+}
+
+uint32_t RmR_CASM_VectraPulse(uint32_t seed, uint32_t *used_asm) {
+  uint32_t out = RmR_CASM_VectraPulse_C(seed);
+  uint32_t asm_hit = 0u;
+#if RMR_CASM_HAS_ASM
+#if defined(__x86_64__)
+  if (rmr_vectra_pulse_u32_x86_64) {
+    out = rmr_vectra_pulse_u32_x86_64(seed);
+    asm_hit = 1u;
+  }
+#endif
+#endif
+  if (used_asm) *used_asm = asm_hit;
+  return out;
+}
+
+uint32_t RmR_CASM_VectraPulse_Interop(uint32_t seed, uint32_t *asm_out, uint32_t *c_out) {
+  uint32_t pulse_c = RmR_CASM_VectraPulse_C(seed);
+  uint32_t pulse_asm = pulse_c;
+#if RMR_CASM_HAS_ASM
+#if defined(__x86_64__)
+  if (rmr_vectra_pulse_u32_x86_64) {
+    pulse_asm = rmr_vectra_pulse_u32_x86_64(seed);
+  }
+#endif
+#endif
+  if (asm_out) *asm_out = pulse_asm;
+  if (c_out) *c_out = pulse_c;
+  return (pulse_asm == pulse_c) ? 0u : 1u;
 }

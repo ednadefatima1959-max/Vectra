@@ -206,6 +206,10 @@ if(NOT ANDROID AND RMR_PROFILE STREQUAL "qa")
     add_executable(bitomega_smoketest demo_cli/src/bitomega_smoketest.c)
     target_link_libraries(bitomega_smoketest PRIVATE rmr)
     rmr_apply_common_flags(bitomega_smoketest)
+
+    add_executable(vectra_pulse_selftest demo_cli/src/vectra_pulse_selftest.c)
+    target_link_libraries(vectra_pulse_selftest PRIVATE rmr)
+    rmr_apply_common_flags(vectra_pulse_selftest)
 endif()
 
 # ========================
@@ -216,7 +220,7 @@ if(NOT ANDROID AND RMR_PROFILE STREQUAL "qa")
     # --- Selftest canônico ---
     add_custom_target(run_selftest
         COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-        DEPENDS rafaelia_demo bitomega_smoketest rmr_bench
+        DEPENDS rafaelia_demo bitomega_smoketest vectra_pulse_selftest rmr_bench
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Executando selftests canônicos..."
     )
@@ -261,5 +265,6 @@ if(NOT ANDROID AND RMR_PROFILE STREQUAL "qa")
     enable_testing()
     add_test(NAME bitomega_smoke COMMAND bitomega_smoketest)
     add_test(NAME rafaelia_demo  COMMAND rafaelia_demo)
+    add_test(NAME vectra_pulse_selftest COMMAND vectra_pulse_selftest)
 
 endif()

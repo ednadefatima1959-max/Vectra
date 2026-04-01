@@ -52,6 +52,7 @@ set(RMR_ENGINE_ASM_X86_64_LOWLEVEL_SOURCES
 
 set(RMR_ENGINE_ASM_X86_64_CASM_SOURCES
   engine/rmr/interop/rmr_casm_x86_64.S
+  engine/rmr/interop/vectra_pulse.s
 )
 
 set(RMR_ENGINE_ASM_ARM64_SOURCES
