@@ -104,10 +104,10 @@ endfunction()
 # ========================
 # SOURCES COLLECTION
 # ========================
-rmr_manifest_apply_base(RMR_SOURCES ${RMR_SOURCE_GROUP_CORE} ${RMR_SOURCE_GROUP_HOST_ONLY})
+rmr_manifest_apply_base(RMR_SOURCES RMR_SOURCE_GROUP_CORE RMR_SOURCE_GROUP_HOST_ONLY)
 
 if(RMR_ENABLE_POLICY_MODULE)
-  rmr_manifest_apply_base(RMR_POLICY_SOURCES ${RMR_SOURCE_GROUP_OPTIONAL_POLICY})
+  rmr_manifest_apply_base(RMR_POLICY_SOURCES RMR_SOURCE_GROUP_OPTIONAL_POLICY)
   list(APPEND RMR_SOURCES ${RMR_POLICY_SOURCES})
 endif()
 

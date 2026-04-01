@@ -31,17 +31,18 @@ set(RMR_SOURCE_GROUP_OPTIONAL_POLICY
 
 # Grupo 4: ASM para x86_64
 set(RMR_SOURCE_GROUP_ASM_X86_64
-    engine/rmr/src/asm/x86_64/rmr_casm_x86_64.s
+    engine/rmr/interop/rmr_lowlevel_x86_64.S
+    engine/rmr/interop/rmr_casm_x86_64.S
 )
 
 # Grupo 5: ASM para ARM64
 set(RMR_SOURCE_GROUP_ASM_ARM64
-    engine/rmr/src/asm/arm64/rmr_casm_arm64.s
+    engine/rmr/interop/rmr_casm_arm64.S
 )
 
 # Grupo 6: ASM para RISC-V 64
 set(RMR_SOURCE_GROUP_ASM_RISCV64
-    engine/rmr/src/asm/riscv64/rmr_casm_riscv64.s
+    engine/rmr/interop/rmr_casm_riscv64.S
 )
 
 # ====================================================================
