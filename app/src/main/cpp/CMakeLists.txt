@@ -11,7 +11,7 @@ option(RMR_ASM_CORE_RISCV64_VALIDATED "Enable RV64I-compatible CASM path on risc
 set(VECTRA_REPO_ROOT ${CMAKE_CURRENT_LIST_DIR}/../../../../)
 set(VECTRA_RMR_INCLUDE_DIR ${VECTRA_REPO_ROOT}/engine/rmr/include)
 
-include(${VECTRA_REPO_ROOT}/engine/rmr/sources_rmr_core.cmake)
+include(${VECTRA_REPO_ROOT}/engine/rmr/sources.cmake)
 
 rmr_manifest_apply_base(VECTRA_ENGINE_CORE_SOURCES ${RMR_SOURCE_GROUP_CORE} ${RMR_SOURCE_GROUP_ANDROID_ONLY})
 list(REMOVE_ITEM VECTRA_ENGINE_CORE_SOURCES ${VECTRA_REPO_ROOT}/engine/rmr/src/rmr_baremetal_compat.c)

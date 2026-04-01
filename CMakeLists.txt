@@ -8,11 +8,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # ========================
 # INCLUDE SOURCES MANIFEST
 # ========================
-set(RMR_SOURCES_CMAKE "${CMAKE_SOURCE_DIR}/engine/rmr/sources_rmr_core.cmake")
-if(NOT EXISTS ${RMR_SOURCES_CMAKE})
-    message(FATAL_ERROR "Arquivo de manifesto de fontes não encontrado: ${RMR_SOURCES_CMAKE}")
+if(NOT EXISTS ${CMAKE_SOURCE_DIR}/engine/rmr/sources.cmake)
+    message(FATAL_ERROR "Arquivo de manifesto de fontes não encontrado: ${CMAKE_SOURCE_DIR}/engine/rmr/sources.cmake")
 endif()
-include(${RMR_SOURCES_CMAKE})
+include(${CMAKE_SOURCE_DIR}/engine/rmr/sources.cmake)
 
 # ========================
 # OPTIONS (valores padrão que podem ser sobrescritos via -D)
