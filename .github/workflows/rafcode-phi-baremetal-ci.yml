@@ -1,14 +1,7 @@
 name: rafcode-phi-baremetal-ci
 
 on:
-  push:
-    paths:
-      - 'tools/baremetal/rafcode_phi/**'
-      - '.github/workflows/rafcode-phi-baremetal-ci.yml'
-  pull_request:
-    paths:
-      - 'tools/baremetal/rafcode_phi/**'
-      - '.github/workflows/rafcode-phi-baremetal-ci.yml'
+  workflow_dispatch:
 
 jobs:
   rafcode-phi-regression:

@@ -1,7 +1,6 @@
 name: android-arm642
 
 on:
-  push:
   workflow_dispatch:
 
 jobs:

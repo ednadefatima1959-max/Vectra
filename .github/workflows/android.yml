@@ -1,48 +1,7 @@
 name: Android CI
 
 on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
   workflow_dispatch:
-    inputs:
-      build_debug:
-        description: 'Build Debug APK'
-        type: boolean
-        default: true
-      build_release:
-        description: 'Build Release APK'
-        type: boolean
-        default: false
-      sign_release:
-        description: 'Sign Release APK (requires secrets)'
-        type: boolean
-        default: false
-      upload_telegram:
-        description: 'Upload to Telegram'
-        type: boolean
-        default: false
-      compile_api:
-        description: 'Compile SDK API'
-        type: string
-        default: '35'
-      tools_version:
-        description: 'Build Tools Version'
-        type: string
-        default: '35.0.0'
-      ndk_version:
-        description: 'NDK Version'
-        type: string
-        default: '27.2.12479018'
-      cmake_version:
-        description: 'CMake Version'
-        type: string
-        default: '3.22.1'
-      java_version:
-        description: 'Java Version'
-        type: string
-        default: '17'
 
 jobs:
   build:
