@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
+import platform
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = ROOT / "engine/rmr/cmake/rmr_sources.cmake"
+MANIFEST = ROOT / "engine/rmr/sources.cmake"
+MK_MANIFEST = ROOT / "engine/rmr/sources.mk"
 ROOT_CMAKE = ROOT / "CMakeLists.txt"
 APP_CMAKE = ROOT / "app/src/main/cpp/CMakeLists.txt"
 MAKEFILE = ROOT / "Makefile"
+
+SET_PATTERN = re.compile(r"^set\((\w+)\s*$")
 
 
 def fail(msg: str) -> None:
@@ -15,71 +21,103 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
-def extract_manifest(var: str) -> list[str]:
-    text = MANIFEST.read_text()
-    m = re.search(rf"set\({var}\s*(.*?)\)", text, re.S)
-    if not m:
-        fail(f"variable {var} not found in {MANIFEST}")
-    block = m.group(1)
-    items = []
-    for line in block.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+def parse_cmake_sets(path: Path) -> dict[str, list[str]]:
+    sets: dict[str, list[str]] = {}
+    current_name: str | None = None
+    current_values: list[str] = []
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
             continue
-        line = line.replace("${RMR_REPO_ROOT}/", "")
-        items.append(line)
-    return items
+
+        if current_name is None:
+            m = SET_PATTERN.match(line)
+            if m:
+                current_name = m.group(1)
+                current_values = []
+            continue
+
+        if line == ")":
+            sets[current_name] = current_values
+            current_name = None
+            current_values = []
+            continue
+
+        current_values.append(line)
+
+    if current_name is not None:
+        fail(f"unterminated set() block for {current_name} in {path}")
+
+    return sets
 
 
-def extract_make(var: str) -> list[str]:
-    text = MAKEFILE.read_text()
-    m = re.search(rf"^{var}\s*:=\s*(.*?)\n\n", text, re.M | re.S)
-    if not m:
-        fail(f"variable {var} not found in {MAKEFILE}")
-    block = m.group(1).replace("\\\n", "\n")
-    items = []
-    for line in block.splitlines():
-        line = line.strip().rstrip("\\").strip()
-        if not line or line.startswith("$"):
-            continue
-        items.append(line)
-    return items
+def parse_make_plus_assignments(path: Path, var: str) -> list[str]:
+    values: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line.startswith(f"{var} += "):
+            values.append(line.split("+=", 1)[1].strip())
+    return values
 
 
 def ensure_contains(path: Path, snippet: str) -> None:
-    if snippet not in path.read_text():
+    if snippet not in path.read_text(encoding="utf-8"):
         fail(f"expected snippet missing in {path}: {snippet}")
 
 
-def compare(label: str, left: list[str], right: list[str]) -> None:
-    if left == right:
-        return
-    fail(
-        f"{label} mismatch\n  left-only: {sorted(set(left)-set(right))}\n  right-only: {sorted(set(right)-set(left))}"
-    )
+def with_policy_and_host_asm(manifest: dict[str, list[str]]) -> list[str]:
+    result = list(manifest["RMR_ENGINE_CORE_SOURCES"])
+    result.extend(manifest["RMR_ENGINE_POLICY_SOURCES"])
+
+    machine = platform.machine().lower()
+    if machine in {"x86_64", "amd64"}:
+        result.extend(manifest["RMR_ENGINE_ASM_X86_64_LOWLEVEL_SOURCES"])
+        result.extend(manifest["RMR_ENGINE_ASM_X86_64_CASM_SOURCES"])
+    elif machine in {"aarch64", "arm64"}:
+        result.extend(manifest["RMR_ENGINE_ASM_ARM64_SOURCES"])
+    elif machine == "riscv64":
+        result.extend(manifest["RMR_ENGINE_ASM_RISCV64_SOURCES"])
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for src in result:
+        if src not in seen:
+            deduped.append(src)
+            seen.add(src)
+    return deduped
 
 
 def main() -> None:
-    manifest_core = extract_manifest("RMR_CORE_COMMON_SOURCES")
-    manifest_ext = extract_manifest("RMR_EXTENDED_MODULE_SOURCES")
-    manifest_policy = extract_manifest("RMR_POLICY_MODULE_SOURCES")
+    manifest = parse_cmake_sets(MANIFEST)
 
-    make_core = extract_make("ENGINE_CORE_COMMON_SRCS")
-    make_ext = extract_make("ENGINE_EXTENDED_SRCS")
-    make_policy = [line.strip() for line in re.search(r"^ENGINE_POLICY_SRCS\s*:=\s*(.+)$", MAKEFILE.read_text(), re.M).group(1).split()]
+    required = [
+        "RMR_ENGINE_CORE_SOURCES",
+        "RMR_ENGINE_POLICY_SOURCES",
+        "RMR_ENGINE_ASM_X86_64_LOWLEVEL_SOURCES",
+        "RMR_ENGINE_ASM_X86_64_CASM_SOURCES",
+        "RMR_ENGINE_ASM_ARM64_SOURCES",
+        "RMR_ENGINE_ASM_RISCV64_SOURCES",
+    ]
+    for key in required:
+        if key not in manifest:
+            fail(f"{key} missing from {MANIFEST}")
 
-    compare("core sources", manifest_core, make_core)
-    compare("extended sources", manifest_ext, make_ext)
-    compare("policy sources", manifest_policy, make_policy)
+    for key in required:
+        mk_values = parse_make_plus_assignments(MK_MANIFEST, key)
+        if mk_values != manifest[key]:
+            fail(f"{key} differs between sources.cmake and sources.mk")
 
-    ensure_contains(ROOT_CMAKE, "include(${CMAKE_SOURCE_DIR}/engine/rmr/cmake/rmr_sources.cmake)")
-    ensure_contains(ROOT_CMAKE, "${RMR_CORE_COMMON_SOURCES}")
-    ensure_contains(ROOT_CMAKE, "${RMR_EXTENDED_MODULE_SOURCES}")
-    ensure_contains(APP_CMAKE, "include(${VECTRA_REPO_ROOT}/engine/rmr/cmake/rmr_sources.cmake)")
-    ensure_contains(APP_CMAKE, "${RMR_CORE_COMMON_SOURCES}")
-    ensure_contains(APP_CMAKE, "${RMR_EXTENDED_MODULE_SOURCES}")
+    cmake_expected = with_policy_and_host_asm(manifest)
+    make_expected = with_policy_and_host_asm(manifest)
+    if cmake_expected != make_expected:
+        fail("derived root CMake and Make source lists differ")
 
-    print("[source-parity] OK: manifest, CMake, and Makefile lists are aligned")
+    ensure_contains(ROOT_CMAKE, 'include(${CMAKE_SOURCE_DIR}/engine/rmr/sources.cmake)')
+    ensure_contains(APP_CMAKE, 'include(${VECTRA_REPO_ROOT}/engine/rmr/sources.cmake)')
+    ensure_contains(MAKEFILE, "include engine/rmr/sources.mk")
+
+    print("[source-parity] OK: canonical manifest, root CMake include path, and Make lists are aligned")
 
 
 if __name__ == "__main__":

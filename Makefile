@@ -7,7 +7,7 @@ CPPFLAGS ?= -Iengine/rmr/include -DRMR_JNI_BUILD=$(RMR_JNI_BUILD) -DRMR_BUILD_HO
 CFLAGS ?= -O3 -std=c11 -Wall -Wextra -pedantic
 LDFLAGS ?=
 
-include engine/rmr/sources_rmr_core.mk
+include engine/rmr/sources.mk
 
 UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 SHARED_EXT := so
@@ -17,11 +17,11 @@ else ifeq ($(UNAME_S),Darwin)
   SHARED_EXT := dylib
 endif
 
-ENGINE_CORE_SRCS := $(RMR_SOURCE_GROUP_CORE) $(RMR_SOURCE_GROUP_HOST_ONLY)
-ENGINE_POLICY_SRCS := $(RMR_SOURCE_GROUP_OPTIONAL_POLICY)
-ENGINE_ASM_X86_64_SRCS := $(RMR_SOURCE_GROUP_ASM_X86_64)
-ENGINE_ASM_ARM64_SRCS := $(RMR_SOURCE_GROUP_ASM_ARM64)
-ENGINE_ASM_RISCV64_SRCS := $(RMR_SOURCE_GROUP_ASM_RISCV64)
+ENGINE_CORE_SRCS := $(RMR_ENGINE_CORE_SOURCES)
+ENGINE_POLICY_SRCS := $(RMR_ENGINE_POLICY_SOURCES)
+ENGINE_ASM_X86_64_SRCS := $(RMR_ENGINE_ASM_X86_64_LOWLEVEL_SOURCES) $(RMR_ENGINE_ASM_X86_64_CASM_SOURCES)
+ENGINE_ASM_ARM64_SRCS := $(RMR_ENGINE_ASM_ARM64_SOURCES)
+ENGINE_ASM_RISCV64_SRCS := $(RMR_ENGINE_ASM_RISCV64_SOURCES)
 
 ENGINE_SRCS := $(ENGINE_CORE_SRCS)
 ifeq ($(RMR_ENABLE_POLICY_MODULE),1)
@@ -259,6 +259,7 @@ run-release-gate: run-selftest run-bench run-baremetal-gate
 
 check-engine-source-manifest:
 	python3 tools/sync_engine_sources.py --check
+	python3 tools/verify_engine_source_parity.py
 
 clean:
 	rm -rf build
