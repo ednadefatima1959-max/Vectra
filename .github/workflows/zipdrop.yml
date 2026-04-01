@@ -1,13 +1,6 @@
 name: zipdrop-overlay
 
 on:
-  # ✅ Drop a zip into _incoming/ and push.
-  # This workflow will safely apply it and self-commit the extracted delta.
-  push:
-    # Don't lock to a single default branch: many repos still use master/dev.
-    paths:
-      - "_incoming/**/*.zip"
-      - "*.zip"
   workflow_dispatch:
 
 concurrency:

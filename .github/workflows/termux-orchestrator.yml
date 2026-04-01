@@ -2,23 +2,6 @@ name: Termux Orchestrator Build
 
 on:
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Run compliance + orchestration without real Gradle release build"
-        required: true
-        default: "true"
-        type: choice
-        options: ["true", "false"]
-      enable_fork_sync:
-        description: "Enable external fork sync step"
-        required: true
-        default: "false"
-        type: choice
-        options: ["true", "false"]
-  push:
-    paths:
-      - "tools/termux-arm64-orchestrator/**"
-      - ".github/workflows/termux-orchestrator.yml"
 
 jobs:
   orchestrator:

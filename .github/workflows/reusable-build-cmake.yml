@@ -1,0 +1,40 @@
+name: Reusable Build CMake
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: false
+        type: string
+        default: ubuntu-latest
+      compiler:
+        required: false
+        type: string
+        default: gcc
+
+permissions:
+  contents: read
+
+jobs:
+  build-cmake:
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 30
+    env:
+      CC: ${{ inputs.compiler }}
+      CXX: ${{ inputs.compiler == 'clang' && 'clang++' || 'g++' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake make ninja-build pkg-config graphviz python3 clang ripgrep
+
+      - name: Build with CMake
+        run: |
+          cmake -S . -B build-cmake -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX"
+          cmake --build build-cmake -j"$(nproc)"
+
+      - name: Verify link contracts (CMake)
+        run: cmake --build build-cmake --target verify_contracts

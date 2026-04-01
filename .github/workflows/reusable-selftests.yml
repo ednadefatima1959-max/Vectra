@@ -1,0 +1,66 @@
+name: Reusable Selftests
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: false
+        type: string
+        default: ubuntu-latest
+      compiler:
+        required: false
+        type: string
+        default: gcc
+
+permissions:
+  contents: read
+
+jobs:
+  selftests:
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 40
+    env:
+      CC: ${{ inputs.compiler }}
+      CXX: ${{ inputs.compiler == 'clang' && 'clang++' || 'g++' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake make ninja-build pkg-config graphviz python3 clang ripgrep
+
+      - name: Prepare output directories
+        run: |
+          mkdir -p bench/results reports/baremetal
+
+      - name: Build and run selftests (Make)
+        run: |
+          make clean && make all CC="$CC" CXX="$CXX"
+          make run-selftest 2>&1 | tee bench/results/make-selftest.log
+          make run-bitomega-smoketest
+          make run-release-gate 2>&1 | tee bench/results/release-gate.log
+
+      - name: Build and run selftests (CMake)
+        run: |
+          cmake -S . -B build-cmake -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX"
+          cmake --build build-cmake -j"$(nproc)"
+          cmake --build build-cmake --target run_bitomega_smoketest
+          cmake --build build-cmake --target run_selftest
+          cmake --build build-cmake --target bitomega_transition_graph
+
+      - name: Upload local selftest artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-${{ inputs.os }}-${{ inputs.compiler }}
+          path: |
+            bench/results/bitomega_transitions.csv
+            reports/bitomega_transition_graph.png
+            reports/bitomega_summary.md
+            bench/results/summary.json
+            bench/results/release-gate.log
+            bench/results/make-selftest.log
+            reports/baremetal/*
+          if-no-files-found: warn

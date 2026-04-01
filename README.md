@@ -137,6 +137,7 @@ make run-bitomega-smoketest
 - Referência do runtime: [`VECTRA_CORE.md`](VECTRA_CORE.md)
 - Guia macro de documentação: [`VECTRAS_MEGAPROMPT_DOCS.md`](VECTRAS_MEGAPROMPT_DOCS.md)
 - Guia operacional de build: [`BUILDING.md`](BUILDING.md)
+- Alinhamento de ambiente e cadeia oficial de CI: [`docs/BUILD_ENV_ALIGNMENT.md`](docs/BUILD_ENV_ALIGNMENT.md)
 - Troubleshooting operacional: [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)
 - Sumário de correções: [`FIXES_SUMMARY.md`](FIXES_SUMMARY.md)
 - Manifesto de estabilidade: [`VERSION_STABILITY.md`](VERSION_STABILITY.md)

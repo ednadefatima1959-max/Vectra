@@ -1,0 +1,38 @@
+name: Reusable Build Make
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: false
+        type: string
+        default: ubuntu-latest
+      compiler:
+        required: false
+        type: string
+        default: gcc
+
+permissions:
+  contents: read
+
+jobs:
+  build-make:
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 30
+    env:
+      CC: ${{ inputs.compiler }}
+      CXX: ${{ inputs.compiler == 'clang' && 'clang++' || 'g++' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake make ninja-build pkg-config graphviz python3 ccache clang ripgrep
+
+      - name: Validate engine source manifest sync
+        run: make check-engine-source-manifest
+
+      - name: Build with Make
+        run: make clean && make all CC="$CC" CXX="$CXX"

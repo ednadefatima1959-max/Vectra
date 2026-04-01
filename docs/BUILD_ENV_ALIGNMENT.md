@@ -9,6 +9,33 @@ Checklist objetivo para resolver “não compila” por desalinhamento de SDK/JD
 - `KOTLIN_VERSION` e `AGP_VERSION` também podem ser ajustados por propriedade.
 
 
+
+## Cadeia estrutural oficial de CI (host + Make + CMake)
+
+A cadeia oficial de CI para validação do engine nativo passa a ser **exclusivamente** o workflow `engine-ci.yml` para execução automática em `push`/`pull_request`.
+
+### Workflow principal (canônico)
+- Arquivo: `.github/workflows/engine-ci.yml`.
+- Gatilhos canônicos e padronizados:
+  - `engine/**`
+  - `demo_cli/**`
+  - `CMakeLists.txt`
+  - `Makefile`
+  - manifestos de fontes (`engine/rmr/sources.cmake`, `engine/rmr/sources.mk`)
+  - `tools/sync_engine_sources.py`
+- Pipeline oficial: **setup toolchain -> build Make -> build CMake -> selftests -> upload de artefatos**.
+
+### Jobs reutilizáveis (reusable workflows)
+Blocos comuns foram extraídos para reusable workflows em `.github/workflows/`:
+- `reusable-setup-toolchain.yml`
+- `reusable-build-make.yml`
+- `reusable-build-cmake.yml`
+- `reusable-selftests.yml`
+- `reusable-upload-artifacts.yml`
+
+### Workflows auxiliares
+Workflows auxiliares foram rebaixados para `workflow_dispatch` (execução manual) para reduzir duplicidade de execução automática e manter uma trilha oficial única para host+nativo.
+
 ## Política explícita de JDK para Gradle
 
 - Runtime padrão obrigatório do Gradle: `GRADLE_JAVA_RUNTIME_VERSION=17` (ver `gradle.properties`).
