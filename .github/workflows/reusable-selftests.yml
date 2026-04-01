@@ -11,6 +11,10 @@ on:
         required: false
         type: string
         default: gcc
+      cmake_profile:
+        required: false
+        type: string
+        default: qa
 
 permissions:
   contents: read
@@ -44,7 +48,7 @@ jobs:
 
       - name: Build and run selftests (CMake)
         run: |
-          cmake -S . -B build-cmake -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX"
+          cmake -S . -B build-cmake -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DRMR_PROFILE="${{ inputs.cmake_profile }}"
           cmake --build build-cmake -j"$(nproc)"
           cmake --build build-cmake --target run_bitomega_smoketest
           cmake --build build-cmake --target run_selftest

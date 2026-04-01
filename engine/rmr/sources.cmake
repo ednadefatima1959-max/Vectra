@@ -91,6 +91,19 @@ set(RMR_SOURCE_GROUP_HOST_ONLY
     engine/rmr/src/rmr_bench_suite.c
 )
 
+# Runtime profile groups:
+# - MINIMAL: low-level runtime only (no benchmark/selftests/graph sources).
+# - QA: includes MINIMAL + QA extras.
+set(RMR_SOURCE_GROUP_QA_EXTRAS
+    engine/rmr/src/rmr_bench.c
+    engine/rmr/src/rmr_benchmark.c
+    engine/rmr/src/rmr_bench_suite.c
+    engine/rmr/src/rmr_execution_graph.c
+)
+
+set(RMR_SOURCE_GROUP_RUNTIME_MINIMAL ${RMR_ENGINE_CORE_SOURCES})
+list(REMOVE_ITEM RMR_SOURCE_GROUP_RUNTIME_MINIMAL ${RMR_SOURCE_GROUP_QA_EXTRAS})
+
 function(rmr_manifest_apply_base out_var)
     set(_sources "")
     foreach(group ${ARGN})

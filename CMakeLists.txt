@@ -19,6 +19,8 @@ include(${CMAKE_SOURCE_DIR}/engine/rmr/sources.cmake)
 option(RMR_JNI_BUILD "Use hosted/JNI libc path for root builds" ON)
 set(RMR_BUILD_HOST_TOOLING "AUTO" CACHE STRING "Host-tooling compatibility path")
 set_property(CACHE RMR_BUILD_HOST_TOOLING PROPERTY STRINGS AUTO ON OFF)
+set(RMR_PROFILE "qa" CACHE STRING "Build profile: minimal|qa")
+set_property(CACHE RMR_PROFILE PROPERTY STRINGS minimal qa)
 
 option(RMR_ENABLE_POLICY_MODULE ON)
 option(RMR_ASM_CORE_EXPERIMENTAL ON)
@@ -70,6 +72,11 @@ endif()
 message(STATUS "RMR_JNI_BUILD=${RMR_JNI_BUILD_VALUE}")
 message(STATUS "RMR_BUILD_HOST_TOOLING=${RMR_BUILD_HOST_TOOLING_VALUE}")
 message(STATUS "RMR_ENABLE_POLICY_MODULE=${RMR_ENABLE_POLICY_MODULE_VALUE}")
+message(STATUS "RMR_PROFILE=${RMR_PROFILE}")
+
+if(NOT RMR_PROFILE STREQUAL "minimal" AND NOT RMR_PROFILE STREQUAL "qa")
+  message(FATAL_ERROR "RMR_PROFILE inválido: ${RMR_PROFILE}. Use minimal ou qa.")
+endif()
 
 # ========================
 # ENV EXPORT (para scripts externos)
@@ -78,6 +85,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/rmr_build_config.env"
   "RMR_JNI_BUILD=${RMR_JNI_BUILD_VALUE}\n"
   "RMR_BUILD_HOST_TOOLING=${RMR_BUILD_HOST_TOOLING_VALUE}\n"
   "RMR_ENABLE_POLICY_MODULE=${RMR_ENABLE_POLICY_MODULE_VALUE}\n"
+  "RMR_PROFILE=${RMR_PROFILE}\n"
 )
 
 # ========================
@@ -103,12 +111,17 @@ endfunction()
 # ========================
 # SOURCES COLLECTION
 # ========================
-rmr_manifest_apply_base(RMR_SOURCES RMR_SOURCE_GROUP_CORE RMR_SOURCE_GROUP_HOST_ONLY)
+rmr_manifest_apply_base(RMR_SOURCES RMR_SOURCE_GROUP_RUNTIME_MINIMAL)
+
+if(RMR_PROFILE STREQUAL "qa")
+  list(APPEND RMR_SOURCES ${RMR_SOURCE_GROUP_QA_EXTRAS})
+endif()
 
 if(RMR_ENABLE_POLICY_MODULE)
   rmr_manifest_apply_base(RMR_POLICY_SOURCES RMR_SOURCE_GROUP_OPTIONAL_POLICY)
   list(APPEND RMR_SOURCES ${RMR_POLICY_SOURCES})
 endif()
+list(REMOVE_DUPLICATES RMR_SOURCES)
 
 # ========================
 # ARCH DETECT (C-ASM opcional)
@@ -180,7 +193,7 @@ endif()
 # ========================
 # EXECUTÁVEIS (apenas host)
 # ========================
-if(NOT ANDROID)
+if(NOT ANDROID AND RMR_PROFILE STREQUAL "qa")
     add_executable(rafaelia_demo demo_cli/src/main.c)
     target_link_libraries(rafaelia_demo PRIVATE rmr)
     rmr_apply_common_flags(rafaelia_demo)
@@ -198,7 +211,7 @@ endif()
 # ========================
 # TARGETS DE SELFTEST E BENCHMARKS (apenas host)
 # ========================
-if(NOT ANDROID)
+if(NOT ANDROID AND RMR_PROFILE STREQUAL "qa")
 
     # --- Selftest canônico ---
     add_custom_target(run_selftest
