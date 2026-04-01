@@ -33,43 +33,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  setup-toolchain:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, ubuntu-22.04]
-        compiler: [gcc, clang]
-    uses: ./.github/workflows/reusable-setup-toolchain.yml
-    with:
-      os: ${{ matrix.os }}
-      compiler: ${{ matrix.compiler }}
+  minimal-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  build-make:
-    needs: setup-toolchain
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, ubuntu-22.04]
-        compiler: [gcc, clang]
-    uses: ./.github/workflows/reusable-build-make.yml
-    with:
-      os: ${{ matrix.os }}
-      compiler: ${{ matrix.compiler }}
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake make ninja-build pkg-config python3 ripgrep
 
-  build-cmake:
-    needs: setup-toolchain
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, ubuntu-22.04]
-        compiler: [gcc, clang]
-    uses: ./.github/workflows/reusable-build-cmake.yml
-    with:
-      os: ${{ matrix.os }}
-      compiler: ${{ matrix.compiler }}
+      - name: Configure + build CMake minimal profile
+        run: |
+          cmake -S . -B build-cmake-minimal -G Ninja -DRMR_PROFILE=minimal
+          cmake --build build-cmake-minimal -j"$(nproc)"
+          cmake --build build-cmake-minimal --target verify_contracts
 
-  selftests:
-    needs: [build-make, build-cmake]
+      - name: Assert QA-only targets are absent in minimal profile
+        run: |
+          set -euo pipefail
+          if ninja -C build-cmake-minimal -t targets all | rg -n "run_selftest|bitomega_transition_graph|run_release_gate|rmr_bench"; then
+            echo "QA-only targets found in minimal profile." >&2
+            exit 1
+          fi
+          echo "OK: minimal profile excludes benchmark/selftest/graph targets."
+
+  qa-full:
     strategy:
       fail-fast: false
       matrix:
@@ -79,18 +70,21 @@ jobs:
     with:
       os: ${{ matrix.os }}
       compiler: ${{ matrix.compiler }}
+      cmake_profile: qa
 
-  upload-canonical-summary:
-    needs: selftests
+  approval-gate:
+    name: approval-gate
+    runs-on: ubuntu-latest
+    needs: [minimal-fast, qa-full]
     if: always()
-    uses: ./.github/workflows/reusable-upload-artifacts.yml
-    with:
-      name: engine-ci-canonical-summary
-      path: |
-        bench/results/summary.json
-        bench/results/release-gate.log
-        bench/results/make-selftest.log
-        reports/bitomega_summary.md
+    steps:
+      - name: Enforce approval criteria
+        run: |
+          echo "Approval criteria:"
+          echo "1) minimal-fast must pass (runtime-only CMake profile)."
+          echo "2) qa-full matrix must pass (full selftests/benchmark/graph path)."
+          [[ "${{ needs.minimal-fast.result }}" == "success" ]]
+          [[ "${{ needs.qa-full.result }}" == "success" ]]
 
   engine-selftest-arm64:
     runs-on: ubuntu-24.04-arm
