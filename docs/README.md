@@ -19,6 +19,7 @@ Camada técnica central de documentação do Vectras VM Android.
 - Operação e benchmark: `OPERATIONS.md`, `BENCHMARKS.md`, `BENCHMARK_MANAGER.md`
 - Build e ambiente: `BUILD_ENV_ALIGNMENT.md`
 - Compilador autoral (cabeçalho C → ASM): `RAFCODE_PHI_COMPILER_HEADER.md`
+- Análise low-level (estado/fase/Δ): `LOWLEVEL_ATTRACTOR_DELTA_ANALYSIS.md`
 - Qualidade e conformidade: `SECURITY.md`, `LEGAL_AND_LICENSES.md`, `SOURCE_TRACEABILITY_MATRIX.md`, `IP_MAP.md`
 - Fullstack (código-fonte ponta a ponta): `FULLSTACK_SOURCE_MAP.md`
 - Navegação por público: `navigation/INDEX.md` e derivados
