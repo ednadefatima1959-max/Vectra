@@ -220,16 +220,20 @@ if(NOT ANDROID)
     find_program(DOT_EXECUTABLE dot)
     if(DOT_EXECUTABLE)
         add_custom_target(bitomega_transition_graph
+            COMMAND ${CMAKE_COMMAND} -E make_directory bench/results
             COMMAND ${CMAKE_COMMAND} -E make_directory reports
-            COMMAND $<TARGET_FILE:bitomega_smoketest> --csv > bench/results/bitomega_transitions.csv || true
-            COMMAND ${DOT_EXECUTABLE} -Tpng bench/results/bitomega_transitions.csv -o reports/bitomega_transition_graph.png || true
+            COMMAND $<TARGET_FILE:bitomega_smoketest> --csv bench/results/bitomega_transitions.csv --dot bench/results/bitomega_transitions.dot
+            COMMAND ${CMAKE_COMMAND}
+                    -DINPUT_DOT=bench/results/bitomega_transitions.dot
+                    -P ${CMAKE_SOURCE_DIR}/tools/validate_dot_file.cmake
+            COMMAND ${DOT_EXECUTABLE} -Tpng bench/results/bitomega_transitions.dot -o reports/bitomega_transition_graph.png
             DEPENDS bitomega_smoketest
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             COMMENT "Gerando grafo de transição BitOmega..."
         )
     else()
         add_custom_target(bitomega_transition_graph
-            COMMAND ${CMAKE_COMMAND} -E echo "dot não encontrado; grafo pulado"
+            COMMAND ${CMAKE_COMMAND} -E echo "dot nao encontrado, graphviz indisponivel, grafo pulado"
             COMMENT "Grafo BitOmega: graphviz não disponível"
         )
     endif()
