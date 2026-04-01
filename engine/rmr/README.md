@@ -15,6 +15,18 @@ make all
 - API pública mínima consolidada: `rmr_kernel_init`, `rmr_kernel_shutdown`, `rmr_kernel_ingest`, `rmr_kernel_process`, `rmr_kernel_route`, `rmr_kernel_verify`, `rmr_kernel_audit`, `rmr_kernel_autodetect`, `rmr_kernel_get_capabilities`.
 - Este header é o único ponto de verdade para orquestração do core (lifecycle + I/O descriptors + capacidades de hardware).
 
+## Matriz arquitetura × contrato × suporte ASM
+
+| Arquitetura | Assinatura (`RMR_SIG_ARCH_*`) | Largura registrador | Alinhamento | Convenção de chamada | Limite de endereçamento | Suporte ASM |
+|---|---:|---:|---:|---|---:|---|
+| x86 | `0x0400` | 32 bits | 16 bytes | `cdecl32` | 32 bits | nenhum |
+| x86_64 | `0x0300` | 64 bits | 16 bytes | `sysv_amd64` | 48 bits | `lowlevel` + `casm` |
+| arm32 | `0x0200` | 32 bits | 8 bytes | `aapcs32` | 32 bits | nenhum |
+| arm64 | `0x0100` | 64 bits | 16 bytes | `aapcs64` | 48 bits | `casm` |
+| riscv64 | `0x0500` | 64 bits | 16 bytes | `riscv64` | 39 bits | `casm` |
+
+Implementação canônica do contrato: `include/rmr_arch_contract.h` + validações estáticas/runtime em `src/rmr_unified_kernel.c`.
+
 ## Constantes canônicas
 - Header canônico de constantes: `include/zero.h`
 - Escopo consolidado das constantes canônicas:

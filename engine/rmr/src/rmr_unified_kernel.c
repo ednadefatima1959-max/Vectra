@@ -1,5 +1,7 @@
 #include "rmr_unified_kernel.h"
 
+#include "rmr_arch_contract.h"
+
 #include "bitomega.h"
 #include "bitraf.h"
 #include "rmr_corelib.h"
@@ -251,6 +253,107 @@ static uint64_t rmr_toroidal_route_tag(const RmR_ToroidalAddr7D *t) {
   return tag;
 }
 
+_Static_assert(sizeof(uintptr_t) == sizeof(void *), "uintptr_t contract mismatch");
+_Static_assert(RMR_SIG_ARCH_UNKNOWN == 0x0000u, "arch signature contract mismatch");
+_Static_assert(RMR_SIG_ARCH_ARM64 == 0x0100u, "arch signature contract mismatch");
+_Static_assert(RMR_SIG_ARCH_ARM32 == 0x0200u, "arch signature contract mismatch");
+_Static_assert(RMR_SIG_ARCH_X64 == 0x0300u, "arch signature contract mismatch");
+_Static_assert(RMR_SIG_ARCH_X86 == 0x0400u, "arch signature contract mismatch");
+_Static_assert(RMR_SIG_ARCH_RISCV64 == 0x0500u, "arch signature contract mismatch");
+
+static uint32_t rmr_arch_signature_from_hw(const RmR_HW_Info *hw) {
+  switch (hw->arch) {
+    case 4u:
+      return RMR_SIG_ARCH_ARM64;
+    case 3u:
+      return RMR_SIG_ARCH_ARM32;
+    case 2u:
+      return RMR_SIG_ARCH_X64;
+    case 1u:
+      return RMR_SIG_ARCH_X86;
+    case 5u:
+      return RMR_SIG_ARCH_RISCV64;
+    default:
+      switch (hw->arch_hex) {
+        case 0xA64u:
+          return RMR_SIG_ARCH_ARM64;
+        case 0xA32u:
+          return RMR_SIG_ARCH_ARM32;
+        case 0x8664u:
+          return RMR_SIG_ARCH_X64;
+        case 0x86u:
+          return RMR_SIG_ARCH_X86;
+        case 0x52u:
+          return RMR_SIG_ARCH_RISCV64;
+        default:
+          return RMR_SIG_ARCH_UNKNOWN;
+      }
+  }
+}
+
+static int rmr_arch_contract_from_signature(uint32_t signature, rmr_arch_contract_t *out) {
+  if (!out) return RMR_KERNEL_ERR_ARG;
+  rmr_mem_set(out, 0u, sizeof(*out));
+  out->contract_version = RMR_ARCH_CONTRACT_VERSION;
+  out->arch_signature = signature;
+
+  switch (signature) {
+    case RMR_SIG_ARCH_X86:
+      out->register_width_bits = 32u;
+      out->pointer_width_bits = 32u;
+      out->alignment_bytes = 16u;
+      out->address_limit_bits = 32u;
+      out->calling_convention = RMR_ARCH_CALLCONV_CDECL32;
+      out->asm_support_mask = RMR_ARCH_ASM_SUPPORT_NONE;
+      return RMR_UK_OK;
+    case RMR_SIG_ARCH_X64:
+      out->register_width_bits = 64u;
+      out->pointer_width_bits = 64u;
+      out->alignment_bytes = 16u;
+      out->address_limit_bits = 48u;
+      out->calling_convention = RMR_ARCH_CALLCONV_SYSV_AMD64;
+      out->asm_support_mask = RMR_ARCH_ASM_SUPPORT_LOWLEVEL | RMR_ARCH_ASM_SUPPORT_CASM;
+      return RMR_UK_OK;
+    case RMR_SIG_ARCH_ARM32:
+      out->register_width_bits = 32u;
+      out->pointer_width_bits = 32u;
+      out->alignment_bytes = 8u;
+      out->address_limit_bits = 32u;
+      out->calling_convention = RMR_ARCH_CALLCONV_AAPCS32;
+      out->asm_support_mask = RMR_ARCH_ASM_SUPPORT_NONE;
+      return RMR_UK_OK;
+    case RMR_SIG_ARCH_ARM64:
+      out->register_width_bits = 64u;
+      out->pointer_width_bits = 64u;
+      out->alignment_bytes = 16u;
+      out->address_limit_bits = 48u;
+      out->calling_convention = RMR_ARCH_CALLCONV_AAPCS64;
+      out->asm_support_mask = RMR_ARCH_ASM_SUPPORT_CASM;
+      return RMR_UK_OK;
+    case RMR_SIG_ARCH_RISCV64:
+      out->register_width_bits = 64u;
+      out->pointer_width_bits = 64u;
+      out->alignment_bytes = 16u;
+      out->address_limit_bits = 39u;
+      out->calling_convention = RMR_ARCH_CALLCONV_RISCV64;
+      out->asm_support_mask = RMR_ARCH_ASM_SUPPORT_CASM;
+      return RMR_UK_OK;
+    default:
+      return RMR_KERNEL_ERR_STATE;
+  }
+}
+
+static int rmr_arch_contract_validate_hw(const rmr_arch_contract_t *contract, const RmR_HW_Info *hw) {
+  if (!contract || !hw) return RMR_KERNEL_ERR_ARG;
+  if (contract->contract_version != RMR_ARCH_CONTRACT_VERSION) return RMR_KERNEL_ERR_STATE;
+  if (contract->arch_signature == RMR_SIG_ARCH_UNKNOWN) return RMR_KERNEL_ERR_STATE;
+  if (hw->ptr_bits != 0u && hw->ptr_bits != contract->pointer_width_bits) return RMR_KERNEL_ERR_STATE;
+  if (hw->word_bits != 0u && hw->word_bits != contract->register_width_bits) return RMR_KERNEL_ERR_STATE;
+  if (hw->align_bytes != 0u && hw->align_bytes < contract->alignment_bytes) return RMR_KERNEL_ERR_STATE;
+  if (contract->asm_support_mask != RMR_ARCH_ASM_SUPPORT_NONE && hw->has_asm_probe == 0u) return RMR_KERNEL_ERR_STATE;
+  return RMR_UK_OK;
+}
+
 static void rmr_legacy_capabilities_from_hw(const RmR_HW_Info *hw,
                                              rmr_legacy_capabilities_t *caps) {
   caps->arch = hw->arch;
@@ -275,6 +378,10 @@ static void rmr_legacy_capabilities_from_hw(const RmR_HW_Info *hw,
   caps->gpio_word_bits = hw->gpio_word_bits;
   caps->gpio_pin_stride = hw->gpio_pin_stride;
   caps->align_bytes = hw->align_bytes;
+  caps->arch_contract.contract_version = 0u;
+  if (rmr_arch_contract_from_signature(rmr_arch_signature_from_hw(hw), &caps->arch_contract) != RMR_UK_OK) {
+    rmr_mem_set(&caps->arch_contract, 0u, sizeof(caps->arch_contract));
+  }
 }
 
 rmr_status_t rmr_legacy_kernel_autodetect(rmr_legacy_capabilities_t *out_capabilities) {
@@ -283,6 +390,7 @@ rmr_status_t rmr_legacy_kernel_autodetect(rmr_legacy_capabilities_t *out_capabil
   rmr_mem_set(&hw, 0u, sizeof(hw));
   RmR_HW_Detect(&hw);
   rmr_legacy_capabilities_from_hw(&hw, out_capabilities);
+  if (rmr_arch_contract_validate_hw(&out_capabilities->arch_contract, &hw) != RMR_UK_OK) return RMR_STATUS_ERR_STATE;
   return RMR_STATUS_OK;
 }
 
@@ -482,50 +590,9 @@ rmr_status_t rmr_legacy_kernel_get_capabilities(const rmr_legacy_kernel_t *kerne
   return RMR_STATUS_OK;
 }
 
-static void rmr_unified_caps_from_hw(const RmR_HW_Info *hw, RmR_UnifiedCapabilities *out) {
-  uint32_t arch_signature = RMR_SIG_ARCH_UNKNOWN;
-
-  switch (hw->arch) {
-    case 4u: /* ARM64 */
-      arch_signature = RMR_SIG_ARCH_ARM64;
-      break;
-    case 3u: /* ARM32 */
-      arch_signature = RMR_SIG_ARCH_ARM32;
-      break;
-    case 2u: /* X64 */
-      arch_signature = RMR_SIG_ARCH_X64;
-      break;
-    case 1u: /* X86 */
-      arch_signature = RMR_SIG_ARCH_X86;
-      break;
-    case 5u: /* RISCV64 */
-      arch_signature = RMR_SIG_ARCH_RISCV64;
-      break;
-    default:
-      switch (hw->arch_hex) {
-        case 0xA64u: /* ARM64 */
-          arch_signature = RMR_SIG_ARCH_ARM64;
-          break;
-        case 0xA32u: /* ARM32 */
-          arch_signature = RMR_SIG_ARCH_ARM32;
-          break;
-        case 0x8664u: /* X64 */
-          arch_signature = RMR_SIG_ARCH_X64;
-          break;
-        case 0x86u: /* X86 */
-          arch_signature = RMR_SIG_ARCH_X86;
-          break;
-        case 0x52u: /* RISCV64 */
-          arch_signature = RMR_SIG_ARCH_RISCV64;
-          break;
-        default:
-          arch_signature = RMR_SIG_ARCH_UNKNOWN;
-          break;
-      }
-      break;
-  }
-
-  out->signature = arch_signature;
+static int rmr_unified_caps_from_hw(const RmR_HW_Info *hw, RmR_UnifiedCapabilities *out) {
+  if (!hw || !out) return RMR_KERNEL_ERR_ARG;
+  out->signature = rmr_arch_signature_from_hw(hw);
   out->pointer_bits = hw->ptr_bits;
   out->cache_line_bytes = hw->cacheline_bytes;
   out->page_bytes = hw->page_bytes;
@@ -536,6 +603,9 @@ static void rmr_unified_caps_from_hw(const RmR_HW_Info *hw, RmR_UnifiedCapabilit
   out->gpio_word_bits = hw->gpio_word_bits;
   out->gpio_pin_stride = hw->gpio_pin_stride;
   out->cache_hint_l4 = hw->cache_hint_l4;
+  if (rmr_arch_contract_from_signature(out->signature, &out->arch_contract) != RMR_UK_OK) return RMR_KERNEL_ERR_STATE;
+  if (rmr_arch_contract_validate_hw(&out->arch_contract, hw) != RMR_UK_OK) return RMR_KERNEL_ERR_STATE;
+  return RMR_UK_OK;
 }
 
 int RmR_UnifiedKernel_Detect(RmR_UnifiedCapabilities *out) {
@@ -543,8 +613,7 @@ int RmR_UnifiedKernel_Detect(RmR_UnifiedCapabilities *out) {
   if (!out) return RMR_KERNEL_ERR_ARG;
   rmr_mem_set(&hw, 0u, sizeof(hw));
   RmR_HW_Detect(&hw);
-  rmr_unified_caps_from_hw(&hw, out);
-  return RMR_UK_OK;
+  return rmr_unified_caps_from_hw(&hw, out);
 }
 
 int RmR_UnifiedKernel_Init(RmR_UnifiedKernel *kernel, const RmR_UnifiedConfig *config) {
@@ -582,6 +651,10 @@ int RmR_UnifiedKernel_Init(RmR_UnifiedKernel *kernel, const RmR_UnifiedConfig *c
   kernel->initialized = 1u;
 
   if (RmR_UnifiedKernel_Detect(&kernel->caps) != RMR_UK_OK) {
+    rmr_mem_set(kernel, 0u, sizeof(*kernel));
+    return RMR_KERNEL_ERR_STATE;
+  }
+  if (kernel->caps.arch_contract.pointer_width_bits != (uint32_t)(8u * sizeof(void *))) {
     rmr_mem_set(kernel, 0u, sizeof(*kernel));
     return RMR_KERNEL_ERR_STATE;
   }

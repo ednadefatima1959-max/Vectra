@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "bitomega.h"
+#include "rmr_arch_contract.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,6 +63,8 @@ typedef struct {
   uint32_t gpio_word_bits;
   uint32_t gpio_pin_stride;
   uint32_t cache_hint_l4;
+  /* Canonical architecture contract snapshot used by all facades. */
+  rmr_arch_contract_t arch_contract;
 } RmR_UnifiedCapabilities;
 
 #define RMR_SIG_ARCH_UNKNOWN 0x0000u
