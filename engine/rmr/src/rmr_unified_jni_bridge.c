@@ -16,6 +16,7 @@ static void rmr_caps_from_unified(const RmR_UnifiedCapabilities *in, rmr_jni_cap
   out->pin_count_hint = in->gpio_word_bits;
   out->feature_bits_hi = in->reg_signature_2;
   out->cache_hint_l4 = in->cache_hint_l4;
+  out->arch_contract = in->arch_contract;
 }
 
 int rmr_jni_kernel_init(rmr_jni_kernel_state_t *state, uint32_t seed) {

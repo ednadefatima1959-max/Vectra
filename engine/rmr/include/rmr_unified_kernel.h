@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "rmr_unified_jni_base.h"
+#include "rmr_arch_contract.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -106,6 +107,7 @@ typedef struct {
   uint32_t gpio_word_bits;
   uint32_t gpio_pin_stride;
   uint32_t align_bytes;
+  rmr_arch_contract_t arch_contract;
 } rmr_legacy_capabilities_t;
 
 /* Legacy kernel lifecycle contract:
@@ -157,6 +159,7 @@ typedef struct {
   uint32_t pin_count_hint;
   uint32_t feature_bits_hi;
   uint32_t cache_hint_l4;
+  rmr_arch_contract_t arch_contract;
 } rmr_jni_capabilities_t;
 
 typedef struct {
