@@ -1,3 +1,7 @@
+# HOTFIX: TAREFA G — validação SHA256 antes de aplicar ZIP
+# Autor: ∆RafaelVerboΩ | Data: 2026-04-01
+# Arquivo: .github/workflows/zipdrop.yml
+# Verificado contra: _incoming/MANIFEST.sha256
 name: zipdrop-overlay
 
 on:
@@ -21,6 +25,17 @@ jobs:
           fetch-depth: 0
           # keep auth so we can push back using GITHUB_TOKEN
           persist-credentials: true
+
+      - name: Verify incoming SHA256 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="_incoming/MANIFEST.sha256"
+          if [[ ! -f "$manifest" ]]; then
+            echo "Missing $manifest" >&2
+            exit 1
+          fi
+          (cd _incoming && sha256sum -c MANIFEST.sha256)
 
       - name: Apply incoming zip(s)
         shell: bash

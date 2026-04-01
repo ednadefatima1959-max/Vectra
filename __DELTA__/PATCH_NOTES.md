@@ -1,21 +1,11 @@
-# BITΩ Overlay — Patch Notes
-Data: 2026-02-25
+# PATCH NOTES
 
-## Adicionado
-- engine/rmr/include/bitomega.h
-- engine/rmr/src/bitomega.c
-- docs/bitomega_postdoc/* (skeleton pós-doc)
-
-## Alterações necessárias (aplicar no seu repo)
-1) Root CMakeLists.txt: adicionar `engine/rmr/src/bitomega.c` na lista do alvo `rmr`.
-2) app/src/main/cpp/CMakeLists.txt: adicionar `../../../../engine/rmr/src/bitomega.c` no `vectra_core_accel`.
-
-> Eu deixei abaixo os trechos prontos (copiar/colar).
-
-### (1) Root CMakeLists.txt
-Na lista `add_library(rmr STATIC ...)`, adicionar:
-- engine/rmr/src/bitomega.c
-
-### (2) app/src/main/cpp/CMakeLists.txt
-Na lista `add_library(vectra_core_accel SHARED ...)`, adicionar:
-- ../../../../engine/rmr/src/bitomega.c
+- BUG1: ASM paths corrected in sources_rmr_core.cmake.
+- BUG2: Android-only group ensured via core-minus-host partition.
+- BUG3: root CMake option help strings added.
+- BUG4: bitraf.c kept out of core list and compiled only as dedicated static lib.
+- BUG5: vectras-ci workflow rebuilt as valid YAML workflow.
+- BUG6: build-zip updated to actions v4.
+- BUG7: android-arm642 now builds librmr.a then links demo.
+- TAREFA C/H: engine-ci now runs manifest check and invariant validation using tools/invariant_golden.txt.
+- TAREFA F/G: android-arm64-build cache gradle; zipdrop validates SHA256 manifest.
