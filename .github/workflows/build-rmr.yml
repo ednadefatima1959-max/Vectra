@@ -1,33 +1,71 @@
 name: Rafaelia RMR Engine Build
 
 on:
+  push:
+    paths:
+      - 'engine/**'
+      - 'demo_cli/**'
+      - 'bench/**'
+      - 'tools/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build-rmr.yml'
+  pull_request:
+    paths:
+      - 'engine/**'
+      - 'demo_cli/**'
+      - 'bench/**'
+      - 'tools/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build-rmr.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
-    - name: Checkout do Repositório
-      uses: actions/checkout@v4
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
 
-    - name: Instalar Dependências (CMake, GCC, Bash)
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake build-essential bash
+      - name: Instalar Dependências (CMake, GCC, Bash)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build build-essential bash
 
-    - name: Configurar CMake
-      # Cria o diretório de build e gera os arquivos Makefile
-      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+      - name: Configurar CMake
+        # Cria o diretório de build e gera os arquivos Ninja
+        run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
 
-    - name: Compilar Engine e Utilitários
-      # Executa a compilação paralela
-      run: cmake --build build -j $(nproc)
+      - name: Compilar Engine e Utilitários
+        # Executa a compilação paralela
+        run: cmake --build build -j "$(nproc)"
 
-    - name: Rodar Verificação de Símbolos
-      # Força o target customizado que garante que a MathFabric existe
-      run: cmake --build build --target verify_contracts
+      - name: Rodar Verificação de Símbolos
+        # Força o target customizado que garante que a MathFabric existe
+        run: cmake --build build --target verify_contracts
 
-    - name: Executar Smoketest (Partícula Ômega)
-      # Testa se o binário principal roda sem falha de segmentação
-      run: ./build/bitomega_smoketest
+      - name: Executar Smoketest (Partícula Ômega)
+        # Testa se o binário principal roda sem falha de segmentação
+        run: ./build/bitomega_smoketest
+
+      - name: Executar selftests canônicos
+        run: cmake --build build --target run_selftest
+
+      - name: Upload artefatos compilados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rmr-engine-build-${{ github.run_id }}
+          path: |
+            build/librmr.a
+            build/libbitraf.a
+            build/rafaelia_demo
+            build/rmr_bench
+            build/bitomega_smoketest
+            build/Testing/**
+            build/bench/results/**
+          if-no-files-found: error

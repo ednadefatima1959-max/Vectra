@@ -1,6 +1,24 @@
 name: vectras-ci
 
 on:
+  push:
+    paths:
+      - 'engine/**'
+      - 'demo_cli/**'
+      - 'bench/**'
+      - 'tools/**'
+      - 'CMakeLists.txt'
+      - 'Makefile'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'engine/**'
+      - 'demo_cli/**'
+      - 'bench/**'
+      - 'tools/**'
+      - 'CMakeLists.txt'
+      - 'Makefile'
+      - '.github/workflows/ci.yml'
   workflow_dispatch:
 
 permissions:
@@ -71,9 +89,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: host-engine-logs
+          name: host-engine-compiled-${{ github.run_id }}
           path: |
             build
             build-cmake
             bench/results
             reports
+          if-no-files-found: error
