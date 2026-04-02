@@ -36,6 +36,9 @@ jobs:
         # Testa se o binário principal roda sem falha de segmentação
         run: ./build/bitomega_smoketest
 
+      - name: Executar selftests canônicos
+        run: cmake --build build --target run_selftest
+
       - name: Upload artefatos compilados
         if: always()
         uses: actions/upload-artifact@v4
@@ -47,4 +50,6 @@ jobs:
             build/rafaelia_demo
             build/rmr_bench
             build/bitomega_smoketest
+            build/Testing/**
+            build/bench/results/**
           if-no-files-found: error
