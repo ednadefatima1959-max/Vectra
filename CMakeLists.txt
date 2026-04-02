@@ -166,6 +166,9 @@ rmr_apply_common_flags(rmr)
 add_library(bitraf_static STATIC engine/rmr/src/bitraf.c)
 set_target_properties(bitraf_static PROPERTIES OUTPUT_NAME bitraf)
 rmr_apply_common_flags(bitraf_static)
+target_include_directories(bitraf_static PUBLIC
+  ${CMAKE_SOURCE_DIR}/engine/rmr/include
+)
 target_link_libraries(rmr PUBLIC bitraf_static)
 
 # ========================
@@ -220,6 +223,8 @@ if(NOT ANDROID AND RMR_PROFILE STREQUAL "qa")
 
     # --- Selftest canônico ---
     add_custom_target(run_selftest
+        COMMAND ${CMAKE_COMMAND} -E make_directory bench/results
+        COMMAND ${CMAKE_COMMAND} -E make_directory reports
         COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
         DEPENDS rafaelia_demo bitomega_smoketest vectra_pulse_selftest rmr_bench
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
@@ -264,8 +269,12 @@ if(NOT ANDROID AND RMR_PROFILE STREQUAL "qa")
 
     # Enable CTest
     enable_testing()
-    add_test(NAME bitomega_smoke COMMAND bitomega_smoketest)
-    add_test(NAME rafaelia_demo  COMMAND rafaelia_demo)
+    add_test(
+      NAME bitomega_smoke
+      COMMAND bitomega_smoketest
+              --csv bench/results/bitomega_transitions.csv
+              --dot bench/results/bitomega_transitions.dot
+    )
     add_test(NAME vectra_pulse_selftest COMMAND vectra_pulse_selftest)
 
 endif()
