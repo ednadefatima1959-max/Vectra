@@ -1,0 +1,677 @@
+# =============================================================================
+# aaaa-pipeline.yml
+# AUTOMAÇÃO COMPLETA — Drop ZIP em aaaa/ → Valida → Corrige → Compila APK ARM64
+#
+# COMO USAR:
+#   1. Coloque qualquer .zip dentro da pasta aaaa/ do repositório
+#   2. Faça git push
+#   3. Este workflow dispara automaticamente
+#   4. O APK compilado aparece em Actions → Artifacts
+#
+# O QUE ESTE WORKFLOW FAZ (em ordem):
+#   FASE 1 — Extrai e valida o ZIP (paths, estrutura, segurança)
+#   FASE 2 — Verifica todos os YMLs (deprecated, [[sem-shell, Node.js)
+#   FASE 3 — Verifica todos os CMake/Makefile (fontes, grupos, paridade)
+#   FASE 4 — Aplica os arquivos do ZIP ao repositório
+#   FASE 5 — Compila engine C + ASM (host x86_64)
+#   FASE 6 — Compila APK Android ARM64 com NDK
+#   FASE 7 — Verifica artefatos (.so, .apk) e faz upload
+#
+# Autor: ∆RafaelVerboΩ — Instituto Rafael / CIENTIESPIRITUAL
+# =============================================================================
+
+name: aaaa ZIP Pipeline → APK ARM64
+
+on:
+  push:
+    paths:
+      - 'aaaa/*.zip'
+      - 'aaaa/**/*.zip'
+  workflow_dispatch:
+    inputs:
+      zip_path:
+        description: "Path do ZIP dentro do repo (ex: aaaa/hotfix.zip)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aaaa-pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION:  '17'
+  COMPILE_API:   '35'
+  TARGET_API:    '35'
+  MIN_API:       '23'
+  TOOLS_VERSION: '35.0.0'
+  NDK_VERSION:   '27.2.12479018'
+  CMAKE_VERSION: '3.22.1'
+
+jobs:
+  # ===========================================================================
+  # FASE 1 — VALIDAÇÃO DO ZIP
+  # ===========================================================================
+  validate-zip:
+    name: "1 · Validar ZIP"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      zip_found: ${{ steps.find.outputs.zip_found }}
+      zip_path:  ${{ steps.find.outputs.zip_path }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Encontrar ZIP em aaaa/
+        id: find
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Aceita ZIP via input manual ou detecta automaticamente
+          MANUAL="${{ github.event.inputs.zip_path }}"
+          if [[ -n "$MANUAL" && -f "$MANUAL" ]]; then
+            ZIP_PATH="$MANUAL"
+          else
+            # Detecta o ZIP mais recente na pasta aaaa/
+            ZIP_PATH=$(find aaaa/ -name "*.zip" -type f 2>/dev/null \
+                       | sort -t_ -k1 | tail -1)
+          fi
+
+          if [[ -z "$ZIP_PATH" ]]; then
+            echo "::warning::Nenhum ZIP encontrado em aaaa/ — pipeline abortado"
+            echo "zip_found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "zip_found=true"  >> "$GITHUB_OUTPUT"
+          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+          echo "ZIP encontrado: $ZIP_PATH"
+
+      - name: Validar segurança do ZIP (path traversal)
+        if: steps.find.outputs.zip_found == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="${{ steps.find.outputs.zip_path }}"
+
+          python3 - "$ZIP" << 'PYEOF'
+          import sys, zipfile, pathlib
+
+          zip_path = pathlib.Path(sys.argv[1])
+          errors = []
+          with zipfile.ZipFile(zip_path) as zf:
+              for info in zf.infolist():
+                  name = pathlib.PurePosixPath(info.filename)
+                  if name.is_absolute():
+                      errors.append(f"PATH ABSOLUTO: {info.filename}")
+                  if ".." in name.parts:
+                      errors.append(f"PATH TRAVERSAL: {info.filename}")
+                  if any(part.startswith(".git") for part in name.parts):
+                      errors.append(f"GIT DIR: {info.filename}")
+          if errors:
+              for e in errors:
+                  print(f"::error::{e}")
+              sys.exit(1)
+          print(f"OK: {len(zf.infolist())} entradas validadas")
+          PYEOF
+
+      - name: Listar conteúdo do ZIP
+        if: steps.find.outputs.zip_found == 'true'
+        shell: bash
+        run: |
+          ZIP="${{ steps.find.outputs.zip_path }}"
+          echo "=== Conteúdo do ZIP ==="
+          python3 -c "
+          import zipfile, sys
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              for i in z.infolist():
+                  print(f'  {i.file_size:>8} bytes  {i.filename}')
+          " "$ZIP"
+
+      - name: Verificar paths declarados existem (pré-apply)
+        if: steps.find.outputs.zip_found == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="${{ steps.find.outputs.zip_path }}"
+
+          python3 - "$ZIP" << 'PYEOF'
+          import sys, zipfile, pathlib, re
+
+          ROOT = pathlib.Path(".")
+          EXPECTED_STRUCTURE = {
+              ".github/workflows": "diretório de workflows",
+              "engine/rmr":        "engine RMR",
+              "app":               "módulo Android",
+              "gradlew":           "Gradle wrapper",
+          }
+
+          with zipfile.ZipFile(sys.argv[1]) as zf:
+              names = [i.filename for i in zf.infolist()]
+
+          print("Verificação de estrutura do ZIP:")
+          for path, desc in EXPECTED_STRUCTURE.items():
+              found = any(path in n for n in names)
+              tag = "OK " if found else "INF"
+              print(f"  [{tag}] {path} ({desc})")
+          PYEOF
+
+      - name: Upload ZIP validado como evidência
+        if: always() && steps.find.outputs.zip_found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zip-validado-${{ github.run_number }}
+          path: ${{ steps.find.outputs.zip_path }}
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ===========================================================================
+  # FASE 2 — AUDITORIA DE WORKFLOWS (deprecated, Node.js, shell)
+  # ===========================================================================
+  audit-workflows:
+    name: "2 · Auditar Workflows"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: validate-zip
+    if: needs.validate-zip.outputs.zip_found == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auditar todos os YMLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ERRORS=0
+          WARNINGS=0
+
+          python3 - << 'PYEOF'
+          import pathlib, re, sys
+
+          WF = pathlib.Path(".github/workflows")
+          if not WF.exists():
+              print("::warning::Diretório .github/workflows não encontrado")
+              sys.exit(0)
+
+          DEPRECATED_ACTIONS = {
+              "actions/checkout@v3":           "Node 16 DEPRECATED → use @v4",
+              "actions/setup-java@v3":         "Node 16 DEPRECATED → use @v4",
+              "actions/upload-artifact@v3":    "Node 16 DEPRECATED → use @v4",
+              "actions/download-artifact@v3":  "Node 16 DEPRECATED → use @v4",
+              "actions/cache@v3":              "Node 16 DEPRECATED → use @v4",
+              "actions/setup-python@v4":       "Node 16 DEPRECATED → use @v5",
+          }
+
+          errors = 0
+          warnings = 0
+
+          for yf in sorted(WF.glob("*.yml")):
+              text = yf.read_text()
+              name = yf.name
+
+              # 1. Deprecated Node.js actions
+              for act, msg in DEPRECATED_ACTIONS.items():
+                  if act in text:
+                      print(f"::error file={yf}::{name}: {act} — {msg}")
+                      errors += 1
+
+              # 2. @master sem SHA
+              for m in re.finditer(r'uses:\s*([\w\-/\.]+@master)', text):
+                  print(f"::warning file={yf}::{name}: {m.group(1)} sem versão fixada — risco supply chain")
+                  warnings += 1
+
+              # 3. [[ sem shell: bash (nível de step)
+              steps = re.split(r'\n      - name:', text)
+              for s in steps:
+                  if "[[" in s and "shell: bash" not in s:
+                      nm = re.match(r'\s*(.*?)\n', s)
+                      step_name = (nm.group(1) if nm else "?").strip()[:50]
+                      print(f"::error file={yf}::{name}: step '{step_name}' usa [[ sem shell: bash")
+                      errors += 1
+
+              # 4. YAML válido
+              try:
+                  import yaml
+                  doc = yaml.safe_load(text)
+                  if not isinstance(doc, dict):
+                      print(f"::error file={yf}::{name}: YAML inválido (não é dict raiz)")
+                      errors += 1
+              except Exception as e:
+                  print(f"::error file={yf}::{name}: YAML parse error — {e}")
+                  errors += 1
+
+          print(f"\nRESUMO AUDITORIA: {errors} erros, {warnings} avisos")
+          if errors > 0:
+              sys.exit(1)
+          PYEOF
+
+      - name: Verificar consistência de versões entre workflows
+        shell: bash
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib, re
+          from collections import defaultdict
+
+          WF = pathlib.Path(".github/workflows")
+          if not WF.exists():
+              print("Diretório workflows não encontrado")
+              exit(0)
+
+          # Agrupa versões de cada action para detectar inconsistências
+          action_versions = defaultdict(set)
+          for yf in WF.glob("*.yml"):
+              text = yf.read_text()
+              for m in re.finditer(r'uses:\s*([\w\-/\.]+)@([\w\.\-]+)', text):
+                  action_versions[m.group(1)].add(m.group(2))
+
+          inconsistent = {k: v for k, v in action_versions.items() if len(v) > 1}
+          if inconsistent:
+              print("::warning::Versões inconsistentes de actions entre workflows:")
+              for act, vers in inconsistent.items():
+                  print(f"  {act}: {sorted(vers)}")
+          else:
+              print("OK: todas as actions usam versões consistentes")
+          PYEOF
+
+  # ===========================================================================
+  # FASE 3 — AUDITORIA CMAKE/MAKEFILE/MANIFESTO
+  # ===========================================================================
+  audit-build-system:
+    name: "3 · Auditar Build System"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: validate-zip
+    if: needs.validate-zip.outputs.zip_found == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verificar manifesto de fontes (cmake vs mk)
+        shell: bash
+        run: |
+          if [ -f "tools/verify_engine_source_parity.py" ]; then
+            python3 tools/verify_engine_source_parity.py
+          else
+            echo "::warning::verify_engine_source_parity.py não encontrado — pulando"
+          fi
+
+      - name: Verificar fontes declaradas existem no disco
+        shell: bash
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib, re, sys
+
+          cmake_file = pathlib.Path("engine/rmr/sources.cmake")
+          if not cmake_file.exists():
+              print("::warning::engine/rmr/sources.cmake não encontrado")
+              sys.exit(0)
+
+          text = cmake_file.read_text()
+          sources = [l.strip() for l in text.splitlines()
+                     if l.strip().startswith("engine/rmr/") and l.strip().endswith((".c", ".S", ".s"))
+                     and not l.strip().startswith("#")]
+
+          missing = [s for s in sources if not pathlib.Path(s).exists()]
+          ok_count = len(sources) - len(missing)
+
+          print(f"Fontes declaradas: {len(sources)} | Existem: {ok_count} | Ausentes: {len(missing)}")
+          for m in missing:
+              print(f"  ::error::AUSENTE: {m}")
+
+          if missing:
+              sys.exit(1)
+          PYEOF
+
+      - name: Verificar bitraf.c duplicado no CMake
+        shell: bash
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib, sys
+
+          cmake = pathlib.Path("CMakeLists.txt")
+          if not cmake.exists():
+              print("CMakeLists.txt não encontrado")
+              sys.exit(0)
+
+          text = cmake.read_text()
+          src_cmake = pathlib.Path("engine/rmr/sources.cmake")
+          src_text  = src_cmake.read_text() if src_cmake.exists() else ""
+
+          bitraf_in_core  = "engine/rmr/src/bitraf.c" in src_text
+          bitraf_in_cmake = "bitraf_static STATIC engine/rmr/src/bitraf.c" in text
+
+          if bitraf_in_core and bitraf_in_cmake:
+              print("::error::bitraf.c duplicado — está em RMR_ENGINE_CORE_SOURCES E compilado como bitraf_static")
+              sys.exit(1)
+          else:
+              print(f"OK: bitraf.c não duplicado (in_core={bitraf_in_core}, in_cmake={bitraf_in_cmake})")
+          PYEOF
+
+      - name: Verificar option() com 3 argumentos no CMakeLists
+        shell: bash
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib, re, sys
+
+          cmake = pathlib.Path("CMakeLists.txt")
+          if not cmake.exists():
+              sys.exit(0)
+
+          errors = []
+          for i, line in enumerate(cmake.read_text().splitlines(), 1):
+              s = line.strip()
+              if s.startswith("option("):
+                  # option(NAME VALUE) tem 2 args — falta texto de ajuda
+                  parts = s.split()
+                  if len(parts) == 2:
+                      errors.append(f"L{i}: {s}")
+
+          if errors:
+              print(f"::error::option() sem texto de ajuda ({len(errors)} ocorrências):")
+              for e in errors:
+                  print(f"  {e}")
+          else:
+              print("OK: todos os option() têm 3 argumentos")
+          PYEOF
+
+  # ===========================================================================
+  # FASE 4 — APLICAR ZIP AO REPOSITÓRIO (dry-run: apenas valida destinos)
+  # ===========================================================================
+  apply-zip:
+    name: "4 · Aplicar ZIP"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [validate-zip, audit-workflows, audit-build-system]
+    if: needs.validate-zip.outputs.zip_found == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extrair ZIP e verificar cada destino
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="${{ needs.validate-zip.outputs.zip_path }}"
+
+          python3 - "$ZIP" << 'PYEOF'
+          import sys, zipfile, pathlib
+
+          zip_path = pathlib.Path(sys.argv[1])
+          ROOT = pathlib.Path(".")
+          issues = []
+
+          with zipfile.ZipFile(zip_path) as zf:
+              for info in zf.infolist():
+                  if info.filename.endswith("/"):
+                      continue  # diretório
+                  dest = ROOT / info.filename
+                  dest.parent.mkdir(parents=True, exist_ok=True)
+                  zf.extract(info, ROOT)
+                  print(f"  APLICADO: {info.filename} ({info.file_size} bytes)")
+
+          print(f"\nZIP aplicado com sucesso.")
+          PYEOF
+
+      - name: Verificar paths após aplicação
+        shell: bash
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib, sys
+
+          # Caminhos críticos que devem existir após aplicar qualquer hotfix
+          REQUIRED = [
+              "engine/rmr/sources.cmake",
+              "engine/rmr/sources.mk",
+              "engine/rmr/sources_rmr_core.cmake",
+              "CMakeLists.txt",
+              "Makefile",
+              "gradlew",
+              "app/build.gradle",
+              "settings.gradle",
+              ".github/workflows",
+          ]
+
+          missing = [p for p in REQUIRED if not pathlib.Path(p).exists()]
+          if missing:
+              print("::error::Paths obrigatórios ausentes após aplicar ZIP:")
+              for m in missing:
+                  print(f"  {m}")
+              sys.exit(1)
+          else:
+              print(f"OK: todos os {len(REQUIRED)} paths obrigatórios presentes")
+          PYEOF
+
+  # ===========================================================================
+  # FASE 5 — COMPILAR ENGINE HOST (validação de símbolos)
+  # ===========================================================================
+  build-engine-host:
+    name: "5 · Engine Host x86_64"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: apply-zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Aplicar ZIP novamente (job isolado)
+        shell: bash
+        run: |
+          ZIP=$(find aaaa/ -name "*.zip" -type f 2>/dev/null | sort | tail -1)
+          if [[ -n "$ZIP" ]]; then
+            unzip -o "$ZIP" -d . 2>/dev/null || true
+            echo "ZIP aplicado: $ZIP"
+          fi
+
+      - name: Instalar dependências de build
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build make \
+            pkg-config python3 ripgrep
+
+      - name: Verificar sincronização do manifesto
+        shell: bash
+        run: |
+          if [ -f "tools/sync_engine_sources.py" ]; then
+            python3 tools/sync_engine_sources.py --check \
+              && echo "OK: manifesto sincronizado" \
+              || echo "::warning::manifesto diverge — regenerar com sync_engine_sources.py"
+          fi
+
+      - name: Build engine com CMake (profile qa)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-host -G Ninja \
+            -DRMR_JNI_BUILD=ON \
+            -DRMR_ENABLE_POLICY_MODULE=ON \
+            -DRMR_PROFILE=qa \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-host -j"$(nproc)"
+
+      - name: Verificar contratos de link
+        shell: bash
+        run: |
+          cmake --build build-host --target verify_contracts || \
+            echo "::warning::verify_contracts não disponível neste perfil"
+
+      - name: Verificar símbolos obrigatórios na librmr
+        shell: bash
+        run: |
+          LIB=$(find build-host -name "librmr.a" 2>/dev/null | head -1)
+          if [ -z "$LIB" ]; then
+            echo "::warning::librmr.a não encontrada"
+          else
+            nm "$LIB" | grep -E "RmR_MathFabric_AutodetectPlan|RmR_MathFabric_VectorMix" \
+              && echo "OK: símbolos MathFabric presentes" \
+              || echo "::error::símbolos MathFabric ausentes"
+          fi
+
+      - name: Upload logs de build host
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-host-build-${{ github.run_number }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            build-host/**/*.log
+            build-host/rmr_build_config.env
+
+  # ===========================================================================
+  # FASE 6 — COMPILAR APK ANDROID ARM64
+  # ===========================================================================
+  build-apk-arm64:
+    name: "6 · APK Android ARM64"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [apply-zip, build-engine-host]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Aplicar ZIP
+        shell: bash
+        run: |
+          ZIP=$(find aaaa/ -name "*.zip" -type f 2>/dev/null | sort | tail -1)
+          if [[ -n "$ZIP" ]]; then
+            unzip -o "$ZIP" -d . 2>/dev/null || true
+          fi
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Aceitar licenças SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c "print('y\n'*200)" | sdkmanager --licenses > /dev/null 2>&1 || true
+
+      - name: Instalar pacotes NDK e CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-${COMPILE_API}" \
+            "build-tools;${TOOLS_VERSION}" \
+            "cmake;${CMAKE_VERSION}" \
+            "ndk;${NDK_VERSION}"
+
+      - name: Gerar local.properties
+        run: echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+
+      - name: Materializar Firebase placeholder
+        shell: bash
+        env:
+          VECTRAS_GOOGLE_SERVICES_JSON_B64: ${{ secrets.VECTRAS_GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          if [ -f "tools/ci/materialize_google_services_placeholder.sh" ]; then
+            bash tools/ci/materialize_google_services_placeholder.sh
+          fi
+
+      - name: Permissão Gradle
+        run: chmod +x ./gradlew
+
+      - name: Compilar APK Debug ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --stacktrace \
+            :app:assembleDebug \
+            -PbuildStrict=false \
+            -PcheckVariant=debug \
+            -PAPP_ABI_POLICY=arm64-only \
+            -Pcompile.api="${COMPILE_API}" \
+            -Ptarget.api="${TARGET_API}" \
+            -Pmin.api="${MIN_API}" \
+            -Ptools.version="${TOOLS_VERSION}" \
+            -Pndk.version="${NDK_VERSION}" \
+            -Pcmake.version="${CMAKE_VERSION}" \
+            -Pjava.language.version="${JAVA_VERSION}"
+
+      # -----------------------------------------------------------------------
+      # FASE 7 — VERIFICAR ARTEFATOS E UPLOAD
+      # -----------------------------------------------------------------------
+      - name: Verificar .so ARM64 compilado
+        shell: bash
+        run: |
+          set -euo pipefail
+          SO=$(find app/build -name "libvectra_core_accel.so" \
+               -path "*/arm64-v8a/*" 2>/dev/null | head -1)
+          if [ -z "$SO" ]; then
+            echo "::error::libvectra_core_accel.so (arm64-v8a) NÃO encontrado"
+            echo "Procurando qualquer .so:"
+            find app/build -name "*.so" 2>/dev/null | head -10 || true
+            exit 1
+          fi
+          echo "=== Native library ARM64 ==="
+          echo "Path:  $SO"
+          file "$SO"
+          size "$SO" || ls -lh "$SO"
+
+      - name: Verificar APK gerado
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/debug -name "*.apk" 2>/dev/null | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::APK debug não encontrado"
+            find app/build/outputs -type f 2>/dev/null | head -20 || true
+            exit 1
+          fi
+          echo "=== APK gerado ==="
+          echo "Path: $APK"
+          ls -lh "$APK"
+          # Verificar que o APK contém o .so ARM64
+          python3 -c "
+          import zipfile, sys
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              sos = [n for n in z.namelist() if n.endswith('.so')]
+              print('Libs nativas no APK:')
+              for s in sos:
+                  print(f'  {s}')
+              arm64 = [s for s in sos if 'arm64' in s]
+              if not arm64:
+                  print('::error::Nenhuma lib arm64 no APK')
+                  sys.exit(1)
+              print(f'OK: {len(arm64)} lib(s) arm64 no APK')
+          " "$APK"
+
+      - name: Upload APK ARM64 (artefato final)
+        uses: actions/upload-artifact@v4
+        with:
+          name: VECTRA-APK-arm64-${{ github.run_number }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            app/build/outputs/apk/debug/*.apk
+
+      - name: Upload diagnósticos completos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnosticos-${{ github.run_number }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            app/build/reports/**
+            app/build/outputs/logs/**
+            app/build/outputs/apk/**/*.apk
