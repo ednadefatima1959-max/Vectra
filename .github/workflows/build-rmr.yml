@@ -55,17 +55,35 @@ jobs:
       - name: Executar selftests canônicos
         run: cmake --build build --target run_selftest
 
+      - name: Materializar diretório de artefatos compilados
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTIFACT_DIR="artifacts/rmr-engine"
+          rm -rf "${ARTIFACT_DIR}"
+          mkdir -p "${ARTIFACT_DIR}/bin" "${ARTIFACT_DIR}/lib" "${ARTIFACT_DIR}/tests"
+
+          cp -v build/librmr.a "${ARTIFACT_DIR}/lib/"
+          cp -v build/libbitraf.a "${ARTIFACT_DIR}/lib/"
+          cp -v build/rafaelia_demo "${ARTIFACT_DIR}/bin/"
+          cp -v build/rmr_bench "${ARTIFACT_DIR}/bin/"
+          cp -v build/bitomega_smoketest "${ARTIFACT_DIR}/bin/"
+
+          if [ -d build/Testing ]; then
+            cp -av build/Testing "${ARTIFACT_DIR}/tests/Testing"
+          fi
+          if [ -d build/bench/results ]; then
+            cp -av build/bench/results "${ARTIFACT_DIR}/tests/bench-results"
+          fi
+
+          test -f "${ARTIFACT_DIR}/lib/librmr.a"
+          test -f "${ARTIFACT_DIR}/lib/libbitraf.a"
+          test -f "${ARTIFACT_DIR}/bin/bitomega_smoketest"
+
       - name: Upload artefatos compilados
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rmr-engine-build-${{ github.run_id }}
-          path: |
-            build/librmr.a
-            build/libbitraf.a
-            build/rafaelia_demo
-            build/rmr_bench
-            build/bitomega_smoketest
-            build/Testing/**
-            build/bench/results/**
+          path: artifacts/rmr-engine
           if-no-files-found: error

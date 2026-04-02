@@ -85,14 +85,45 @@ jobs:
       - name: Run engine selftests (CMake)
         run: cmake --build build-cmake --target run_selftest
 
+      - name: Materializar diretório de artefatos compilados
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTIFACT_DIR="artifacts/host-engine"
+          rm -rf "${ARTIFACT_DIR}"
+          mkdir -p "${ARTIFACT_DIR}/make/lib" "${ARTIFACT_DIR}/make/bin" "${ARTIFACT_DIR}/cmake/lib" "${ARTIFACT_DIR}/cmake/bin" "${ARTIFACT_DIR}/logs"
+
+          # Make outputs
+          cp -v build/engine/librmr.a "${ARTIFACT_DIR}/make/lib/"
+          cp -v build/engine/libbitraf.a "${ARTIFACT_DIR}/make/lib/"
+          cp -v build/demo/rafaelia_demo "${ARTIFACT_DIR}/make/bin/"
+          cp -v build/demo/bitomega_smoketest "${ARTIFACT_DIR}/make/bin/"
+          cp -v build/bench/rmr_bench "${ARTIFACT_DIR}/make/bin/"
+
+          # CMake outputs
+          cp -v build-cmake/librmr.a "${ARTIFACT_DIR}/cmake/lib/"
+          cp -v build-cmake/libbitraf.a "${ARTIFACT_DIR}/cmake/lib/"
+          cp -v build-cmake/rafaelia_demo "${ARTIFACT_DIR}/cmake/bin/"
+          cp -v build-cmake/bitomega_smoketest "${ARTIFACT_DIR}/cmake/bin/"
+          cp -v build-cmake/rmr_bench "${ARTIFACT_DIR}/cmake/bin/"
+
+          # Logs and reports
+          if [ -d bench/results ]; then
+            cp -av bench/results "${ARTIFACT_DIR}/logs/bench-results"
+          fi
+          if [ -d reports ]; then
+            cp -av reports "${ARTIFACT_DIR}/logs/reports"
+          fi
+
+          test -f "${ARTIFACT_DIR}/make/lib/librmr.a"
+          test -f "${ARTIFACT_DIR}/cmake/lib/librmr.a"
+          test -f "${ARTIFACT_DIR}/make/bin/bitomega_smoketest"
+          test -f "${ARTIFACT_DIR}/cmake/bin/bitomega_smoketest"
+
       - name: Upload host logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: host-engine-compiled-${{ github.run_id }}
-          path: |
-            build
-            build-cmake
-            bench/results
-            reports
+          path: artifacts/host-engine
           if-no-files-found: error
