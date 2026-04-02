@@ -1,6 +1,22 @@
 name: Rafaelia RMR Engine Build
 
 on:
+  push:
+    paths:
+      - 'engine/**'
+      - 'demo_cli/**'
+      - 'bench/**'
+      - 'tools/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build-rmr.yml'
+  pull_request:
+    paths:
+      - 'engine/**'
+      - 'demo_cli/**'
+      - 'bench/**'
+      - 'tools/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build-rmr.yml'
   workflow_dispatch:
 
 permissions:
