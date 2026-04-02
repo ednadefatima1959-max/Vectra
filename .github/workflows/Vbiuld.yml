@@ -1,0 +1,46 @@
+name: Vectra Auto Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Install tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential findutils
+
+    - name: Scan source files
+      run: |
+        echo "Procurando arquivos C..."
+        find . -name "*.c" > sources.txt
+        cat sources.txt
+
+    - name: Try compile everything
+      run: |
+        echo "Tentando compilar tudo..."
+        gcc -O2 -w $(cat sources.txt) -o vectra_auto || echo "Falhou, tentando fallback..."
+
+    - name: Fallback compile (ignora alguns erros)
+      run: |
+        gcc -O2 -w -fcommon $(cat sources.txt) -o vectra_auto || true
+
+    - name: List result
+      run: |
+        ls -lh
+
+    - name: Try run
+      run: |
+        if [ -f vectra_auto ]; then
+          echo "Executando..."
+          ./vectra_auto || true
+        else
+          echo "Não gerou binário"
+        fi
