@@ -1,18 +1,39 @@
+# termux-orchestrator.yml
+# CORREÇÃO B08: adicionado shell: bash no step que usa [[ (bashism)
+# O step "Prepare release signing env for real release build"
+# usava [[ -z "${!var:-}" ]] sem declarar shell: bash →
+# em sh isso causa syntax error e a validação de secrets falha silenciosamente.
+#
+# Autor: ∆RafaelVerboΩ / Instituto Rafael
+
 name: Termux Orchestrator Build
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run compliance + orchestration without real Gradle release build"
+        required: true
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      enable_fork_sync:
+        description: "Enable external fork sync step"
+        required: true
+        default: "false"
+        type: choice
+        options: ["true", "false"]
 
 jobs:
   orchestrator:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      ENABLE_FORK_SYNC: ${{ github.event.inputs.enable_fork_sync == 'true' && '1' || '0' }}
-      BOOTSTRAP_ANDROID: "1"
-      ENABLE_SPILL: "1"
+      ENABLE_FORK_SYNC:      ${{ github.event.inputs.enable_fork_sync == 'true' && '1' || '0' }}
+      BOOTSTRAP_ANDROID:     "1"
+      ENABLE_SPILL:          "1"
       ALLOW_NETWORK_TOOLCHAIN: "1"
-      ALLOW_NETWORK_FORKS: "1"
+      ALLOW_NETWORK_FORKS:   "1"
 
     steps:
       - name: Checkout
@@ -26,23 +47,26 @@ jobs:
 
       - name: Prepare release signing env for dry-run
         if: ${{ github.event.inputs.dry_run != 'false' }}
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p .secrets
           : > .secrets/ci-dry-run.jks
           echo "VECTRAS_RELEASE_STORE_FILE=$PWD/.secrets/ci-dry-run.jks" >> "$GITHUB_ENV"
-          echo "VECTRAS_RELEASE_STORE_PASSWORD=ci-dry-run" >> "$GITHUB_ENV"
-          echo "VECTRAS_RELEASE_KEY_ALIAS=ci-dry-run" >> "$GITHUB_ENV"
-          echo "VECTRAS_RELEASE_KEY_PASSWORD=ci-dry-run" >> "$GITHUB_ENV"
-          echo "CI_DRY_RUN=1" >> "$GITHUB_ENV"
+          echo "VECTRAS_RELEASE_STORE_PASSWORD=ci-dry-run"                >> "$GITHUB_ENV"
+          echo "VECTRAS_RELEASE_KEY_ALIAS=ci-dry-run"                     >> "$GITHUB_ENV"
+          echo "VECTRAS_RELEASE_KEY_PASSWORD=ci-dry-run"                  >> "$GITHUB_ENV"
+          echo "CI_DRY_RUN=1"                                             >> "$GITHUB_ENV"
 
+      # FIX B08: shell: bash adicionado — [[ -z "${!var:-}" ]] é bashism
       - name: Prepare release signing env for real release build
         if: ${{ github.event.inputs.dry_run == 'false' }}
+        shell: bash
         env:
-          RELEASE_KEYSTORE_B64: ${{ secrets.VECTRAS_RELEASE_KEYSTORE_B64 }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.VECTRAS_RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.VECTRAS_RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.VECTRAS_RELEASE_KEY_PASSWORD }}
+          RELEASE_KEYSTORE_B64:    ${{ secrets.VECTRAS_RELEASE_KEYSTORE_B64 }}
+          RELEASE_STORE_PASSWORD:  ${{ secrets.VECTRAS_RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS:       ${{ secrets.VECTRAS_RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD:    ${{ secrets.VECTRAS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           for var in RELEASE_KEYSTORE_B64 RELEASE_STORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
@@ -57,14 +81,19 @@ jobs:
 
           echo "VECTRAS_RELEASE_STORE_FILE=$PWD/.secrets/release.jks" >> "$GITHUB_ENV"
           echo "VECTRAS_RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "VECTRAS_RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "VECTRAS_RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD" >> "$GITHUB_ENV"
-          echo "CI_DRY_RUN=0" >> "$GITHUB_ENV"
+          echo "VECTRAS_RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS"           >> "$GITHUB_ENV"
+          echo "VECTRAS_RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD"     >> "$GITHUB_ENV"
+          echo "CI_DRY_RUN=0"                                           >> "$GITHUB_ENV"
 
       - name: Run termux orchestrator
+        shell: bash
         run: |
           set -euo pipefail
           bash tools/termux-arm64-orchestrator/run-local-termux-build.sh
+
+      - name: Cleanup signing material
+        if: always()
+        run: rm -rf .secrets
 
       - name: Upload release APK
         if: ${{ github.event.inputs.dry_run == 'false' }}
