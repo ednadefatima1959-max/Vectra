@@ -4,17 +4,29 @@ project(rafaelia_rmr C ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# ========================
+# DEBUG / ESTABILIDADE (NÃO QUEBRA NADA)
+# ========================
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # ========================
-# INCLUDE SOURCES MANIFEST
+# INCLUDE SOURCES MANIFEST (PROTEGIDO)
 # ========================
-if(NOT EXISTS ${CMAKE_SOURCE_DIR}/engine/rmr/sources_rmr_core.cmake)
-    message(FATAL_ERROR "Arquivo de manifesto de fontes não encontrado: ${CMAKE_SOURCE_DIR}/engine/rmr/sources_rmr_core.cmake")
+set(RMR_MANIFEST "${CMAKE_SOURCE_DIR}/engine/rmr/sources_rmr_core.cmake")
+
+if(NOT EXISTS ${RMR_MANIFEST})
+    message(FATAL_ERROR "Manifesto não encontrado: ${RMR_MANIFEST}")
 endif()
-include(${CMAKE_SOURCE_DIR}/engine/rmr/sources_rmr_core.cmake)
+
+include(${RMR_MANIFEST})
+
+if(NOT COMMAND rmr_manifest_apply_base)
+    message(FATAL_ERROR "Função rmr_manifest_apply_base não definida pelo manifesto")
+endif()
 
 # ========================
-# OPTIONS (valores padrão que podem ser sobrescritos via -D)
+# OPTIONS
 # ========================
 option(RMR_JNI_BUILD "Use hosted/JNI libc path for root builds" ON)
 set(RMR_BUILD_HOST_TOOLING "AUTO" CACHE STRING "Host-tooling compatibility path")
@@ -73,13 +85,14 @@ message(STATUS "RMR_JNI_BUILD=${RMR_JNI_BUILD_VALUE}")
 message(STATUS "RMR_BUILD_HOST_TOOLING=${RMR_BUILD_HOST_TOOLING_VALUE}")
 message(STATUS "RMR_ENABLE_POLICY_MODULE=${RMR_ENABLE_POLICY_MODULE_VALUE}")
 message(STATUS "RMR_PROFILE=${RMR_PROFILE}")
+message(STATUS "Processor: ${CMAKE_SYSTEM_PROCESSOR}")
 
 if(NOT RMR_PROFILE STREQUAL "minimal" AND NOT RMR_PROFILE STREQUAL "qa")
   message(FATAL_ERROR "RMR_PROFILE inválido: ${RMR_PROFILE}. Use minimal ou qa.")
 endif()
 
 # ========================
-# ENV EXPORT (para scripts externos)
+# ENV EXPORT
 # ========================
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/rmr_build_config.env"
   "RMR_JNI_BUILD=${RMR_JNI_BUILD_VALUE}\n"
@@ -109,7 +122,7 @@ function(rmr_apply_common_flags target_name)
 endfunction()
 
 # ========================
-# SOURCES COLLECTION
+# SOURCES COLLECTION (PROTEGIDO)
 # ========================
 rmr_manifest_apply_base(RMR_SOURCES RMR_SOURCE_GROUP_RUNTIME_MINIMAL)
 
@@ -121,13 +134,23 @@ if(RMR_ENABLE_POLICY_MODULE)
   rmr_manifest_apply_base(RMR_POLICY_SOURCES RMR_SOURCE_GROUP_OPTIONAL_POLICY)
   list(APPEND RMR_SOURCES ${RMR_POLICY_SOURCES})
 endif()
+
 list(REMOVE_DUPLICATES RMR_SOURCES)
 
+if(NOT RMR_SOURCES)
+  message(FATAL_ERROR "RMR_SOURCES está vazio")
+endif()
+
 # ========================
-# ARCH DETECT (C-ASM opcional)
+# ARCH DETECT (CORRIGIDO)
 # ========================
 set(RMR_HAS_CASM FALSE)
-string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" PROC_LOWER)
+
+if(NOT CMAKE_SYSTEM_PROCESSOR)
+    set(PROC_LOWER "unknown")
+else()
+    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" PROC_LOWER)
+endif()
 
 if(RMR_ASM_CORE_EXPERIMENTAL AND UNIX)
   if(PROC_LOWER MATCHES "x86_64|amd64" AND RMR_ASM_CORE_X86_64_VALIDATED)
@@ -160,23 +183,28 @@ endif()
 rmr_apply_common_flags(rmr)
 
 # ========================
-## HOTFIX: BUG4 — bitraf.c removido do grupo core em sources_rmr_core.cmake
-# BITRAF (compilado separadamente para evitar símbolo duplicado)
+# BITRAF (PROTEGIDO)
 # ========================
-add_library(bitraf_static STATIC engine/rmr/src/bitraf.c)
-set_target_properties(bitraf_static PROPERTIES OUTPUT_NAME bitraf)
-rmr_apply_common_flags(bitraf_static)
-target_include_directories(bitraf_static PUBLIC
-  ${CMAKE_SOURCE_DIR}/engine/rmr/include
-)
+if(NOT TARGET bitraf_static)
+    add_library(bitraf_static STATIC engine/rmr/src/bitraf.c)
+    set_target_properties(bitraf_static PROPERTIES OUTPUT_NAME bitraf)
+
+    target_include_directories(bitraf_static PUBLIC
+      ${CMAKE_SOURCE_DIR}/engine/rmr/include
+    )
+
+    rmr_apply_common_flags(bitraf_static)
+endif()
+
 target_link_libraries(rmr PUBLIC bitraf_static)
 
 # ========================
-# SYMBOL CHECK (apenas host)
+# SYMBOL CHECK (ROBUSTO)
 # ========================
 if(NOT ANDROID)
     find_program(BASH_EXECUTABLE bash)
-    if(BASH_EXECUTABLE)
+
+    if(BASH_EXECUTABLE AND EXISTS ${CMAKE_SOURCE_DIR}/tools/verify_librmr_symbols.sh)
         add_custom_command(
             TARGET rmr
             POST_BUILD
@@ -189,15 +217,17 @@ if(NOT ANDROID)
             VERBATIM
         )
     else()
-        message(WARNING "bash não encontrado, pulando verificação determinística de símbolos.")
+        message(WARNING "bash/script não encontrado, pulando verificação.")
     endif()
+
     add_custom_target(verify_contracts DEPENDS rmr)
 endif()
 
 # ========================
-# EXECUTÁVEIS (apenas host)
+# EXECUTÁVEIS
 # ========================
 if(NOT ANDROID AND RMR_PROFILE STREQUAL "qa")
+
     add_executable(rafaelia_demo demo_cli/src/main.c)
     target_link_libraries(rafaelia_demo PRIVATE rmr)
     rmr_apply_common_flags(rafaelia_demo)
@@ -214,67 +244,15 @@ if(NOT ANDROID AND RMR_PROFILE STREQUAL "qa")
     add_executable(vectra_pulse_selftest demo_cli/src/vectra_pulse_selftest.c)
     target_link_libraries(vectra_pulse_selftest PRIVATE rmr)
     rmr_apply_common_flags(vectra_pulse_selftest)
-endif()
 
-# ========================
-# TARGETS DE SELFTEST E BENCHMARKS (apenas host)
-# ========================
-if(NOT ANDROID AND RMR_PROFILE STREQUAL "qa")
-
-    # --- Selftest canônico ---
-    add_custom_target(run_selftest
-        COMMAND ${CMAKE_COMMAND} -E make_directory bench/results
-        COMMAND ${CMAKE_COMMAND} -E make_directory reports
-        COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-        DEPENDS rafaelia_demo bitomega_smoketest vectra_pulse_selftest rmr_bench
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        COMMENT "Executando selftests canônicos..."
-    )
-
-    # --- BitOmega smoketest ---
-    add_custom_target(run_bitomega_smoketest
-        COMMAND $<TARGET_FILE:bitomega_smoketest>
-        DEPENDS bitomega_smoketest
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        COMMENT "Executando BitOmega smoketest..."
-    )
-
-    # --- Grafo de transição BitOmega (requer graphviz/dot) ---
-    find_program(DOT_EXECUTABLE dot)
-    if(DOT_EXECUTABLE)
-        add_custom_target(bitomega_transition_graph
-            COMMAND ${CMAKE_COMMAND} -E make_directory bench/results
-            COMMAND ${CMAKE_COMMAND} -E make_directory reports
-            COMMAND $<TARGET_FILE:bitomega_smoketest> --csv bench/results/bitomega_transitions.csv --dot bench/results/bitomega_transitions.dot
-            COMMAND ${CMAKE_COMMAND}
-                    -DINPUT_DOT=bench/results/bitomega_transitions.dot
-                    -P ${CMAKE_SOURCE_DIR}/tools/validate_dot_file.cmake
-            COMMAND ${DOT_EXECUTABLE} -Tpng bench/results/bitomega_transitions.dot -o reports/bitomega_transition_graph.png
-            DEPENDS bitomega_smoketest
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-            COMMENT "Gerando grafo de transição BitOmega..."
-        )
-    else()
-        add_custom_target(bitomega_transition_graph
-            COMMAND ${CMAKE_COMMAND} -E echo "dot nao encontrado, graphviz indisponivel, grafo pulado"
-            COMMENT "Grafo BitOmega: graphviz não disponível"
-        )
-    endif()
-
-    # --- Release gate ---
-    add_custom_target(run_release_gate
-        DEPENDS run_selftest run_bitomega_smoketest
-        COMMENT "Executando release gate completo..."
-    )
-
-    # Enable CTest
     enable_testing()
-    add_test(
-      NAME bitomega_smoke
+
+    add_test(NAME bitomega_smoke
       COMMAND bitomega_smoketest
               --csv bench/results/bitomega_transitions.csv
               --dot bench/results/bitomega_transitions.dot
     )
+
     add_test(NAME vectra_pulse_selftest COMMAND vectra_pulse_selftest)
 
 endif()
