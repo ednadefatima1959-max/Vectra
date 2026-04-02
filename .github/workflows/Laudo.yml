@@ -1,0 +1,47 @@
+name: Laudo Build Vectra
+
+on:
+push:
+pull_request:
+
+jobs:
+laudo:
+runs-on: ubuntu-latest
+
+steps:
+- name: Checkout
+  uses: actions/checkout@v4
+
+- name: Setup Java
+  uses: actions/setup-java@v4
+  with:
+    distribution: temurin
+    java-version: 17
+
+- name: Permissão Gradle
+  run: chmod +x ./gradlew || true
+
+- name: Limpar build
+  run: ./gradlew clean || true
+
+- name: Compilar (captura erros)
+  run: |
+    mkdir -p laudo
+    ./gradlew assembleDebug > laudo/build_output.txt 2>&1 || true
+
+- name: Extrair erros principais
+  run: |
+    grep -i "error" laudo/build_output.txt > laudo/erros.txt || true
+    grep -i "exception" laudo/build_output.txt >> laudo/erros.txt || true
+
+- name: Upload laudo completo
+  uses: actions/upload-artifact@v4
+  with:
+    name: laudo-completo
+    path: laudo/build_output.txt
+
+- name: Upload erros filtrados
+  uses: actions/upload-artifact@v4
+  with:
+    name: laudo-erros
+    path: laudo/erros.txt
