@@ -1,47 +1,499 @@
-name: Laudo Build Vectra
+# ============================================================
+# unified-vectras-ci.yml — Build & Validação Única Vectra
+# Autor: ∆RafaelVerboΩ / Instituto Rafael
+# Corrige: B01, B02, B03, B04, B05, B06, B07, B08, B09, B10, B11, B12
+# Uso: push/PR em paths críticos OU manual via workflow_dispatch
+# ============================================================
+
+name: Unified Vectras CI
 
 on:
-push:
-pull_request:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'engine/**'
+      - 'demo_cli/**'
+      - 'app/**'
+      - 'CMakeLists.txt'
+      - 'Makefile'
+      - 'gradle/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - '.github/workflows/unified-vectras-ci.yml'
+  pull_request:
+    paths:
+      - 'engine/**'
+      - 'demo_cli/**'
+      - 'app/**'
+      - 'CMakeLists.txt'
+      - 'Makefile'
+      - 'gradle/**'
+  workflow_dispatch:
+    inputs:
+      # ===== SELEÇÃO DE TAREFAS =====
+      run_engine_checks:
+        description: 'Validar engine (manifesto, selftest, invariantes)'
+        required: false
+        default: true
+        type: boolean
+      run_engine_build_cmake:
+        description: 'Compilar engine com CMake (perfil qa)'
+        required: false
+        default: true
+        type: boolean
+      run_engine_build_make:
+        description: 'Compilar engine com Makefile'
+        required: false
+        default: true
+        type: boolean
+      run_apk_debug:
+        description: 'Compilar APK Debug (arm64)'
+        required: false
+        default: true
+        type: boolean
+      run_apk_release:
+        description: 'Compilar APK Release (requer secrets)'
+        required: false
+        default: false
+        type: boolean
+      run_termux_orchestrator:
+        description: 'Executar termux-orchestrator (release real)'
+        required: false
+        default: false
+        type: boolean
+      upload_artifacts:
+        description: 'Fazer upload dos artefatos (APKs, logs)'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: write   # necessário para cancelar execuções concorrentes
+
+concurrency:
+  group: unified-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION:    '17'
+  COMPILE_API:     '35'
+  TARGET_API:      '35'
+  MIN_API:         '23'
+  TOOLS_VERSION:   '35.0.0'
+  NDK_VERSION:     '27.2.12479018'
+  CMAKE_VERSION:   '3.22.1'
 
 jobs:
-laudo:
-runs-on: ubuntu-latest
+  # ============================================================
+  # JOB 1: VALIDAÇÕES ESTRUTURAIS (sempre executa, leve)
+  # ============================================================
+  structural-validation:
+    name: Structural validation (invariants, manifest, duplicates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
 
-steps:
-- name: Checkout
-  uses: actions/checkout@v4
+      - name: Block duplicated overlay ZIP source
+        run: bash tools/check_overlay_zip_duplicates.sh
 
-- name: Setup Java
-  uses: actions/setup-java@v4
-  with:
-    distribution: temurin
-    java-version: 17
+      - name: Block firebasestorage links in web assets
+        run: bash tools/check_no_firebasestorage_links.sh
 
-- name: Permissão Gradle
-  run: chmod +x ./gradlew || true
+      - name: Validate docs reference commit consistency
+        run: bash tools/check_docs_reference_commit.sh
 
-- name: Limpar build
-  run: ./gradlew clean || true
+      - name: Validate engine source manifest alignment
+        run: make check-engine-source-manifest
 
-- name: Compilar (captura erros)
-  run: |
-    mkdir -p laudo
-    ./gradlew assembleDebug > laudo/build_output.txt 2>&1 || true
+      # B10 - verifica shim sources_rmr_core.cmake
+      - name: Verify sources_rmr_core.cmake is a pure shim
+        shell: bash
+        run: |
+          set -euo pipefail
+          shim="engine/rmr/sources_rmr_core.cmake"
+          if [[ ! -f "$shim" ]]; then
+            echo "::warning::$shim not found"
+            exit 0
+          fi
+          if grep -qE 'engine/rmr/src/(bitomega|rmr_corelib|rmr_ll_ops)\.c' "$shim"; then
+            echo "::error::$shim contains source list — must be a pure include shim"
+            exit 1
+          fi
+          if ! grep -q 'include(${CMAKE_CURRENT_LIST_DIR}/sources.cmake)' "$shim"; then
+            echo "::error::$shim does not include sources.cmake"
+            exit 1
+          fi
+          echo "OK: $shim is a pure shim"
 
-- name: Extrair erros principais
-  run: |
-    grep -i "error" laudo/build_output.txt > laudo/erros.txt || true
-    grep -i "exception" laudo/build_output.txt >> laudo/erros.txt || true
+      # B01 - verifica se bitraf.c está duplicado em sources.cmake
+      - name: Check duplicate bitraf.c in sources.cmake
+        shell: bash
+        run: |
+          set -euo pipefail
+          src_cmake="engine/rmr/sources.cmake"
+          if grep -q 'engine/rmr/src/bitraf.c' "$src_cmake"; then
+            echo "::error::B01: bitraf.c found in RMR_ENGINE_CORE_SOURCES — remove it (causes duplicate symbol)"
+            exit 1
+          fi
+          echo "OK: bitraf.c not in core sources"
 
-- name: Upload laudo completo
-  uses: actions/upload-artifact@v4
-  with:
-    name: laudo-completo
-    path: laudo/build_output.txt
+      # B03 - valida que option() tem 3 argumentos
+      - name: Validate CMake option() calls
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE '^option\([^,)]+ [A-Z]+\)' CMakeLists.txt; then
+            echo "::error::B03: option() with only 2 arguments found (missing help string)"
+            exit 1
+          fi
+          echo "OK: all option() have help string"
 
-- name: Upload erros filtrados
-  uses: actions/upload-artifact@v4
-  with:
-    name: laudo-erros
-    path: laudo/erros.txt
+      # B04 - verifica se vectra_pulse_selftest está presente no Makefile
+      - name: Check Makefile for vectra_pulse_selftest
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -q 'VECTRA_PULSE_SELFTEST_BIN' Makefile; then
+            echo "::error::B04: vectra_pulse_selftest missing in Makefile"
+            exit 1
+          fi
+          if ! grep -q 'vectra_pulse_selftest' Makefile | grep -q 'run-selftest'; then
+            echo "::error::B04: vectra_pulse_selftest not added to run-selftest target"
+            exit 1
+          fi
+          echo "OK: vectra_pulse_selftest integrated in Makefile"
+
+      # B12 - warning, não quebra
+      - name: Warn about fragile rmr_sources.cmake path
+        shell: bash
+        run: |
+          if grep -q 'get_filename_component(RMR_REPO_ROOT' engine/rmr/cmake/rmr_sources.cmake; then
+            echo "::warning::B12: rmr_sources.cmake uses absolute path logic (fragile for submodules)"
+          fi
+
+  # ============================================================
+  # JOB 2: BUILD DA ENGINE (CMAKE + MAKE) - condicional
+  # ============================================================
+  build-engine:
+    name: Engine build (CMake/Make)
+    runs-on: ubuntu-latest
+    needs: structural-validation
+    if: |
+      always() &&
+      (github.event_name == 'push' || github.event_name == 'pull_request' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.run_engine_checks == true || inputs.run_engine_build_cmake == true || inputs.run_engine_build_make == true)))
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build make pkg-config python3 graphviz ripgrep
+
+      # --------------------------------------------------------
+      # MAKE build
+      # --------------------------------------------------------
+      - name: Build engine with Makefile
+        if: github.event_name != 'workflow_dispatch' || inputs.run_engine_build_make == true
+        run: make -j"$(nproc)"
+
+      - name: Run selftests via Make
+        if: github.event_name != 'workflow_dispatch' || inputs.run_engine_checks == true
+        run: |
+          mkdir -p bench/results
+          make run-selftest 2>&1 | tee bench/results/selftest-make.log
+
+      # --------------------------------------------------------
+      # CMAKE build (perfil qa)
+      # --------------------------------------------------------
+      - name: Configure CMake (qa profile)
+        if: github.event_name != 'workflow_dispatch' || inputs.run_engine_build_cmake == true
+        run: |
+          cmake -S . -B build-cmake -G Ninja \
+            -DRMR_JNI_BUILD=ON \
+            -DRMR_ENABLE_POLICY_MODULE=ON \
+            -DRMR_PROFILE=qa \
+            --warn-uninitialized
+
+      - name: Build CMake
+        if: github.event_name != 'workflow_dispatch' || inputs.run_engine_build_cmake == true
+        run: cmake --build build-cmake -j"$(nproc)"
+
+      - name: Verify link contracts (CMake)
+        if: github.event_name != 'workflow_dispatch' || inputs.run_engine_checks == true
+        run: cmake --build build-cmake --target verify_contracts
+
+      - name: Run selftests via CMake
+        if: github.event_name != 'workflow_dispatch' || inputs.run_engine_checks == true
+        run: cmake --build build-cmake --target run_selftest
+
+      # Invariantes matemáticas (nunca mudam)
+      - name: Validate Q16 invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "SPIRAL_Q16.*56756" engine/rmr/include/rafaelia_formulas_core.h
+          grep -q "PI_SIN_279_Q16.*203360" engine/rmr/include/rafaelia_formulas_core.h
+          grep -q "ALPHA_Q16.*0x4000" engine/rmr/include/rafaelia_formulas_core.h
+          echo "Invariants OK"
+
+      # Upload logs
+      - name: Upload engine logs
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.upload_artifacts == true)
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-logs-${{ github.run_id }}
+          path: |
+            bench/results/
+            build-cmake/
+          if-no-files-found: warn
+
+  # ============================================================
+  # JOB 3: APK DEBUG (ARM64)
+  # ============================================================
+  apk-debug:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+    needs: structural-validation
+    if: |
+      always() &&
+      (github.event_name == 'push' || github.event_name == 'pull_request' ||
+       (github.event_name == 'workflow_dispatch' && inputs.run_apk_debug == true))
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept SDK licenses
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+          python3 -c "print('y\n'*200)" > "$tmp"
+          sdkmanager --licenses < "$tmp" > /dev/null 2>&1 || true
+
+      - name: Install SDK packages
+        shell: bash
+        run: |
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-${{ env.COMPILE_API }}" \
+            "build-tools;${{ env.TOOLS_VERSION }}" \
+            "cmake;${{ env.CMAKE_VERSION }}" \
+            "ndk;${{ env.NDK_VERSION }}"
+
+      - name: Generate local.properties
+        run: echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+
+      - name: Materialize Firebase placeholder (debug)
+        shell: bash
+        env:
+          VECTRAS_GOOGLE_SERVICES_JSON_B64: ${{ secrets.VECTRAS_GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          if [ -f "tools/ci/materialize_google_services_placeholder.sh" ]; then
+            bash tools/ci/materialize_google_services_placeholder.sh
+          fi
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build Debug APK
+        shell: bash
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            :app:assembleDebug \
+            -PbuildStrict=false \
+            -PcheckVariant=debug \
+            -PAPP_ABI_POLICY=arm64-only \
+            -Pcompile.api=${{ env.COMPILE_API }} \
+            -Ptarget.api=${{ env.TARGET_API }} \
+            -Pmin.api=${{ env.MIN_API }} \
+            -Ptools.version=${{ env.TOOLS_VERSION }} \
+            -Pndk.version=${{ env.NDK_VERSION }} \
+            -Pcmake.version=${{ env.CMAKE_VERSION }}
+
+      - name: Verify native library
+        shell: bash
+        run: |
+          SO=$(find app/build -name "libvectra_core_accel.so" | head -1)
+          if [ -z "$SO" ]; then
+            echo "::error::libvectra_core_accel.so not found"
+            exit 1
+          fi
+          echo "Native library: $SO"
+
+      - name: Upload Debug APK
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.upload_artifacts == true)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectras-debug-apk-${{ github.run_number }}
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+          if-no-files-found: error
+
+  # ============================================================
+  # JOB 4: APK RELEASE (OPCIONAL, REQUER SECRETS)
+  # ============================================================
+  apk-release:
+    name: Build Release APK (signed)
+    runs-on: ubuntu-latest
+    needs: structural-validation
+    if: github.event_name == 'workflow_dispatch' && inputs.run_apk_release == true
+    timeout-minutes: 60
+    environment: release   # opcional: forçar aprovação manual
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # B07/B08 - shell:bash e validação correta de secrets
+      - name: Prepare release signing environment
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.VECTRAS_RELEASE_KEYSTORE_B64 }}
+          STORE_PASS:   ${{ secrets.VECTRAS_RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS:    ${{ secrets.VECTRAS_RELEASE_KEY_ALIAS }}
+          KEY_PASS:     ${{ secrets.VECTRAS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for var in KEYSTORE_B64 STORE_PASS KEY_ALIAS KEY_PASS; do
+            if [[ -z "${!var:-}" ]]; then
+              echo "missing required secret: $var" >&2
+              exit 1
+            fi
+          done
+          mkdir -p .secrets
+          echo "$KEYSTORE_B64" | base64 -d > .secrets/release.jks
+          echo "VECTRAS_RELEASE_STORE_FILE=$PWD/.secrets/release.jks" >> $GITHUB_ENV
+          echo "VECTRAS_RELEASE_STORE_PASSWORD=$STORE_PASS" >> $GITHUB_ENV
+          echo "VECTRAS_RELEASE_KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+          echo "VECTRAS_RELEASE_KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
+
+      - name: Build Release APK
+        run: ./gradlew :app:assembleRelease
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectras-release-apk-${{ github.run_number }}
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+  # ============================================================
+  # JOB 5: TERMUX ORCHESTRATOR (OPCIONAL)
+  # ============================================================
+  termux-orchestrator:
+    name: Termux Orchestrator (release build)
+    runs-on: ubuntu-latest
+    needs: structural-validation
+    if: github.event_name == 'workflow_dispatch' && inputs.run_termux_orchestrator == true
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare signing env (real release)
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.VECTRAS_RELEASE_KEYSTORE_B64 }}
+          STORE_PASS:   ${{ secrets.VECTRAS_RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS:    ${{ secrets.VECTRAS_RELEASE_KEY_ALIAS }}
+          KEY_PASS:     ${{ secrets.VECTRAS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for var in KEYSTORE_B64 STORE_PASS KEY_ALIAS KEY_PASS; do
+            if [[ -z "${!var:-}" ]]; then
+              echo "missing required secret: $var" >&2
+              exit 1
+            fi
+          done
+          mkdir -p .secrets
+          echo "$KEYSTORE_B64" | base64 -d > .secrets/release.jks
+          echo "VECTRAS_RELEASE_STORE_FILE=$PWD/.secrets/release.jks" >> $GITHUB_ENV
+          echo "VECTRAS_RELEASE_STORE_PASSWORD=$STORE_PASS" >> $GITHUB_ENV
+          echo "VECTRAS_RELEASE_KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+          echo "VECTRAS_RELEASE_KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
+
+      - name: Run termux orchestrator
+        shell: bash
+        run: bash tools/termux-arm64-orchestrator/run-local-termux-build.sh
+
+      - name: Cleanup secrets
+        if: always()
+        run: rm -rf .secrets
+
+      - name: Upload release APK (orchestrator)
+        uses: actions/upload-artifact@v4
+        with:
+          name: termux-orchestrator-release-apk-${{ github.run_number }}
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+  # ============================================================
+  # JOB 6: ARQUITETURA ARM64 NATIVA (selftest em ARM64)
+  # ============================================================
+  arm64-selftest:
+    name: Engine selftest on ARM64 runner
+    runs-on: ubuntu-24.04-arm
+    needs: structural-validation
+    if: github.event_name != 'workflow_dispatch' || inputs.run_engine_checks == true
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake make ninja-build pkg-config python3 ripgrep
+
+      - name: Build engine (Make)
+        run: make -j"$(nproc)"
+
+      - name: Run selftest
+        run: |
+          mkdir -p bench/results
+          make run-selftest 2>&1 | tee bench/results/selftest-arm64.log
+
+      # B06 - upload dos logs ARM64
+      - name: Upload ARM64 selftest logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-logs-arm64-${{ github.run_id }}
+          path: bench/results/selftest-arm64.log
+          retention-days: 14
+          if-no-files-found: warnt
