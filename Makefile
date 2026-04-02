@@ -3,7 +3,7 @@ AR ?= ar
 RMR_JNI_BUILD ?= 1
 RMR_BUILD_HOST_TOOLING ?= $(RMR_JNI_BUILD)
 RMR_ENABLE_POLICY_MODULE ?= 1
-CPPFLAGS ?= -Iengine/rmr/include -DRMR_JNI_BUILD=$(RMR_JNI_BUILD) -DRMR_BUILD_HOST_TOOLING=$(RMR_BUILD_HOST_TOOLING) -DRMR_ENABLE_POLICY_MODULE=$(RMR_ENABLE_POLICY_MODULE)
+CPPFLAGS ?= -Iengine/rmr/include -Iinclude -DRMR_JNI_BUILD=$(RMR_JNI_BUILD) -DRMR_BUILD_HOST_TOOLING=$(RMR_BUILD_HOST_TOOLING) -DRMR_ENABLE_POLICY_MODULE=$(RMR_ENABLE_POLICY_MODULE)
 CFLAGS ?= -O3 -std=c11 -Wall -Wextra -pedantic
 LDFLAGS ?=
 
@@ -283,3 +283,29 @@ print-build-config-env:
 	@cat rmr_build_config.env
 
 .PHONY: print-build-config print-build-config-env
+
+MODEL_S_BIN := build/model_s/model_s_demo
+MODEL_S_SRCS := src/main.c src/model_s.c
+MODEL_S_OBJS := $(patsubst %.c,build/%.o,$(MODEL_S_SRCS))
+MODEL_S_ASM_SRCS :=
+ifeq ($(shell uname -m 2>/dev/null),x86_64)
+MODEL_S_ASM_SRCS += asm/x86_64/model_s_step.S
+endif
+ifeq ($(shell uname -m 2>/dev/null),aarch64)
+MODEL_S_ASM_SRCS += asm/arm64/model_s_step.S
+endif
+MODEL_S_ASM_OBJS := $(patsubst %.S,build/%.o,$(MODEL_S_ASM_SRCS))
+
+.PHONY: model-s run-model-s clean-model-s
+
+model-s: $(MODEL_S_BIN)
+
+$(MODEL_S_BIN): $(MODEL_S_OBJS) $(MODEL_S_ASM_OBJS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CPPFLAGS) -Iinclude $(CFLAGS) $^ $(LDFLAGS) -o $@
+
+run-model-s: $(MODEL_S_BIN)
+	./$(MODEL_S_BIN)
+
+clean-model-s:
+	rm -f $(MODEL_S_BIN) $(MODEL_S_OBJS) $(MODEL_S_ASM_OBJS)
