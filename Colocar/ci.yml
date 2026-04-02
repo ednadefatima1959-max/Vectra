@@ -1,0 +1,119 @@
+# HOTFIX BUG-V12-C: 'on' original tinha apenas workflow_dispatch.
+# CI principal nunca disparava em push nem em pull_request — build silencioso.
+# Corrigido: adicionados push e pull_request com filtro de paths relevantes.
+#
+# Copyright (c) 2026 Instituto Rafael / ∆RafaelVerboΩ
+
+name: vectras-ci
+
+on:
+  push:
+    paths:
+      - 'engine/**'
+      - 'demo_cli/**'
+      - 'bench/**'
+      - 'CMakeLists.txt'
+      - 'Makefile'
+      - 'engine/rmr/sources.cmake'
+      - 'engine/rmr/sources.mk'
+      - 'app/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'engine/**'
+      - 'demo_cli/**'
+      - 'bench/**'
+      - 'CMakeLists.txt'
+      - 'Makefile'
+      - 'engine/rmr/sources.cmake'
+      - 'engine/rmr/sources.mk'
+      - 'app/**'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vectras-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Block duplicated overlay ZIP source
+        run: bash tools/check_overlay_zip_duplicates.sh
+
+      - name: Block firebasestorage links in web assets
+        run: bash tools/check_no_firebasestorage_links.sh
+
+      - name: Validate docs reference commit consistency
+        run: bash tools/check_docs_reference_commit.sh
+
+      - name: Install host build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build make \
+            pkg-config python3 graphviz ripgrep
+
+      - name: Validate native toolchain dependencies
+        run: |
+          set -euo pipefail
+          required_tools=(cc gcc as ld ar nm make cmake ninja python3 dot rg)
+          for tool in "${required_tools[@]}"; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              echo "Missing required tool: $tool" >&2
+              exit 1
+            fi
+            echo "OK: $tool -> $(command -v "$tool")"
+          done
+
+      - name: Show hosted engine config
+        run: make print-build-config
+
+      - name: Export Make resolved build config
+        run: make print-build-config-env
+
+      - name: Validate engine source manifest sync
+        run: make check-engine-source-manifest
+
+      - name: Build engine with Makefile
+        run: make -j"$(nproc)"
+
+      - name: Run engine selftests
+        run: |
+          set -euo pipefail
+          mkdir -p bench/results
+          make run-selftest 2>&1 | tee bench/results/host-selftest.log
+
+      - name: Build engine with root CMake (qa profile)
+        run: |
+          cmake -S . -B build-cmake -G Ninja \
+            -DRMR_JNI_BUILD=ON \
+            -DRMR_ENABLE_POLICY_MODULE=ON \
+            -DRMR_PROFILE=qa
+          cmake --build build-cmake -j"$(nproc)"
+
+      - name: Verify link contracts (CMake)
+        run: cmake --build build-cmake --target verify_contracts
+
+      - name: Run engine selftests (CMake)
+        run: cmake --build build-cmake --target run_selftest
+
+      - name: Upload host logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-engine-logs-${{ github.run_id }}
+          path: |
+            build
+            build-cmake
+            bench/results
+            reports
+          if-no-files-found: warn

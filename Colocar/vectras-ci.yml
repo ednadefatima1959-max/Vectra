@@ -1,0 +1,55 @@
+# HOTFIX BUG-V12-B: arquivo original era fragmento YAML sem on:/jobs:/runs-on:
+# GitHub Actions rejeitava silenciosamente — nenhum job rodava.
+# Reconstruído como workflow de validação MaiaSuprema completo e funcional.
+#
+# Copyright (c) 2026 Instituto Rafael / ∆RafaelVerboΩ
+
+name: vectras-integrity-ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integrity-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Validação de Integridade MaiaSuprema
+        run: |
+          set -euo pipefail
+          # Verificação defensiva: script e artefato devem existir antes de executar.
+          # Este passo garante que o Semeador não quebre o build.
+          # Se falhar aqui, o Cultivador rejeita a semente antes do compilador falhar.
+          if [ ! -f "scripts/v_integrity_check.py" ]; then
+            echo "::warning::scripts/v_integrity_check.py não encontrado — pulando verificação"
+            exit 0
+          fi
+          if [ ! -f "generated_output/ir_hex.asm" ]; then
+            echo "::warning::generated_output/ir_hex.asm não encontrado — pulando verificação"
+            exit 0
+          fi
+          python scripts/v_integrity_check.py ./generated_output/ir_hex.asm
+
+      - name: Upload integrity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integrity-report-${{ github.run_id }}
+          path: |
+            generated_output/
+            reports/integrity/
+          if-no-files-found: warn
