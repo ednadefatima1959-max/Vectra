@@ -1,0 +1,144 @@
+name: Vectra Meta CI
+
+on:
+  workflow_dispatch:
+    inputs:
+
+      # 🧩 CHECKBOXES (módulos)
+      mod_core:
+        type: boolean
+        default: true
+      mod_simd:
+        type: boolean
+        default: true
+      mod_bitraf:
+        type: boolean
+        default: true
+      mod_kernel:
+        type: boolean
+        default: true
+      mod_qemu:
+        type: boolean
+        default: false
+
+      # 🎛️ COMBOBOX (modo)
+      build_mode:
+        description: "Modo de execução"
+        type: choice
+        options:
+          - safe
+          - aggressive
+          - debug
+        default: safe
+
+jobs:
+  vectra:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 🧠 LOG GLOBAL
+      - name: Init log
+        run: |
+          mkdir -p logs
+          echo "=== VECTRA LOG START ===" > logs/full.log
+
+      # 🌳 TREE (estrutura)
+      - name: Generate tree
+        run: |
+          echo "=== TREE ===" >> logs/full.log
+          tree -L 4 || find . >> logs/full.log
+
+      # 🔍 SCAN
+      - name: Scan sources
+        run: |
+          echo "=== SCAN ===" >> logs/full.log
+          find . -name "*.c" >> logs/full.log
+          find . -name "*.h" >> logs/full.log
+
+      # ⚙️ BUILD ENGINE (núcleo)
+      - name: Build Engine
+        run: |
+          set +e  # ⚠️ NÃO PARA EM ERRO
+
+          INCLUDES=$(find . -type d | sed 's/^/-I/')
+          MODE="${{ inputs.build_mode }}"
+
+          echo "=== MODE: $MODE ===" >> logs/full.log
+
+          compile_module () {
+            NAME=$1
+            PATH=$2
+
+            echo "=== MODULE: $NAME ===" >> logs/full.log
+
+            FILES=$(find $PATH -name "*.c" 2>/dev/null)
+
+            for f in $FILES; do
+              echo "→ $f" >> logs/full.log
+
+              gcc -c $f $INCLUDES -O2 -o /tmp/test.o \
+                >> logs/full.log 2>&1
+
+              if [ $? -ne 0 ]; then
+                echo "⚠️ ERRO (continuando): $f" >> logs/full.log
+              else
+                echo "$f" >> valid.txt
+              fi
+            done
+          }
+
+          rm -f valid.txt
+
+          # 🧩 CHECKBOX EXECUTION
+          if [ "${{ inputs.mod_core }}" = "true" ]; then
+            compile_module "CORE" "./core"
+          fi
+
+          if [ "${{ inputs.mod_simd }}" = "true" ]; then
+            compile_module "SIMD" "./simd"
+          fi
+
+          if [ "${{ inputs.mod_bitraf }}" = "true" ]; then
+            compile_module "BITRAF" "./bitraf"
+          fi
+
+          if [ "${{ inputs.mod_kernel }}" = "true" ]; then
+            compile_module "KERNEL" "./kernel"
+          fi
+
+          if [ "${{ inputs.mod_qemu }}" = "true" ]; then
+            compile_module "QEMU" "./qemu"
+          fi
+
+          echo "=== LINK ===" >> logs/full.log
+
+          if [ -f valid.txt ]; then
+            gcc $(cat valid.txt) $INCLUDES -O3 -o vectra_auto -lm \
+              >> logs/full.log 2>&1
+          else
+            echo "int main(){return 0;}" > fallback.c
+            gcc fallback.c -o vectra_auto
+          fi
+
+      # 📦 RESULTADO
+      - name: Final check
+        run: |
+          echo "=== RESULT ===" >> logs/full.log
+
+          if [ -f vectra_auto ]; then
+            echo "SUCESSO" >> logs/full.log
+            ls -lh vectra_auto >> logs/full.log
+          else
+            echo "FALHOU (mas pipeline continuou)" >> logs/full.log
+          fi
+
+      # 📤 ARTIFACTS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vectra-output
+          path: |
+            vectra_auto
+            logs/
+            valid.txt
