@@ -1,0 +1,128 @@
+name: Vectra Adaptive CI Core
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_android:
+        description: "Build Android"
+        type: boolean
+        default: true
+
+      build_native:
+        description: "Build C/C++ (vectra_auto)"
+        type: boolean
+        default: true
+
+      run_diagnostics:
+        description: "Gerar diagnóstico completo"
+        type: boolean
+        default: true
+
+      continue_on_error:
+        description: "Não parar em erro"
+        type: boolean
+        default: true
+
+      log_level:
+        description: "Nível de log"
+        type: choice
+        options:
+          - minimal
+          - normal
+          - full
+        default: full
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # =========================
+      # 🌳 TREE + CONTEXTO
+      # =========================
+      - name: Project Tree
+        run: |
+          echo "=== TREE ===" > tree.log
+          sudo apt-get install -y tree
+          tree -L 4 >> tree.log || true
+
+      # =========================
+      # 🔍 DIAGNÓSTICO HEADERS
+      # =========================
+      - name: Scan headers
+        if: inputs.run_diagnostics == true
+        run: |
+          echo "=== HEADER SCAN ===" > headers.log
+          find . -name "*.h" >> headers.log || true
+
+          echo "=== MISSING INCLUDES ===" >> headers.log
+          grep -R '#include "' . | grep -vE "$(find . -name '*.h' -printf '%f\n' | paste -sd '|')" >> headers.log || true
+
+      # =========================
+      # ⚙️ BUILD NATIVE (TOLERANTE)
+      # =========================
+      - name: Build vectra_auto
+        if: inputs.build_native == true
+        continue-on-error: true
+        run: |
+          echo "=== BUILD NATIVE ===" > build_native.log
+
+          gcc demo_cli/src/*.c \
+            -I./ \
+            -I./include \
+            -I./core \
+            -O3 -o vectra_auto 2>> build_native.log || true
+
+          if [ -f vectra_auto ]; then
+            echo "SUCCESS" >> build_native.log
+          else
+            echo "FAILED (but continuing)" >> build_native.log
+          fi
+
+      # =========================
+      # 🤖 BUILD ANDROID
+      # =========================
+      - name: Setup JDK
+        if: inputs.build_android == true
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Setup Android
+        if: inputs.build_android == true
+        uses: android-actions/setup-android@v3
+
+      - name: Build APK
+        if: inputs.build_android == true
+        continue-on-error: true
+        run: |
+          chmod +x gradlew || true
+          ./gradlew assembleDebug > android.log 2>&1 || true
+
+      # =========================
+      # 📊 LOG FINAL UNIFICADO
+      # =========================
+      - name: Merge Logs
+        run: |
+          cat tree.log headers.log build_native.log android.log 2>/dev/null > FULL_LOG.txt || true
+
+      # =========================
+      # 📦 ARTIFATOS (SEMPRE)
+      # =========================
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectra-diagnostics
+          path: |
+            FULL_LOG.txt
+            *.log
+            vectra_auto
+          if-no-files-found: warn
