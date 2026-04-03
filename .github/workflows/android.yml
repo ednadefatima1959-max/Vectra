@@ -1,41 +1,50 @@
-name: Android CI (Vectra Adaptive No-Gap)
+name: Android CI (No-Gap Adaptive)
 
 on:
   workflow_dispatch:
     inputs:
       build_debug:
+        description: "Gerar APK debug"
         type: boolean
         default: true
       build_release:
+        description: "Gerar APK release"
         type: boolean
         default: false
       sign_release:
+        description: "Assinar release com secrets"
         type: boolean
         default: false
       auto_fix_resources:
-        description: "Auto corrigir resources (strings.xml)"
+        description: "Auto corrigir strings.xml"
         type: boolean
         default: true
       enable_fallback:
-        description: "Ativar fallback inteligente"
+        description: "Ativar fallback"
         type: boolean
         default: true
       compile_api:
+        description: "Android compileSdk"
         type: string
         default: "35"
       tools_version:
+        description: "Build Tools"
         type: string
         default: "35.0.0"
       ndk_version:
+        description: "NDK"
         type: string
         default: "27.2.12479018"
       cmake_version:
+        description: "CMake"
         type: string
         default: "3.22.1"
       java_version:
+        description: "JDK"
         type: string
         default: "17"
       upload_telegram:
+        description: "Notificar Telegram"
         type: boolean
         default: false
 
@@ -64,7 +73,7 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Setup Android
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install SDK/NDK/CMake
@@ -78,8 +87,8 @@ jobs:
             "ndk;${NDK_VERSION}" \
             "cmake;${CMAKE_VERSION}"
 
-      # 🧠 FECHAMENTO DE GAP (CRÍTICO)
-      - name: Auto-fix resources (no-gap)
+      # 🔧 FECHAMENTO DE GAP (strings.xml)
+      - name: Auto-fix resources
         if: inputs.auto_fix_resources == true
         run: |
           BASE=app/src/main/res/values
@@ -88,7 +97,7 @@ jobs:
           mkdir -p $BASE
 
           if [ ! -f "$FILE" ]; then
-            echo "🔧 Criando base strings.xml"
+            echo "Criando strings.xml base"
             cat <<EOF > $FILE
 <resources>
     <string name="app_name">Vectra</string>
@@ -106,22 +115,37 @@ EOF
       - name: chmod gradle
         run: chmod +x gradlew tools/gradle_with_jdk21.sh
 
-      # 🧠 BUILD COM CAPTURA DE ERRO (Δ)
-      - name: Build Debug (primary)
+      # 🧠 BUILD COM CAPTURA (Δ)
+      - name: Build Debug
         id: build_debug
         if: inputs.build_debug == true
         continue-on-error: true
         run: |
           ./tools/gradle_with_jdk21.sh assembleDebug | tee build.log
 
-      - name: Build Release (primary)
+      - name: Build Release
         id: build_release
-        if: inputs.build_release == true
+        if: inputs.build_release == true && inputs.sign_release != true
         continue-on-error: true
         run: |
-          ./tools/gradle_with_jdk21.sh assembleRelease | tee build.log
+          ./tools/gradle_with_jdk21.sh assembleRelease | tee -a build.log
 
-      # 🔍 DETECTOR DE Δ (ERRO)
+      - name: Build Release Signed
+        if: inputs.build_release == true && inputs.sign_release == true
+        continue-on-error: true
+        env:
+          VECTRAS_RELEASE_STORE_FILE: ${{ secrets.VECTRAS_RELEASE_STORE_FILE }}
+          VECTRAS_RELEASE_STORE_PASSWORD: ${{ secrets.VECTRAS_RELEASE_STORE_PASSWORD }}
+          VECTRAS_RELEASE_KEY_ALIAS: ${{ secrets.VECTRAS_RELEASE_KEY_ALIAS }}
+          VECTRAS_RELEASE_KEY_PASSWORD: ${{ secrets.VECTRAS_RELEASE_KEY_PASSWORD }}
+        run: |
+          echo "storeFile=$VECTRAS_RELEASE_STORE_FILE" > keystore.properties
+          echo "storePassword=$VECTRAS_RELEASE_STORE_PASSWORD" >> keystore.properties
+          echo "keyAlias=$VECTRAS_RELEASE_KEY_ALIAS" >> keystore.properties
+          echo "keyPassword=$VECTRAS_RELEASE_KEY_PASSWORD" >> keystore.properties
+          ./tools/gradle_with_jdk21.sh assembleRelease | tee -a build.log
+
+      # 🔍 DETECÇÃO DE ERRO
       - name: Detect errors
         id: detect
         run: |
@@ -131,37 +155,34 @@ EOF
             echo "has_error=false" >> $GITHUB_OUTPUT
           fi
 
-      # 🔁 FALLBACK INTELIGENTE
+      # 🔁 FALLBACK
       - name: Fallback recovery
         if: steps.detect.outputs.has_error == 'true' && inputs.enable_fallback == true
         run: |
-          echo "⚠️ Ativando fallback..."
-
+          echo "Ativando fallback..."
           ./gradlew clean
           rm -rf app/build
-
-          # tentativa mais segura
           ./tools/gradle_with_jdk21.sh assembleDebug --stacktrace --no-daemon
 
-      # 📦 Upload sempre (mesmo com erro)
+      # 📦 Upload sempre
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vectra-build-${{ github.run_id }}
+          name: android-apks-${{ github.run_id }}
           path: |
             app/build/outputs/**/*.apk
             build.log
             **/build/reports/**
           if-no-files-found: warn
 
-      - name: Telegram
+      - name: Notify Telegram
         if: inputs.upload_telegram == true
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            🚀 VECTRA BUILD FINALIZADO
+            🚀 Build finalizado
             Repo: ${{ github.repository }}
             Commit: ${{ github.sha }}
