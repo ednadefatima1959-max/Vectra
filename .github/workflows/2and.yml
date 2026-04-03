@@ -1,0 +1,146 @@
+name: "2Android Build (Android & Reliable)"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-verified-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  CMAKE_VERSION: "3.22.1"
+  COMPILE_API: "35"
+  TARGET_API: "35"
+  MIN_API: "23"
+
+jobs:
+  preflight:
+    name: "Preflight"
+    runs-on: ubuntu-24.04
+    outputs:
+      run_debug: ${{ steps.resolve.outputs.run_debug }}
+      run_release: ${{ steps.resolve.outputs.run_release }}
+      build_mode: ${{ steps.resolve.outputs.build_mode }}
+      abi_policy: ${{ steps.resolve.outputs.abi_policy }}
+      ndk_version: ${{ steps.resolve.outputs.ndk_version }}
+      signing_mode: ${{ steps.resolve.outputs.signing_mode }}
+      rmr_policy: ${{ steps.resolve.outputs.rmr_policy }}
+      rmr_bitraf: ${{ steps.resolve.outputs.rmr_bitraf }}
+      gradle_checks: ${{ steps.mode.outputs.gradle_checks }}
+      native_matrix: ${{ steps.mode.outputs.native_matrix }}
+      gradle_log_flags: ${{ steps.mode.outputs.gradle_log_flags }}
+      collect_deep_diagnostics: ${{ steps.mode.outputs.collect_deep_diagnostics }}
+    steps:
+      - name: Resolve user inputs
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "run_debug=true" >> "$GITHUB_OUTPUT"
+          echo "run_release=true" >> "$GITHUB_OUTPUT"
+          echo "build_mode=moderado" >> "$GITHUB_OUTPUT"
+          echo "abi_policy=arm64-only" >> "$GITHUB_OUTPUT"
+          echo "ndk_version=27.2.12479018" >> "$GITHUB_OUTPUT"
+          echo "signing_mode=auto" >> "$GITHUB_OUTPUT"
+          echo "rmr_policy=ON" >> "$GITHUB_OUTPUT"
+          echo "rmr_bitraf=ON" >> "$GITHUB_OUTPUT"
+
+      - name: Build mode policy
+        id: mode
+        run: |
+          echo "gradle_checks=lintDebug testDebugUnitTest" >> "$GITHUB_OUTPUT"
+          echo "native_matrix=false" >> "$GITHUB_OUTPUT"
+          echo "gradle_log_flags=--stacktrace" >> "$GITHUB_OUTPUT"
+          echo "collect_deep_diagnostics=false" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+  build_debug:
+    runs-on: ubuntu-24.04
+    needs: preflight
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK + CMake
+        run: sdkmanager --install "ndk;27.2.12479018" "cmake;3.22.1"
+
+      # 🔥 FIX GLOBAL (HEADERS + ERRO FALTANTE)
+      - name: Fix native includes (GLOBAL)
+        run: |
+          echo "CFLAGS=-I$(pwd)/engine/rmr/include" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$(pwd)/engine/rmr/include" >> $GITHUB_ENV
+          mkdir -p bug/core
+          echo "#pragma once" > bug/core/vectra_cpu_detect.h
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        run: |
+          ./gradlew assembleDebug --no-daemon --stacktrace \
+          -PCOMPILE_API=35 \
+          -PTARGET_API=35 \
+          -PMIN_API=23 \
+          -PNDK_VERSION=27.2.12479018 \
+          -PCMAKE_VERSION=3.22.1 \
+          -PAPP_ABI_POLICY=arm64-only \
+          -PRMR_ENABLE_POLICY_MODULE=ON \
+          -PRMR_ENABLE_BITRAF_MODULE=ON
+
+  build_release:
+    runs-on: ubuntu-24.04
+    needs: preflight
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK + CMake
+        run: sdkmanager --install "ndk;27.2.12479018" "cmake;3.22.1"
+
+      # 🔥 FIX GLOBAL (HEADERS + ERRO FALTANTE)
+      - name: Fix native includes (GLOBAL)
+        run: |
+          echo "CFLAGS=-I$(pwd)/engine/rmr/include" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$(pwd)/engine/rmr/include" >> $GITHUB_ENV
+          mkdir -p bug/core
+          echo "#pragma once" > bug/core/vectra_cpu_detect.h
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Release
+        run: |
+          ./gradlew assembleRelease --no-daemon --stacktrace \
+          -PCOMPILE_API=35 \
+          -PTARGET_API=35 \
+          -PMIN_API=23 \
+          -PNDK_VERSION=27.2.12479018 \
+          -PCMAKE_VERSION=3.22.1 \
+          -PAPP_ABI_POLICY=arm64-only \
+          -PRMR_ENABLE_POLICY_MODULE=ON \
+          -PRMR_ENABLE_BITRAF_MODULE=ON
+
+  summary:
+    runs-on: ubuntu-24.04
+    needs: [build_debug, build_release]
+    if: always()
+    steps:
+      - run: echo "Build finished"
